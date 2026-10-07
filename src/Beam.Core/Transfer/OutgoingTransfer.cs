@@ -320,6 +320,7 @@ internal sealed class OutgoingTransfer
 
                     var chunk = current;
                     var length = read;
+                    await _service.SendLimiter.WaitAsync(length, token).ConfigureAwait(false);
                     await WriteAsync(io, t => connection.Channel.SendDataAsync(chunk, length, t), token).ConfigureAwait(false);
                     sent += read;
                     _session.AddTransferred(read);

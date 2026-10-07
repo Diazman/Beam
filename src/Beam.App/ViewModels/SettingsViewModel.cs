@@ -6,6 +6,8 @@ using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Identity;
+using Beam.Core.Licensing;
+using Beam.Core.Util;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
 
@@ -54,6 +56,7 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly MainViewModel _main;
     private string _deviceName;
     private string _nameStatus = "";
+    private string _proStatus = "";
     private bool _suppress;
 
     public SettingsViewModel(BeamNode node, IPlatformServices platform, IUiServices ui, MainViewModel main)
@@ -74,6 +77,8 @@ public sealed class SettingsViewModel : ObservableObject
         ResetFolderCommand = new RelayCommand(() => _node.Settings.Update(s => s.ReceiveFolder = null), () => !UsesDefaultFolder);
         OpenLogsCommand = new RelayCommand(() => _platform.OpenFolder(_node.Paths.LogDirectory));
         CopyAddressCommand = new AsyncCommand(() => _ui.CopyToClipboardAsync(LocalAddresses));
+        UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
+        RestorePurchaseCommand = new AsyncCommand(RestorePurchaseAsync);
 
         ThemeOptions = new[]
         {
@@ -185,6 +190,29 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string DataFolder => _node.Paths.Root;
 
+    public bool IsPro => _node.Edition.IsPro;
+
+    public bool IsFree => !IsPro;
+
+    public string PlanTitle => IsPro ? "Beam Pro" : "Beam Free";
+
+    public string PlanDescription => IsPro
+        ? "Thank you for supporting Beam! You can send to several computers at once, at full speed, as often as you like."
+        : $"Send to one computer at a time, at up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s, {FreeLimits.SendsPerDay} times a day. "
+          + $"Today you've used {_node.Quota.UsedToday} of {FreeLimits.SendsPerDay}. Receiving files is always free and unlimited.";
+
+    public bool CanRestorePurchase => _main.Pro.CanPurchase && IsFree;
+
+    public string ProStatus
+    {
+        get => _proStatus;
+        private set => SetProperty(ref _proStatus, value);
+    }
+
+    public AsyncCommand UpgradeCommand { get; }
+
+    public AsyncCommand RestorePurchaseCommand { get; }
+
     public RelayCommand SaveNameCommand { get; }
 
     public AsyncCommand ChangeFolderCommand { get; }
@@ -210,6 +238,19 @@ public sealed class SettingsViewModel : ObservableObject
         if (DeviceName != normalized) DeviceName = normalized;
     }
 
+    internal void OnEditionChanged()
+    {
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(CanRestorePurchase), nameof(VersionText) })
+            OnPropertyChanged(name);
+    }
+
+    private async Task RestorePurchaseAsync()
+    {
+        ProStatus = "Checking…";
+        await _main.Pro.RefreshAsync();
+        ProStatus = IsPro ? "" : "No Beam Pro purchase was found for the Microsoft account signed in to the Store.";
+    }
+
     private void Apply(Action<AppSettings> change, Action? sideEffect = null)
     {
         if (_suppress) return;
@@ -228,6 +269,7 @@ public sealed class SettingsViewModel : ObservableObject
                          nameof(ReceiveFolder), nameof(UsesDefaultFolder), nameof(StartWithWindows), nameof(CloseToTray),
                          nameof(Discoverable), nameof(NotificationsEnabled), nameof(NotifyOnIncomingRequest),
                          nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(LocalAddresses),
+                         nameof(PlanDescription),
                      })
             {
                 OnPropertyChanged(name);

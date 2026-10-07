@@ -37,11 +37,12 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private DialogViewModel? _dialog;
     private bool _isDragOver;
 
-    public MainViewModel(BeamNode node, IPlatformServices platform, IUiServices ui)
+    public MainViewModel(BeamNode node, IPlatformServices platform, IUiServices ui, IStoreService? store = null)
     {
         Node = node;
         _platform = platform;
         _ui = ui;
+        Pro = new ProService(node, store ?? new UnavailableStoreService());
         node.IncomingHandler = this;
 
         Home = new HomeViewModel(node, ui, this);
@@ -58,9 +59,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
         foreach (var session in node.Transfers.Sessions) AddTransfer(session);
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
+        node.Edition.Changed += () => Dispatcher.UIThread.Post(OnEditionChanged);
+        node.Quota.Changed += () => Dispatcher.UIThread.Post(Home.OnEditionChanged);
     }
 
     public BeamNode Node { get; }
+
+    public ProService Pro { get; }
+
+    public bool IsPro => Node.Edition.IsPro;
 
     public HomeViewModel Home { get; }
 
@@ -172,6 +179,16 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         HandleCommandLine(commandLine);
+        await Pro.RefreshAsync();
+    }
+
+    /// <summary>Shows what Pro offers and lets the user buy it. True when the user has Pro afterwards.</summary>
+    public async Task<bool> ShowUpgradeAsync(string? reason = null)
+    {
+        if (IsPro) return true;
+        await Pro.RefreshAsync();
+        if (IsPro) return true;
+        return await ShowDialogAsync(new UpgradeViewModel(Pro, _platform, reason)) is true && IsPro;
     }
 
     public void HandleCommandLine(CommandLine commandLine)
@@ -193,15 +210,23 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         OnPropertyChanged(nameof(IsSettingsPage));
     }
 
-    public void StartSend(DeviceInfo device, IReadOnlyList<string> paths)
+    /// <summary>Starts sending to one device. Returns false (after telling the user why) if it couldn't start.</summary>
+    public async Task<bool> StartSendAsync(DeviceInfo device, IReadOnlyList<string> paths)
     {
         try
         {
             Node.Send(device, paths);
+            return true;
+        }
+        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
+        {
+            if (!await ShowUpgradeAsync(ex.Error.Message)) return false;
+            return await StartSendAsync(device, paths);
         }
         catch (Exception ex)
         {
             Log.Error("Could not start transfer", ex);
+            return false;
         }
     }
 
@@ -258,6 +283,13 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         if (_deviceNotifiedAt.TryGetValue(device.Id, out var last) && DateTime.UtcNow - last < TimeSpan.FromMinutes(30)) return;
         _deviceNotifiedAt[device.Id] = DateTime.UtcNow;
         Notify(s => s.NotifyOnDeviceFound, $"{device.Name} is nearby", "Open Beam to send files to it.");
+    }
+
+    private void OnEditionChanged()
+    {
+        OnPropertyChanged(nameof(IsPro));
+        Home.OnEditionChanged();
+        Settings.OnEditionChanged();
     }
 
     // ----- IIncomingTransferHandler (called by the engine on background threads) -----

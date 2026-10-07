@@ -18,6 +18,8 @@ internal sealed class GenericPlatformServices : IPlatformServices
 
     public void OpenFile(string path) => Launch(OperatingSystem.IsMacOS() ? "open" : "xdg-open", path);
 
+    public void OpenUrl(string url) => Launch(OperatingSystem.IsMacOS() ? "open" : "xdg-open", url);
+
     public bool GetStartWithSystem() => false;
 
     public void SetStartWithSystem(bool enabled)

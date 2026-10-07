@@ -55,6 +55,18 @@ internal sealed partial class WindowsPlatformServices : IPlatformServices
         }
     }
 
+    public void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not open {url}: {ex.Message}");
+        }
+    }
+
     public bool GetStartWithSystem()
     {
         if (PackageInfo.IsPackaged) return PackagedStartup.IsEnabled();

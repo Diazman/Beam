@@ -39,6 +39,9 @@
     <DataTemplate DataType="dlg:WelcomeViewModel">
       <dviews:WelcomeView />
     </DataTemplate>
+    <DataTemplate DataType="dlg:UpgradeViewModel">
+      <dviews:UpgradeView />
+    </DataTemplate>
   </Window.DataTemplates>
 
   <Panel>

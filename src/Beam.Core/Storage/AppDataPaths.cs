@@ -19,6 +19,8 @@ public sealed class AppDataPaths
 
     public string IdentityFile => Path.Combine(Root, "identity.json");
 
+    public string UsageFile => Path.Combine(Root, "usage.json");
+
     public string ResumeDirectory => Path.Combine(Root, "resume");
 
     public string LogDirectory => Path.Combine(Root, "logs");

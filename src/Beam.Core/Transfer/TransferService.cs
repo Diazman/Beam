@@ -5,6 +5,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
 using Beam.Core.Identity;
 using Beam.Core.Protocol;
+using Beam.Core.Util;
 
 namespace Beam.Core.Transfer;
 
@@ -33,8 +34,10 @@ public sealed class TransferService : IAsyncDisposable
         IIncomingTransferHandler handler,
         Func<IncomingPolicy> policy,
         Func<string> deviceName,
-        Func<string>? deviceKind = null)
+        Func<string>? deviceKind = null,
+        Func<long>? sendBytesPerSecond = null)
     {
+        SendLimiter = new RateLimiter(sendBytesPerSecond ?? (() => 0));
         Identity = identity;
         ResumeStore = resumeStore;
         Handler = handler;
@@ -56,6 +59,9 @@ public sealed class TransferService : IAsyncDisposable
     internal IIncomingTransferHandler Handler { get; }
 
     internal Func<IncomingPolicy> Policy { get; }
+
+    /// <summary>Shared pacing of everything this device sends (the free edition's speed limit).</summary>
+    internal RateLimiter SendLimiter { get; }
 
     public int Port { get; private set; }
 

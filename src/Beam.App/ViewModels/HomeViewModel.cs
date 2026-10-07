@@ -6,6 +6,7 @@ using Beam.App.Services;
 using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
+using Beam.Core.Licensing;
 using Beam.Core.Util;
 
 namespace Beam.App.ViewModels;
@@ -136,7 +137,7 @@ public sealed class HomeViewModel : ObservableObject
     private readonly IUiServices _ui;
     private readonly MainViewModel _main;
     private readonly DispatcherTimer _searchHintTimer;
-    private DeviceViewModel? _selectedDevice;
+    private readonly List<DeviceViewModel> _selected = new();
     private bool _selectionIsAutomatic;
     private bool _showSearchHint;
 
@@ -149,7 +150,8 @@ public sealed class HomeViewModel : ObservableObject
         ChooseFilesCommand = new AsyncCommand(ChooseFilesAsync);
         ChooseFolderCommand = new AsyncCommand(ChooseFolderAsync);
         ClearCommand = new RelayCommand(ClearItems, () => Items.Count > 0);
-        SendCommand = new RelayCommand(Send, () => CanSend);
+        SendCommand = new AsyncCommand(SendAsync, () => CanSend);
+        UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
         RefreshCommand = new RelayCommand(Refresh);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
@@ -199,17 +201,35 @@ public sealed class HomeViewModel : ObservableObject
         private set => SetProperty(ref _showSearchHint, value);
     }
 
-    public DeviceViewModel? SelectedDevice
+    /// <summary>The first chosen computer (the only one in the free edition).</summary>
+    public DeviceViewModel? SelectedDevice => _selected.FirstOrDefault();
+
+    /// <summary>The chosen computers, in the order they were picked.</summary>
+    public IReadOnlyList<DeviceViewModel> SelectedDevices => _selected;
+
+    public bool IsPro => _node.Edition.IsPro;
+
+    public bool IsFree => !IsPro;
+
+    public bool CanSelectSeveral => _node.Edition.IsEnabled(Feature.SendToSeveralDevices);
+
+    /// <summary>Free edition with several computers around: mention that Pro can send to all of them.</summary>
+    public bool ShowMultiSendUpsell => !CanSelectSeveral && Devices.Count > 1;
+
+    public string DeviceHint => CanSelectSeveral && Devices.Count > 1 ? "Choose one or more computers." : "";
+
+    public bool HasDeviceHint => DeviceHint.Length > 0;
+
+    /// <summary>The free edition's limits, shown next to the Send button.</summary>
+    public string PlanText
     {
-        get => _selectedDevice;
-        private set
+        get
         {
-            if (_selectedDevice == value) return;
-            if (_selectedDevice != null) _selectedDevice.IsSelected = false;
-            _selectedDevice = value;
-            if (_selectedDevice != null) _selectedDevice.IsSelected = true;
-            OnPropertyChanged();
-            UpdateSendState();
+            var left = _node.Quota.RemainingToday ?? 0;
+            var sends = left == 0
+                ? "no free sends left today"
+                : $"{left} of {_node.Quota.Limit} free sends left today";
+            return $"Free · up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s · {sends}";
         }
     }
 
@@ -239,20 +259,27 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
-    public bool CanSend => SelectedDevice != null && Items.Count > 0;
+    public bool CanSend => _selected.Count > 0 && Items.Count > 0;
 
     public string SendSummary
     {
         get
         {
-            if (Items.Count == 0 && SelectedDevice == null) return "Choose a computer and add files to send.";
-            if (Items.Count == 0) return $"Add files or folders to send to {SelectedDevice!.Name}.";
-            if (SelectedDevice == null) return "Choose a computer to send to.";
+            if (Items.Count == 0 && _selected.Count == 0) return "Choose a computer and add files to send.";
+            if (Items.Count == 0) return $"Add files or folders to send to {TargetsText}.";
+            if (_selected.Count == 0) return "Choose a computer to send to.";
             var what = Items.Count == 1 ? $"“{Items[0].Name}”" : Format.Count(Items.Count, "item");
             var size = IsMeasuring ? "" : $" ({Format.Bytes(TotalBytes)})";
-            return $"Send {what}{size} to {SelectedDevice.Name}";
+            return $"Send {what}{size} to {TargetsText}";
         }
     }
+
+    private string TargetsText => _selected.Count switch
+    {
+        1 => _selected[0].Name,
+        2 => $"{_selected[0].Name} and {_selected[1].Name}",
+        _ => $"{_selected.Count} computers",
+    };
 
     public AsyncCommand ChooseFilesCommand { get; }
 
@@ -260,7 +287,9 @@ public sealed class HomeViewModel : ObservableObject
 
     public RelayCommand ClearCommand { get; }
 
-    public RelayCommand SendCommand { get; }
+    public AsyncCommand SendCommand { get; }
+
+    public AsyncCommand UpgradeCommand { get; }
 
     public RelayCommand RefreshCommand { get; }
 
@@ -302,10 +331,64 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
+    /// <summary>Clicking a computer toggles it. In the free edition, picking another one replaces the choice.</summary>
     public void SelectDevice(DeviceViewModel device)
     {
         _selectionIsAutomatic = false;
-        SelectedDevice = SelectedDevice == device ? null : device;
+        if (_selected.Contains(device))
+        {
+            Deselect(device);
+            return;
+        }
+
+        if (!CanSelectSeveral) ClearSelection();
+        device.IsSelected = true;
+        _selected.Add(device);
+        OnSelectionChanged();
+    }
+
+    /// <summary>Called when the edition or the daily count changes.</summary>
+    internal void OnEditionChanged()
+    {
+        if (!CanSelectSeveral)
+        {
+            foreach (var extra in _selected.Skip(1).ToList()) Deselect(extra);
+        }
+
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
+            OnPropertyChanged(name);
+    }
+
+    private void SelectOnly(DeviceViewModel? device)
+    {
+        ClearSelection();
+        if (device != null)
+        {
+            device.IsSelected = true;
+            _selected.Add(device);
+        }
+
+        OnSelectionChanged();
+    }
+
+    private void Deselect(DeviceViewModel device)
+    {
+        device.IsSelected = false;
+        _selected.Remove(device);
+        OnSelectionChanged();
+    }
+
+    private void ClearSelection()
+    {
+        foreach (var device in _selected) device.IsSelected = false;
+        _selected.Clear();
+    }
+
+    private void OnSelectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedDevice));
+        OnPropertyChanged(nameof(SelectedDevices));
+        UpdateSendState();
     }
 
     private void AddOrUpdateDevice(DeviceInfo device)
@@ -325,14 +408,14 @@ public sealed class HomeViewModel : ObservableObject
 
         // With exactly one other computer the choice is obvious, so pre-select it. Once more appear,
         // drop a selection the user didn't make so files never go to a computer they didn't pick.
-        if (Devices.Count == 1 && SelectedDevice == null)
+        if (Devices.Count == 1 && _selected.Count == 0)
         {
-            SelectedDevice = Devices[0];
+            SelectOnly(Devices[0]);
             _selectionIsAutomatic = true;
         }
         else if (Devices.Count > 1 && _selectionIsAutomatic)
         {
-            SelectedDevice = null;
+            SelectOnly(null);
             _selectionIsAutomatic = false;
         }
 
@@ -344,7 +427,7 @@ public sealed class HomeViewModel : ObservableObject
         var existing = Devices.FirstOrDefault(d => d.Id == id);
         if (existing == null) return;
         Devices.Remove(existing);
-        if (SelectedDevice == existing) SelectedDevice = null;
+        if (_selected.Contains(existing)) Deselect(existing);
         OnDevicesChanged();
     }
 
@@ -352,6 +435,9 @@ public sealed class HomeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasDevices));
         OnPropertyChanged(nameof(HasNoDevices));
+        OnPropertyChanged(nameof(ShowMultiSendUpsell));
+        OnPropertyChanged(nameof(DeviceHint));
+        OnPropertyChanged(nameof(HasDeviceHint));
         if (Devices.Count > 0) ShowSearchHint = false;
         else if (!_searchHintTimer.IsEnabled) _searchHintTimer.Start();
     }
@@ -457,19 +543,25 @@ public sealed class HomeViewModel : ObservableObject
             vm = Devices.FirstOrDefault(d => d.Id == device.Id);
         }
 
-        if (vm != null)
-        {
-            _selectionIsAutomatic = false;
-            SelectedDevice = vm;
-        }
+        if (vm != null && !vm.IsSelected) SelectDevice(vm);
     }
 
-    private void Send()
+    private async Task SendAsync()
     {
         if (!CanSend) return;
-        var device = SelectedDevice!.Device;
+        var targets = _selected.Select(d => d.Device).ToList();
         var paths = Items.Select(i => i.Path).ToList();
-        _main.StartSend(device, paths);
-        ClearItems();
+        if (!_node.Quota.CanSend(targets.Count))
+        {
+            var left = _node.Quota.RemainingToday ?? 0;
+            var reason = left == 0
+                ? $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade for unlimited sends, or send again tomorrow."
+                : $"You have {Format.Count(left, "free send")} left today, which isn't enough for {targets.Count} computers.";
+            if (!await _main.ShowUpgradeAsync(reason)) return;
+        }
+
+        var started = false;
+        foreach (var target in targets) started |= await _main.StartSendAsync(target, paths);
+        if (started) ClearItems();
     }
 }

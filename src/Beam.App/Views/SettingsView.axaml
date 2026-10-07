@@ -170,6 +170,29 @@
         </Border>
       </StackPanel>
 
+      <!-- Beam Pro -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="Your plan" />
+        <Border Classes="card">
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="iconBadge" Width="40" Height="40" CornerRadius="20" VerticalAlignment="Top">
+              <PathIcon Data="{StaticResource IconCheckCircle}" Width="18" Height="18" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="14,0,0,0" Spacing="6">
+              <TextBlock Classes="h3" Text="{Binding PlanTitle}" />
+              <TextBlock Classes="caption" Text="{Binding PlanDescription}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" IsVisible="{Binding IsFree}">
+                <Button Classes="accent" Content="Upgrade to Pro" Command="{Binding UpgradeCommand}" />
+                <Button Classes="link" Content="Restore purchase" Command="{Binding RestorePurchaseCommand}"
+                        IsVisible="{Binding CanRestorePurchase}" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Classes="caption" Text="{Binding ProStatus}" TextWrapping="Wrap"
+                         IsVisible="{Binding ProStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </StackPanel>
+
       <!-- About -->
       <StackPanel Spacing="10">
         <TextBlock Classes="h2" Text="About" />

@@ -21,7 +21,7 @@ USB sticks or cloud uploads. Pick the other computer, drag in your files or whol
 press Send. The other person sees exactly what's coming and decides whether to accept it.
 
 FAST AND RELIABLE
-• Transfers go directly between your computers at full local-network speed.
+• Transfers go directly between your computers, never through the internet.
 • Huge files and folders with thousands of files are no problem.
 • If the connection drops, Beam reconnects and continues where it stopped instead of starting over.
 • Every file is checked after it arrives, so you never end up with a damaged copy.
@@ -41,6 +41,14 @@ SIMPLE
 Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks automatic discovery,
 connect using the address Beam shows on the other computer.
 
+FREE AND PRO
+Beam is free to use: send to one computer at a time at up to 10 MB/s, 10 times a day. Receiving is
+always free and unlimited. Beam Pro, an optional one-time in-app purchase, adds:
+• Send to several computers at once
+• Full speed — as fast as your network allows
+• Unlimited sends
+• Sending to phones and tablets once Beam for Android and iPhone is available
+
 ## What's new in this version
 First release.
 
@@ -55,6 +63,8 @@ Verifies every file after transfer
 Keeps folder structure and file dates
 Replace, keep both or skip existing files
 Live progress, speed and time remaining
+Send to several computers at once (Pro)
+Full-speed, unlimited sending (Pro)
 Multiple transfers at once
 Transfer history
 Works without internet
@@ -78,3 +88,15 @@ Productivity (subcategory: none) — alternatively Utilities & tools.
 | System requirements | Windows 10 version 1809 or later; a local network |
 | Pricing | Free |
 | Age rating questionnaire | No user-generated content shared publicly, no purchases, no location, no personal data collection → typically rated 3+ / Everyone |
+
+## Add-on: Beam Pro
+Create it in Partner Center > your app > **Add-ons > Create a new add-on**:
+
+| Field | Value |
+|---|---|
+| Product type | **Durable**, product lifetime **Forever** |
+| Product ID | `BeamPro` (must be exactly this — the app looks for it) |
+| Title | Beam Pro |
+| Description | Send to several computers at once, at full speed, as often as you like. Includes sending to phones and tablets when Beam for Android and iPhone arrives. |
+| Price | your choice (e.g. USD 4.99 tier); the Store converts it to local prices, including Turkish lira |
+| Store listing image | `packaging/msix/Assets/StoreLogo.scale-400.png` |
