@@ -30,15 +30,37 @@ structure intact. No cables, accounts, cloud, IP addresses, or network shares.
   start with Windows, single instance, `Beam.exe --send <paths>` for future Explorer integration, light/dark theme.
 - Friendly errors ("Connection was lost…") with technical details one click away and in a log file.
 
-## Install / run
+## Download and install
 
-**From a release build:** run `BeamSetup-<version>-x64.exe` (per-user install, no administrator rights), or just run
-the standalone `Beam.exe` — it is a single self-contained file (~31 MB) that needs nothing else installed.
+Go to **[Releases](../../releases/latest)** and download:
 
-On first launch Windows may ask whether Beam can use the network: choose **Allow** (private networks). Beam explains
-this on its welcome screen. Installing "for all users" adds the firewall rule automatically.
+| You have | Download |
+|---|---|
+| Most Windows PCs (Intel/AMD) | `Beam-<version>-x64-setup.exe` |
+| Windows on ARM | `Beam-<version>-arm64-setup.exe` |
+| No installation wanted | `Beam-<version>-x64-portable.exe` — a single file, just run it |
+
+The installer needs no administrator rights. Because these direct downloads aren't code-signed, Windows
+SmartScreen may say "Windows protected your PC": click **More info → Run anyway**. (The Microsoft Store
+version is signed by Microsoft.) On first launch, allow Beam through Windows Firewall on private networks —
+Beam's welcome screen explains this.
 
 Requirements: Windows 10 (1809) or Windows 11, x64 or ARM64.
+
+## Microsoft Store
+
+The Store package (MSIX) and listing material are ready: see **[docs/STORE-SUBMISSION.md](docs/STORE-SUBMISSION.md)**.
+Each release also contains `Beam_<version>.0.msixbundle` for uploading to Partner Center.
+
+## Making a release
+
+Bump `<Version>` in `Directory.Build.props`, then push a tag:
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+The *Release* workflow builds everything on Windows and publishes the GitHub release automatically.
 
 ## Build from source
 
@@ -70,6 +92,7 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | `tests/Beam.Core.Tests` | Engine tests: real two-device transfers over loopback TLS, failure injection, resume, security. |
 | `tests/Beam.App.Tests` | Headless UI tests that drive real transfers through the UI and render screenshots. |
 | `installer/Beam.iss` | Inno Setup installer script. |
+| `packaging/` | Microsoft Store: MSIX manifest, logos, packaging script, listing text and screenshots. |
 | `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md). |
 
 ## Troubleshooting
@@ -82,3 +105,9 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | Need technical details | Settings → About → **Open log folder** (`%LOCALAPPDATA%\Beam\logs`). |
 
 Beam stores its settings, history and device identity in `%LOCALAPPDATA%\Beam`. It never keeps copies of transferred files.
+
+## License
+
+Copyright © 2026 Diazman. All rights reserved. This is proprietary software — see [LICENSE](LICENSE).
+No permission is granted to copy, modify or redistribute the source code. Third-party components are
+listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Privacy: [PRIVACY.md](PRIVACY.md).

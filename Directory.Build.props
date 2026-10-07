@@ -5,8 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>1.0.0</Version>
     <Product>Beam</Product>
-    <Company>Beam</Company>
-    <Copyright>Copyright © 2026</Copyright>
+    <Authors>Diazman</Authors>
+    <Company>Diazman</Company>
+    <Copyright>Copyright © 2026 Diazman. All rights reserved.</Copyright>
     <Deterministic>true</Deterministic>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

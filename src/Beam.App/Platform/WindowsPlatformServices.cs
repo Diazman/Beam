@@ -21,7 +21,8 @@ internal sealed partial class WindowsPlatformServices : IPlatformServices
     {
         try
         {
-            SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+            // A packaged (Store) app already has an identity from its package.
+            if (!PackageInfo.IsPackaged) SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
         }
         catch (Exception ex)
         {
@@ -56,6 +57,7 @@ internal sealed partial class WindowsPlatformServices : IPlatformServices
 
     public bool GetStartWithSystem()
     {
+        if (PackageInfo.IsPackaged) return PackagedStartup.IsEnabled();
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey);
@@ -69,6 +71,12 @@ internal sealed partial class WindowsPlatformServices : IPlatformServices
 
     public void SetStartWithSystem(bool enabled)
     {
+        if (PackageInfo.IsPackaged)
+        {
+            PackagedStartup.SetEnabled(enabled);
+            return;
+        }
+
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);

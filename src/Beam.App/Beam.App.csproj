@@ -18,7 +18,7 @@
 
   <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <DefineConstants>$(DefineConstants);WINDOWS_TOASTS</DefineConstants>
+    <DefineConstants>$(DefineConstants);WINDOWS_WINRT</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

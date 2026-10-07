@@ -46,3 +46,38 @@ if __name__ == "__main__":
     big.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, "beam.png"))
     big.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, "beam.ico"), sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48), (64, 64), (128, 128), (256, 256)])
     print("icons written to", os.path.abspath(OUT))
+
+
+def make_store_assets(out_dir):
+    """MSIX / Microsoft Store logo assets with the scale and target-size variants Windows looks for."""
+    os.makedirs(out_dir, exist_ok=True)
+    big = make(S)
+
+    def icon(px):
+        return big.resize((px, px), Image.LANCZOS)
+
+    def tile(width, height, icon_fraction):
+        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        px = int(min(width, height) * icon_fraction)
+        canvas.alpha_composite(icon(px), ((width - px) // 2, (height - px) // 2))
+        return canvas
+
+    for scale in (100, 125, 150, 200, 400):
+        f = scale / 100
+        icon(round(44 * f)).save(os.path.join(out_dir, f"Square44x44Logo.scale-{scale}.png"))
+        tile(round(150 * f), round(150 * f), 0.62).save(os.path.join(out_dir, f"Square150x150Logo.scale-{scale}.png"))
+        tile(round(310 * f), round(150 * f), 0.62).save(os.path.join(out_dir, f"Wide310x150Logo.scale-{scale}.png"))
+        tile(round(71 * f), round(71 * f), 0.78).save(os.path.join(out_dir, f"SmallTile.scale-{scale}.png"))
+        icon(round(50 * f)).save(os.path.join(out_dir, f"StoreLogo.scale-{scale}.png"))
+    for size in (16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256):
+        icon(size).save(os.path.join(out_dir, f"Square44x44Logo.targetsize-{size}.png"))
+        icon(size).save(os.path.join(out_dir, f"Square44x44Logo.targetsize-{size}_altform-unplated.png"))
+        icon(size).save(os.path.join(out_dir, f"Square44x44Logo.altform-lightunplated_targetsize-{size}.png"))
+    # Unqualified fallbacks (used when no resources.pri is present, e.g. packages built off Windows).
+    for name in ("Square44x44Logo", "Square150x150Logo", "Wide310x150Logo", "SmallTile", "StoreLogo"):
+        Image.open(os.path.join(out_dir, f"{name}.scale-200.png")).save(os.path.join(out_dir, f"{name}.png"))
+    print("store assets written to", os.path.abspath(out_dir))
+
+
+if __name__ == "__main__":
+    make_store_assets(os.path.join(os.path.dirname(__file__), "..", "packaging", "msix", "Assets"))

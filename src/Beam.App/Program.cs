@@ -13,6 +13,8 @@ internal static class Program
     public static int Main(string[] args)
     {
         var paths = AppDataPaths.Default();
+        if (Environment.GetEnvironmentVariable(AppDataPaths.OverrideVariable) == null && Platform.PackageInfo.LocalDataFolder is { } packaged)
+            paths = new AppDataPaths(packaged); // Store install: use the package's own data folder
         var key = SingleInstance.KeyFor(paths.Root);
         using var instance = SingleInstance.TryAcquire(key);
         if (instance == null)
@@ -32,7 +34,9 @@ internal static class Program
         };
 
         App.DataPaths = paths;
-        App.StartupCommandLine = CommandLine.Parse(args);
+        var commandLine = CommandLine.Parse(args);
+        if (Platform.PackageInfo.LaunchedByStartupTask()) commandLine = commandLine with { StartMinimized = true };
+        App.StartupCommandLine = commandLine;
         App.Instance = instance;
 
         try

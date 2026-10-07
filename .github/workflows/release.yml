@@ -1,0 +1,94 @@
+name: Release
+
+# Builds Beam on Windows and publishes a GitHub release with:
+#   • Beam-<version>-x64-setup.exe / -arm64-setup.exe   (installer, recommended)
+#   • Beam-<version>-x64-portable.exe / -arm64-...       (single exe, no install)
+#   • Beam_<version>.0.msixbundle                        (upload this to Microsoft Partner Center)
+# Trigger: push a tag like v1.0.0, or run manually from the Actions tab.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  AVALONIA_TELEMETRY_OPTOUT: 1
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run tests
+        run: dotnet test Beam.sln -c Release
+
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build apps and installers
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          ./build.ps1 -Runtime win-x64 -SkipTests -Installer
+          ./build.ps1 -Runtime win-arm64 -SkipTests -Installer
+          $v = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item artifacts/publish/win-x64/Beam.exe "release/Beam-$v-x64-portable.exe"
+          Copy-Item artifacts/publish/win-arm64/Beam.exe "release/Beam-$v-arm64-portable.exe"
+          Copy-Item "artifacts/installer/BeamSetup-$v-x64.exe" "release/Beam-$v-x64-setup.exe"
+          Copy-Item "artifacts/installer/BeamSetup-$v-arm64.exe" "release/Beam-$v-arm64-setup.exe"
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Build Microsoft Store package
+        shell: pwsh
+        run: |
+          ./packaging/build-msix.ps1
+          Copy-Item artifacts/msix/*.msixbundle release/
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem release | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content release/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beam-release
+          path: release/*
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', env.VERSION) }}
+          name: Beam ${{ env.VERSION }}
+          files: release/*
+          body: |
+            ## Download
+
+            | You have | Download |
+            |---|---|
+            | Most Windows PCs (Intel/AMD) | **Beam-${{ env.VERSION }}-x64-setup.exe** |
+            | Windows on ARM (e.g. Snapdragon laptops) | Beam-${{ env.VERSION }}-arm64-setup.exe |
+            | No installation wanted | Beam-${{ env.VERSION }}-x64-portable.exe — just run it |
+
+            The installer needs no administrator rights. Windows may show "Windows protected your PC"
+            because these builds aren't code-signed: click **More info → Run anyway**. The Microsoft Store
+            version is signed by Microsoft.
+
+            `Beam_${{ env.VERSION }}.0.msixbundle` is the Microsoft Store package — upload it in Partner
+            Center (it can't be installed by double-clicking). See docs/STORE-SUBMISSION.md.
+
+            Requires Windows 10 (1809) or Windows 11.

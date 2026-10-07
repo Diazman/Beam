@@ -1,7 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security;
 using Beam.Core.Diagnostics;
-#if WINDOWS_TOASTS
+#if WINDOWS_WINRT
 using Microsoft.Win32;
 using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
@@ -11,21 +11,29 @@ namespace Beam.App.Platform;
 
 /// <summary>
 /// Native Windows 10/11 toast notifications for an unpackaged desktop app. The app registers its
-/// AppUserModelID under HKCU so Windows knows the display name and icon to show.
+/// AppUserModelID under HKCU so Windows knows the display name and icon to show; the Store
+/// (MSIX) build uses its package identity instead.
 /// Builds without the Windows SDK projection (the plain net8.0 target) simply don't show toasts.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal sealed class ToastNotifier
 {
-#if WINDOWS_TOASTS
+#if WINDOWS_WINRT
     private readonly Windows.UI.Notifications.ToastNotifier? _notifier;
 #endif
 
     public ToastNotifier()
     {
-#if WINDOWS_TOASTS
+#if WINDOWS_WINRT
         try
         {
+            if (PackageInfo.IsPackaged)
+            {
+                // Store (MSIX) install: the package identity supplies the name and icon.
+                _notifier = ToastNotificationManager.CreateToastNotifier();
+                return;
+            }
+
             var iconPath = ExtractIcon();
             using (var key = Registry.CurrentUser.CreateSubKey($@"Software\Classes\AppUserModelId\{WindowsPlatformServices.AppUserModelId}"))
             {
@@ -44,7 +52,7 @@ internal sealed class ToastNotifier
 
     public void Show(string title, string message, Action? onActivated)
     {
-#if WINDOWS_TOASTS
+#if WINDOWS_WINRT
         if (_notifier == null) return;
         try
         {
@@ -68,7 +76,7 @@ internal sealed class ToastNotifier
 #endif
     }
 
-#if WINDOWS_TOASTS
+#if WINDOWS_WINRT
     private static string? ExtractIcon()
     {
         try

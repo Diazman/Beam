@@ -85,7 +85,7 @@ public sealed class UiHarness : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true)
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760)
     {
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
@@ -103,7 +103,7 @@ public sealed class UiHarness : IAsyncDisposable
         });
         Ui = new FakeUi();
         Platform = new FakePlatform();
-        Window = new MainWindow { Width = 1180, Height = 760 };
+        Window = new MainWindow { Width = width, Height = height };
         ViewModel = new MainViewModel(Node, Platform, Ui);
         Window.DataContext = ViewModel;
         Window.Show();
@@ -170,12 +170,12 @@ public sealed class UiHarness : IAsyncDisposable
     }
 
     /// <summary>Renders the window to a PNG under artifacts/screenshots for visual review.</summary>
-    public string Screenshot(string name)
+    public string Screenshot(string name, string folderName = "screenshots")
     {
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         var frame = Window.CaptureRenderedFrame() ?? throw new InvalidOperationException("Nothing rendered");
-        var folder = Path.Combine(FindRepoRoot(), "artifacts", "screenshots");
+        var folder = Path.Combine(FindRepoRoot(), "artifacts", folderName);
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, name + ".png");
         frame.Save(path);
