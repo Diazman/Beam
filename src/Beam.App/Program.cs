@@ -37,7 +37,16 @@ internal static class Program
 
         try
         {
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnExplicitShutdown);
+            var builder = BuildAvaloniaApp();
+            if (App.StartupCommandLine.SoftwareRendering || Environment.GetEnvironmentVariable("BEAM_SOFTWARE_RENDERING") == "1")
+            {
+                // Troubleshooting switch for PCs whose graphics drivers render a blank/black window.
+                Log.Info("Using software rendering");
+                builder = builder.With(new Win32PlatformOptions { RenderingMode = new[] { Win32RenderingMode.Software } })
+                    .With(new X11PlatformOptions { RenderingMode = new[] { X11RenderingMode.Software } });
+            }
+
+            builder.StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnExplicitShutdown);
             return 0;
         }
         catch (Exception ex)

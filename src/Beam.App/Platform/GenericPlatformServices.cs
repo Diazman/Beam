@@ -24,9 +24,13 @@ internal sealed class GenericPlatformServices : IPlatformServices
     {
     }
 
+    private static readonly Lazy<bool> HasNotifySend = new(() =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
+        .Any(dir => File.Exists(Path.Combine(dir, "notify-send"))));
+
     public void ShowNotification(string title, string message, Action? onActivated = null)
     {
-        if (OperatingSystem.IsLinux()) Launch("notify-send", "--app-name=Beam", title, message);
+        if (OperatingSystem.IsLinux() && HasNotifySend.Value) Launch("notify-send", "--app-name=Beam", title, message);
     }
 
     private static void Launch(string program, params string[] args)

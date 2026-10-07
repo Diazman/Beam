@@ -44,7 +44,18 @@ public partial class App : Application
             _desktop = desktop;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            _node = BeamNode.Create(new BeamNodeOptions { Paths = DataPaths });
+            try
+            {
+                _node = BeamNode.Create(new BeamNodeOptions { Paths = DataPaths });
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Beam could not start", ex);
+                ShowStartupError(desktop, ex);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var platform = PlatformServices.Create();
             _window = new MainWindow();
             _viewModel = new MainViewModel(_node, platform, _window);
@@ -105,6 +116,49 @@ public partial class App : Application
         {
             Log.Warn("Error while shutting down", ex);
         }
+    }
+
+    /// <summary>Last-resort window when Beam can't initialise (instead of a crash dialog).</summary>
+    private void ShowStartupError(IClassicDesktopStyleApplicationLifetime desktop, Exception ex)
+    {
+        var close = new Button { Content = "Close", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 96 };
+        close.Classes.Add("accent");
+        var heading = new TextBlock { Text = "Beam couldn't start", FontSize = 20, FontWeight = Avalonia.Media.FontWeight.SemiBold };
+        var window = new Window
+        {
+            Title = "Beam",
+            Width = 500,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = this.FindResource("WindowBackgroundBrush") as Avalonia.Media.IBrush,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(24),
+                Spacing = 12,
+                Children =
+                {
+                    heading,
+                    new TextBlock
+                    {
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                        Text = "Something on this computer stopped Beam from starting. Restarting the computer often helps. " +
+                               "If it keeps happening, the details below help with troubleshooting.",
+                    },
+                    new SelectableTextBlock
+                    {
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                        FontSize = 12,
+                        Text = $"{ex.GetType().Name}: {ex.Message}\nLog folder: {DataPaths.LogDirectory}",
+                    },
+                    close,
+                },
+            },
+        };
+        close.Click += (_, _) => window.Close();
+        window.Closed += (_, _) => desktop.Shutdown(1);
+        desktop.MainWindow = window;
+        window.Show();
     }
 
     private void ApplyTheme(ThemePreference theme) => RequestedThemeVariant = theme switch

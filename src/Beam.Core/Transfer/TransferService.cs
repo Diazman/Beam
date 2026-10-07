@@ -14,7 +14,7 @@ namespace Beam.Core.Transfer;
 /// </summary>
 public sealed class TransferService : IAsyncDisposable
 {
-    private const int MaxConcurrentConnections = 32;
+    private const int MaxConcurrentConnections = 16;
     private const int MaxPendingPrompts = 4;
 
     private readonly ConcurrentDictionary<string, TransferSession> _sessions = new();

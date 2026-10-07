@@ -474,3 +474,31 @@ public class TransferTests
         Assert.Equal(TestFiles.Hash(f3), TestFiles.Hash(Path.Combine(b.ReceiveFolder, "three.bin")));
     }
 }
+
+public class TransferSecurityTests
+{
+    [Fact]
+    public async Task NeverWritesThroughALinkedFolder()
+    {
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        sender.CreateFile("Photos/a.jpg", 100, 1);
+        var outside = Path.Combine(receiver.Root, "outside");
+        Directory.CreateDirectory(outside);
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(receiver.ReceiveFolder, "Photos"), outside);
+        }
+        catch (Exception)
+        {
+            return; // symlinks not permitted on this machine
+        }
+
+        var session = sender.Node.Send(receiver.AsDevice(), new[] { sender.SourcePath("Photos") });
+        await Wait.ForFinishAsync(session);
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Empty(Directory.GetFiles(outside));
+        Assert.True(File.Exists(Path.Combine(receiver.ReceiveFolder, "Photos (1)", "a.jpg")));
+    }
+}

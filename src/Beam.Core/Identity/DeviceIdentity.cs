@@ -66,9 +66,9 @@ public sealed class DeviceIdentity : IDisposable
     private static DeviceIdentity Create(string path)
     {
         var deviceId = Guid.NewGuid().ToString("N");
-        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var request = new CertificateRequest($"CN={AppInfo.ProductName} device {deviceId[..8]}", key, HashAlgorithmName.SHA256);
-        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
+        var subject = $"CN={AppInfo.ProductName} device {deviceId[..8]}";
+        using var key = CreateKey(subject, out var request, out var usage);
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(usage, critical: true));
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
             new OidCollection { new Oid("1.3.6.1.5.5.7.3.1"), new Oid("1.3.6.1.5.5.7.3.2") }, critical: false));
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
@@ -94,6 +94,26 @@ public sealed class DeviceIdentity : IDisposable
 
         Log.Info($"Created new device identity {deviceId}");
         return new DeviceIdentity(deviceId, LoadCertificate(pfx));
+    }
+
+    /// <summary>ECDSA P-256 where available (fast, small); RSA-2048 on systems whose crypto provider lacks it.</summary>
+    private static AsymmetricAlgorithm CreateKey(string subject, out CertificateRequest request, out X509KeyUsageFlags usage)
+    {
+        try
+        {
+            var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            request = new CertificateRequest(subject, ecdsa, HashAlgorithmName.SHA256);
+            usage = X509KeyUsageFlags.DigitalSignature;
+            return ecdsa;
+        }
+        catch (Exception ex) when (ex is CryptographicException or PlatformNotSupportedException)
+        {
+            Log.Warn($"ECDSA keys unavailable ({ex.Message}); using RSA");
+            var rsa = RSA.Create(2048);
+            request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            usage = X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment;
+            return rsa;
+        }
     }
 
     private static X509Certificate2 LoadCertificate(byte[] pfx)

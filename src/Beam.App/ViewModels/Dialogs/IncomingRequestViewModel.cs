@@ -100,7 +100,7 @@ public sealed class IncomingRequestViewModel : DialogViewModel
 
     private void UpdateSpace()
     {
-        var available = AvailableBytes(Folder);
+        var available = DiskSpace.GetAvailableBytes(Folder);
         NotEnoughSpace = available >= 0 && available < Request.TotalBytes;
         SpaceWarning = NotEnoughSpace
             ? $"Not enough space: {Format.Bytes(Request.TotalBytes)} needed, {Format.Bytes(available)} free. Choose another folder or free up space."
@@ -108,19 +108,5 @@ public sealed class IncomingRequestViewModel : DialogViewModel
         OnPropertyChanged(nameof(NotEnoughSpace));
         OnPropertyChanged(nameof(SpaceWarning));
         AcceptCommand?.RaiseCanExecuteChanged();
-    }
-
-    private static long AvailableBytes(string folder)
-    {
-        try
-        {
-            var root = Path.GetPathRoot(Path.GetFullPath(folder));
-            if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal)) return -1;
-            return new DriveInfo(root).AvailableFreeSpace;
-        }
-        catch
-        {
-            return -1;
-        }
     }
 }

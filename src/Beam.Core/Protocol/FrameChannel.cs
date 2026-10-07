@@ -23,7 +23,7 @@ public sealed class FrameChannel
     public const int HeaderSize = 5;
     public const int DataChunkSize = 256 * 1024;
     public const int MaxDataPayload = 1024 * 1024;
-    public const int MaxControlPayload = 64 * 1024 * 1024;
+    public const int MaxControlPayload = 32 * 1024 * 1024; // ~250,000 files in one offer
 
     private readonly Stream _stream;
     private readonly SemaphoreSlim _writeLock = new(1, 1);

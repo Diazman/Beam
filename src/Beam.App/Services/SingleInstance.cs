@@ -34,7 +34,9 @@ public sealed class SingleInstance : IDisposable
     /// <summary>Returns null if another instance already owns <paramref name="key"/>.</summary>
     public static SingleInstance? TryAcquire(string key)
     {
-        var mutex = new Mutex(initiallyOwned: true, (OperatingSystem.IsWindows() ? @"Local\" : "") + key, out var created);
+        // Windows: per logon session. Elsewhere .NET scopes unprefixed names to the terminal session,
+        // so use Global\ (the key already contains the user name).
+        var mutex = new Mutex(initiallyOwned: true, (OperatingSystem.IsWindows() ? @"Local\" : @"Global\") + key, out var created);
         if (!created)
         {
             mutex.Dispose();

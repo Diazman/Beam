@@ -648,7 +648,7 @@ internal sealed class IncomingTransfer
     {
         if (string.IsNullOrEmpty(offer.TransferId) || offer.TransferId.Length > 64 || !offer.TransferId.All(char.IsAsciiLetterOrDigit))
             return null;
-        if (offer.Entries.Count == 0 || offer.Entries.Count > 2_000_000) return null;
+        if (offer.Entries.Count == 0 || offer.Entries.Count > 500_000) return null;
 
         var result = new List<IncomingEntry>(offer.Entries.Count);
         long total = 0;
@@ -722,12 +722,13 @@ internal sealed class IncomingTransfer
                 var parent = actual;
                 var name = segments[i];
                 var full = SafePath.Combine(destination, parent.Append(name));
-                if (File.Exists(full) || plan.PlannedPaths.Contains(full))
+                if (File.Exists(full) || plan.PlannedPaths.Contains(full) || IsLink(full))
                 {
+                    // Never merge into a symbolic link / junction: it could point outside the destination.
                     name = FileNaming.MakeUnique(name, n =>
                     {
                         var candidate = SafePath.Combine(destination, parent.Append(n));
-                        return File.Exists(candidate) || plan.PlannedPaths.Contains(candidate);
+                        return File.Exists(candidate) || plan.PlannedPaths.Contains(candidate) || IsLink(candidate);
                     }, isDirectory: true);
                     full = SafePath.Combine(destination, parent.Append(name));
                 }
@@ -797,6 +798,19 @@ internal sealed class IncomingTransfer
         }
 
         return plan;
+    }
+
+    private static bool IsLink(string path)
+    {
+        try
+        {
+            var info = new DirectoryInfo(path);
+            return info.Exists && (info.Attributes.HasFlag(FileAttributes.ReparsePoint) || info.LinkTarget != null);
+        }
+        catch
+        {
+            return true; // can't tell: treat as unsafe
+        }
     }
 
     private static void ApplyConflictActions(Plan plan, IReadOnlyList<ConflictAction> actions)
@@ -892,7 +906,7 @@ internal sealed class IncomingTransfer
     }
 }
 
-internal static class DiskSpace
+public static class DiskSpace
 {
     /// <summary>Free bytes available to the user on the drive holding <paramref name="path"/>, or -1 if unknown.</summary>
     public static long GetAvailableBytes(string path)
