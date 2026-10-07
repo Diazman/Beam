@@ -52,6 +52,23 @@ internal sealed class PeerConnection : IAsyncDisposable
             // The connection may already be gone; closing is what matters.
         }
 
+        // Close gracefully: if a socket is closed while the peer's data is still unread, Windows
+        // resets the connection and the peer loses the Cancel frame we just sent. So signal end of
+        // stream and discard incoming data until the peer closes too (it stops once it reads Cancel).
+        try
+        {
+            _socket.Shutdown(SocketShutdown.Send);
+            var buffer = new byte[64 * 1024];
+            using var drain = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            while (await _socket.ReceiveAsync(buffer, SocketFlags.None, drain.Token).ConfigureAwait(false) > 0)
+            {
+            }
+        }
+        catch
+        {
+            // Peer closed, reset, or took too long: either way we're done.
+        }
+
         await DisposeAsync().ConfigureAwait(false);
     }
 
