@@ -1,0 +1,75 @@
+; Beam installer (Inno Setup 6). Build with build.ps1 -Installer, or:
+;   iscc /DArch=x64 installer\Beam.iss
+; Installs per user by default (no administrator rights). Choosing "Install for all users"
+; elevates and additionally adds a Windows Firewall rule so Beam is reachable on private networks
+; without the first-run firewall prompt.
+
+#ifndef Arch
+  #define Arch "x64"
+#endif
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
+
+#define AppName "Beam"
+#define AppExe "Beam.exe"
+#define AppId "Beam.Desktop"
+
+[Setup]
+AppId={{6C1E4F0B-8B57-4C43-9E0B-3E7A1B9D4F21}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher=Beam
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+OutputDir=..\artifacts\installer
+OutputBaseFilename=BeamSetup-{#AppVersion}-{#Arch}
+SetupIconFile=..\src\Beam.App\Assets\beam.ico
+UninstallDisplayIcon={app}\{#AppExe}
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+CloseApplications=yes
+RestartApplications=no
+MinVersion=10.0.17763
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+#endif
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "startup"; Description: "Start Beam when I sign in, so other computers can send me files"; GroupDescription: "Other:"
+
+[Files]
+Source: "..\artifacts\publish\win-{#Arch}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+; The AppUserModelID must match WindowsPlatformServices.AppUserModelId so toasts show Beam's name and icon.
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppId}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "{#AppId}"; Tasks: desktopicon
+
+[Registry]
+; Same value Beam writes itself when "Start Beam when I sign in" is switched on in Settings.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"" --minimized"; Tasks: startup; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\{#AppId}"; Flags: uninsdeletekey dontcreatekey
+
+[Run]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Allowing Beam through Windows Firewall..."
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName}"" program=""{app}\{#AppExe}"""; Flags: runhidden; Check: IsAdminInstallMode; RunOnceId: "RemoveFirewallRule"
+
+; Settings, history and the device identity in %LOCALAPPDATA%\Beam are kept on uninstall so a
+; reinstall keeps the same name and trusted devices. Received files are never touched.

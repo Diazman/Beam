@@ -1,0 +1,118 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Beam.App.ViewModels"
+        xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+        xmlns:views="using:Beam.App.Views"
+        xmlns:dviews="using:Beam.App.Views.Dialogs"
+        x:Class="Beam.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Beam"
+        Icon="/Assets/beam.ico"
+        Width="1080" Height="720"
+        MinWidth="820" MinHeight="580"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        DragDrop.AllowDrop="True">
+
+  <Window.DataTemplates>
+    <DataTemplate DataType="vm:HomeViewModel">
+      <views:HomeView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:HistoryViewModel">
+      <views:HistoryView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SettingsViewModel">
+      <views:SettingsView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:IncomingRequestViewModel">
+      <dviews:IncomingRequestView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:ConflictViewModel">
+      <dviews:ConflictView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:ConfirmViewModel">
+      <dviews:ConfirmView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:AddDeviceViewModel">
+      <dviews:AddDeviceView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:WelcomeViewModel">
+      <dviews:WelcomeView />
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Panel>
+    <Grid ColumnDefinitions="Auto,*,Auto">
+      <!-- Navigation rail -->
+      <Border Width="76"
+              Background="{DynamicResource RailBackgroundBrush}"
+              BorderBrush="{DynamicResource DividerBrush}"
+              BorderThickness="0,0,1,0">
+        <StackPanel Margin="0,18,0,0" Spacing="4" HorizontalAlignment="Center">
+          <Image Source="/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
+                 ToolTip.Tip="Beam" />
+          <RadioButton Classes="nav" GroupName="nav" Content="Send"
+                       Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="History"
+                       Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="Settings"
+                       Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Current page -->
+      <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" />
+
+      <!-- Transfers panel (only while there are transfers) -->
+      <Border Grid.Column="2" Width="340"
+              IsVisible="{Binding HasTransfers}"
+              Background="{DynamicResource RailBackgroundBrush}"
+              BorderBrush="{DynamicResource DividerBrush}"
+              BorderThickness="1,0,0,0">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="20,24,14,12">
+            <TextBlock Classes="h2" Text="Transfers" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="link" Content="Clear finished"
+                    Command="{Binding ClearFinishedCommand}"
+                    IsVisible="{Binding HasFinishedTransfers}" />
+          </Grid>
+          <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Transfers}" Margin="14,0,14,14">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Spacing="10" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TransferViewModel">
+                  <views:TransferCard />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+
+    <!-- Shown while files are dragged over the window -->
+    <Border IsVisible="{Binding IsDragOver}" Background="{DynamicResource OverlayBrush}" IsHitTestVisible="False">
+      <Border Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="44,32">
+        <StackPanel Spacing="10" HorizontalAlignment="Center">
+          <Border Classes="iconBadge" Width="60" Height="60" CornerRadius="30" HorizontalAlignment="Center" Margin="0,0,0,6">
+            <PathIcon Data="{StaticResource IconUpload}" Width="26" Height="26" />
+          </Border>
+          <TextBlock Classes="h2" Text="Drop to add to your send list" HorizontalAlignment="Center" />
+          <TextBlock Classes="secondary" Text="Files and whole folders both work." HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+    </Border>
+
+    <!-- Dialogs -->
+    <Border IsVisible="{Binding HasDialog}" Background="{DynamicResource OverlayBrush}">
+      <Border Classes="dialog" HorizontalAlignment="Center" VerticalAlignment="Center"
+              MaxWidth="560" Margin="24">
+        <ContentControl Content="{Binding Dialog}" />
+      </Border>
+    </Border>
+  </Panel>
+</Window>

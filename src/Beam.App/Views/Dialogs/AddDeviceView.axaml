@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.AddDeviceView"
+             x:DataType="dlg:AddDeviceViewModel"
+             Width="460">
+  <StackPanel Spacing="16">
+    <StackPanel Spacing="10">
+      <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
+        <PathIcon Data="{StaticResource IconLink}" Width="22" Height="22" />
+      </Border>
+      <TextBlock Classes="dialogTitle" Text="Connect by address" />
+      <TextBlock Classes="secondary" TextWrapping="Wrap"
+                 Text="Some networks stop computers from finding each other automatically. On the other computer, open Beam and go to Settings → Connection. Type the address shown there." />
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <TextBox Name="AddressBox" Text="{Binding Address}" Watermark="For example 192.168.1.20" IsEnabled="{Binding !IsBusy}" />
+      <Border Classes="notice error" IsVisible="{Binding HasError}">
+        <TextBlock Text="{Binding Error}" TextWrapping="Wrap" FontSize="13" />
+      </Border>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+    </StackPanel>
+
+    <Border Classes="details">
+      <TextBlock Classes="caption" TextWrapping="Wrap">
+        <Run Text="This computer's address:" />
+        <Run Text="{Binding LocalAddresses}" FontWeight="SemiBold" />
+      </TextBlock>
+    </Border>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="Cancel" MinWidth="96" Command="{Binding CancelCommand}" />
+      <Button Classes="accent" Content="Connect" MinWidth="96" Command="{Binding ConnectCommand}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

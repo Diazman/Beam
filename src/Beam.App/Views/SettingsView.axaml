@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="36,30,36,36" Spacing="24" MaxWidth="820" HorizontalAlignment="Left">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="Settings" />
+        <TextBlock Classes="secondary" Text="Changes are saved automatically." />
+      </StackPanel>
+
+      <!-- This computer -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="This computer" />
+        <Border Classes="card">
+          <StackPanel Spacing="16">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h3" Text="Name" />
+              <TextBlock Classes="caption" Text="Other people see this name when they send you files." />
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                <TextBox Name="NameBox" Text="{Binding DeviceName}" MaxLength="{Binding MaxNameLength}" Width="320"
+                         Watermark="e.g. Diaz's laptop" />
+                <Button Content="Save" Command="{Binding SaveNameCommand}" />
+              </StackPanel>
+              <TextBlock Classes="caption success" Text="{Binding NameStatus}" />
+            </StackPanel>
+            <Separator />
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="Let nearby computers find this one" />
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="When off, this computer doesn't appear for others. You can still send files to them." />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Discoverable}" Margin="16,0,0,0" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Receiving -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="Receiving files" />
+        <Border Classes="card">
+          <StackPanel Spacing="16">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h3" Text="Save received files to" />
+              <Grid ColumnDefinitions="Auto,*">
+                <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource TextSecondaryBrush}" />
+                <TextBlock Grid.Column="1" Text="{Binding ReceiveFolder}" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding ReceiveFolder}" VerticalAlignment="Center" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                <Button Content="Change…" Command="{Binding ChangeFolderCommand}" />
+                <Button Content="Open folder" Command="{Binding OpenFolderCommand}" />
+                <Button Classes="link" Content="Use Downloads" Command="{Binding ResetFolderCommand}"
+                        IsVisible="{Binding !UsesDefaultFolder}" />
+              </StackPanel>
+              <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"
+                         Text="You can also choose a different folder each time you accept files." />
+            </StackPanel>
+            <Separator />
+            <StackPanel Spacing="8">
+              <TextBlock Classes="h3" Text="Trusted computers" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="Files from these computers are accepted without asking. Add one by ticking “Always accept” when it sends you files." />
+              <TextBlock Classes="tertiary" Text="No trusted computers. Beam always asks before receiving files." IsVisible="{Binding !HasTrustedDevices}" />
+              <ItemsControl ItemsSource="{Binding TrustedDevices}" IsVisible="{Binding HasTrustedDevices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TrustedDeviceViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                      <PathIcon Data="{StaticResource IconShield}" Width="16" Height="16" Foreground="{DynamicResource SuccessBrush}" />
+                      <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" />
+                        <TextBlock Classes="caption" Text="{Binding Details}" />
+                      </StackPanel>
+                      <Button Grid.Column="2" Content="Remove" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- App behaviour -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="App" />
+        <Border Classes="card">
+          <StackPanel Spacing="12">
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto" IsVisible="{Binding SupportsStartup}">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="Start Beam when I sign in to Windows" />
+                <TextBlock Classes="caption" Text="Beam starts quietly in the notification area, ready to receive files." TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding StartWithWindows}" Margin="16,0,0,0" />
+            </Grid>
+            <Separator IsVisible="{Binding SupportsStartup}" />
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="Keep running when the window is closed" />
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="Beam stays in the notification area so other computers can still send you files." />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding CloseToTray}" Margin="16,0,0,0" />
+            </Grid>
+            <Separator />
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="Appearance" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ThemeOptions}" SelectedItem="{Binding SelectedTheme}"
+                        MinWidth="200" Margin="16,0,0,0" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Notifications -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="Notifications" />
+        <Border Classes="card">
+          <StackPanel Spacing="12">
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="Show notifications" />
+                <TextBlock Classes="caption" Text="Only shown while the Beam window isn't in front." />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding NotificationsEnabled}" Margin="16,0,0,0" />
+            </Grid>
+            <StackPanel Spacing="4" Margin="2,0,0,0" IsEnabled="{Binding NotificationsEnabled}">
+              <CheckBox Content="When someone wants to send me files" IsChecked="{Binding NotifyOnIncomingRequest}" />
+              <CheckBox Content="When a transfer finishes or fails" IsChecked="{Binding NotifyOnTransferFinished}" />
+              <CheckBox Content="When a nearby computer appears" IsChecked="{Binding NotifyOnDeviceFound}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Connection help -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="Connection" />
+        <Border Classes="card">
+          <StackPanel Spacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="h3" Text="This computer's address" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="If another computer can't find this one automatically, type this address there using “Can't find a computer?”." />
+              <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                <SelectableTextBlock Text="{Binding LocalAddresses}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Copy" Command="{Binding CopyAddressCommand}" />
+              </Grid>
+            </StackPanel>
+            <StackPanel Spacing="6" IsVisible="{Binding HasManualAddresses}">
+              <Separator />
+              <TextBlock Classes="h3" Text="Computers added by address" Margin="0,6,0,0" />
+              <ItemsControl ItemsSource="{Binding ManualAddresses}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ManualAddressViewModel">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                      <TextBlock Text="{Binding Address}" VerticalAlignment="Center" />
+                      <Button Grid.Column="1" Content="Forget" Command="{Binding RemoveCommand}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- About -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="About" />
+        <Border Classes="card">
+          <StackPanel Spacing="10">
+            <TextBlock Text="{Binding VersionText}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap">
+              <Run Text="Security code of this computer:" />
+              <Run Text="{Binding SecurityCode}" FontWeight="SemiBold" />
+              <Run Text=" — shown to others when you send them files, so they can check it's really you." />
+            </TextBlock>
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="Transfers go directly between computers on your network, are encrypted, and every file is checked after it arrives." />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Open log folder" Command="{Binding OpenLogsCommand}"
+                      ToolTip.Tip="Technical details that help when troubleshooting" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

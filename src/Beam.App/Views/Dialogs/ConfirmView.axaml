@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.ConfirmView"
+             x:DataType="dlg:ConfirmViewModel"
+             Width="420">
+  <StackPanel Spacing="14">
+    <TextBlock Classes="dialogTitle" Text="{Binding Title}" />
+    <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+      <Button Content="{Binding SecondaryText}" MinWidth="96" Command="{Binding SecondaryCommand}"
+              IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <Button Classes="accent" Content="{Binding PrimaryText}" MinWidth="96" Command="{Binding PrimaryCommand}"
+              IsVisible="{Binding IsNotDestructive}" />
+      <Button Classes="danger" Content="{Binding PrimaryText}" MinWidth="96" Command="{Binding PrimaryCommand}"
+              IsVisible="{Binding IsDestructive}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

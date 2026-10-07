@@ -1,0 +1,7 @@
+{
+  "_comment": "Replace these with the exact values from Partner Center > your app > Product management > Product identity. The Store rejects packages whose identity doesn't match.",
+  "identityName": "Diazman.Beam",
+  "publisher": "CN=Diazman",
+  "publisherDisplayName": "Diazman",
+  "displayName": "Beam"
+}

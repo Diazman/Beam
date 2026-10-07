@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.IncomingRequestView"
+             x:DataType="dlg:IncomingRequestViewModel"
+             Width="460">
+  <StackPanel Spacing="16">
+    <StackPanel Spacing="12">
+      <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
+        <PathIcon Data="{StaticResource IconDownload}" Width="22" Height="22" />
+      </Border>
+      <TextBlock Classes="dialogTitle" Text="{Binding Title}" />
+      <TextBlock Classes="secondary" Text="{Binding Summary}" />
+    </StackPanel>
+
+    <Border Classes="details" Padding="12,8">
+      <StackPanel Spacing="6">
+        <ItemsControl ItemsSource="{Binding Items}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="dlg:IncomingItemViewModel">
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                <PathIcon Data="{Binding Icon}" Width="14" Height="14" Foreground="{DynamicResource TextSecondaryBrush}" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="8,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Classes="caption" Text="{Binding Details}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="caption" Text="{Binding MoreItemsText}" IsVisible="{Binding HasMoreItems}" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel Spacing="4">
+      <TextBlock Classes="caption" Text="Save to" />
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <PathIcon Data="{StaticResource IconFolder}" Width="15" Height="15" Foreground="{DynamicResource TextSecondaryBrush}" />
+        <TextBlock Grid.Column="1" Text="{Binding Folder}" Margin="8,0" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Folder}" />
+        <Button Grid.Column="2" Classes="link" Content="Change" Command="{Binding ChangeFolderCommand}" />
+      </Grid>
+    </StackPanel>
+
+    <Border Classes="notice error" IsVisible="{Binding NotEnoughSpace}">
+      <TextBlock Text="{Binding SpaceWarning}" TextWrapping="Wrap" FontSize="13" />
+    </Border>
+
+    <CheckBox Content="{Binding TrustText}" IsChecked="{Binding TrustDevice}" IsVisible="{Binding CanTrust}" />
+
+    <TextBlock Classes="tertiary" TextWrapping="Wrap">
+      <Run Text="Security code" />
+      <Run Text="{Binding VerificationCode}" FontWeight="SemiBold" />
+      <Run Text="· from" />
+      <Run Text="{Binding SenderAddress}" />
+    </TextBlock>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
+      <Button Content="Decline" MinWidth="100" Command="{Binding DeclineCommand}" />
+      <Button Classes="accent" Content="Accept" MinWidth="100" Command="{Binding AcceptCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>
