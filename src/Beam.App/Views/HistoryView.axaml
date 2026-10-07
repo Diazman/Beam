@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.HistoryView"
+             x:DataType="vm:HistoryViewModel">
+  <DockPanel Margin="36,30,36,24">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,20">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="History" />
+        <TextBlock Classes="secondary" Text="Files you've recently sent and received. Beam doesn't keep copies of them." TextWrapping="Wrap" />
+      </StackPanel>
+      <Button Grid.Column="1" VerticalAlignment="Top" Command="{Binding ClearCommand}" IsVisible="{Binding HasItems}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <PathIcon Data="{StaticResource IconDelete}" Width="14" Height="14" />
+          <TextBlock Text="Clear history" />
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <Panel>
+      <!-- Empty state -->
+      <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="0,0,0,80">
+        <Border Classes="iconBadge neutral" Width="56" Height="56" CornerRadius="28" HorizontalAlignment="Center">
+          <PathIcon Data="{StaticResource IconHistory}" Width="24" Height="24" />
+        </Border>
+        <TextBlock Classes="h3" Text="No transfers yet" HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary" Text="Files you send or receive will be listed here." HorizontalAlignment="Center" />
+      </StackPanel>
+
+      <Border Classes="card" Padding="0" IsVisible="{Binding HasItems}" VerticalAlignment="Top">
+        <ScrollViewer>
+          <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:HistoryItemViewModel">
+                <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <Border Classes="iconBadge" Width="36" Height="36" CornerRadius="18"
+                            Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+                            Classes.error="{Binding IsError}" Classes.neutral="{Binding IsNeutral}">
+                      <PathIcon Data="{Binding Icon}" Width="15" Height="15" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="caption" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Right">
+                      <TextBlock Text="{Binding StatusText}" FontSize="13" HorizontalAlignment="Right" ToolTip.Tip="{Binding Tooltip}"
+                                 Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+                                 Classes.error="{Binding IsError}" Classes.secondary="{Binding IsNeutral}" />
+                      <TextBlock Classes="caption" Text="{Binding When}" HorizontalAlignment="Right" />
+                    </StackPanel>
+                    <Button Grid.Column="3" Content="Show" VerticalAlignment="Center" MinWidth="72"
+                            Command="{Binding ShowCommand}" IsVisible="{Binding CanShow}"
+                            ToolTip.Tip="Show the received files in their folder" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

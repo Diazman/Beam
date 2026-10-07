@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.TransferCard"
+             x:DataType="vm:TransferViewModel">
+  <Border Classes="card" Padding="14,12">
+    <StackPanel Spacing="8">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Border Classes="iconBadge" Width="36" Height="36" CornerRadius="18"
+                Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+                Classes.error="{Binding IsError}" Classes.neutral="{Binding IsNeutral}">
+          <PathIcon Data="{Binding Icon}" Width="15" Height="15" />
+        </Border>
+        <StackPanel Grid.Column="1" Margin="10,0,4,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ItemTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding ItemTitle}" />
+          <TextBlock Classes="caption" Text="{Binding Heading}" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <Button Grid.Column="2" Classes="icon" Width="28" Height="28" VerticalAlignment="Top"
+                Command="{Binding DismissCommand}" IsVisible="{Binding IsFinished}" ToolTip.Tip="Remove from list">
+          <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11" />
+        </Button>
+      </Grid>
+
+      <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="13"
+                 Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+                 Classes.error="{Binding IsError}" Classes.secondary="{Binding IsNeutral}" />
+
+      <ProgressBar Value="{Binding Progress}" Maximum="100" IsIndeterminate="{Binding IsIndeterminate}"
+                   IsVisible="{Binding ShowProgress}" />
+
+      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowStats}">
+        <TextBlock Classes="caption" Text="{Binding SizeText}" />
+        <TextBlock Grid.Column="1" Classes="caption" Text="{Binding SpeedText}" />
+      </Grid>
+      <TextBlock Classes="caption" Text="{Binding EtaText}" IsVisible="{Binding HasEta}" />
+      <TextBlock Classes="tertiary" Text="{Binding CurrentFileText}" IsVisible="{Binding HasCurrentFile}"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentFileText}" />
+
+      <WrapPanel Orientation="Horizontal">
+        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding OpenCommand}" IsVisible="{Binding CanOpenFile}" Content="Open" />
+        <Button Margin="0,4,8,0" Command="{Binding ShowInFolderCommand}" IsVisible="{Binding CanOpen}" Content="Show in folder" />
+        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" Content="Try again" />
+        <Button Margin="0,4,8,0" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" Content="{Binding CancelText}" />
+        <Button Classes="link" Margin="0,4,0,0" Command="{Binding ToggleDetailsCommand}" IsVisible="{Binding HasDetails}"
+                Content="{Binding DetailsToggleText}" />
+      </WrapPanel>
+
+      <Border Classes="details" IsVisible="{Binding ShowDetails}">
+        <SelectableTextBlock Text="{Binding DetailsText}" FontSize="12" TextWrapping="Wrap" />
+      </Border>
+    </StackPanel>
+  </Border>
+</UserControl>
