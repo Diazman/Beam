@@ -78,7 +78,7 @@ public sealed class ProService
     public string? Price { get; private set; }
 
     public static string StorePageUrl => string.IsNullOrEmpty(StoreProductId)
-        ? "https://apps.microsoft.com/search?query=Beam"
+        ? "https://apps.microsoft.com/search?query=Beam%20File%20Transfer"
         : $"ms-windows-store://pdp/?productid={StoreProductId}";
 
     /// <summary>Asks the store what the user owns. Never downgrades on errors (e.g. offline).</summary>
