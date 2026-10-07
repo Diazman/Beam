@@ -203,6 +203,9 @@ public sealed class FlakyProxy : IDisposable
     /// <summary>Cut the next connection after this many bytes from client to server (once).</summary>
     public long CutAfterBytes { get; set; } = -1;
 
+    /// <summary>Limits client-to-server throughput (bytes per second, per connection); 0 = unlimited.</summary>
+    public long BytesPerSecond { get; set; }
+
     /// <summary>Number of connections accepted so far.</summary>
     public int Connections;
 
@@ -260,7 +263,7 @@ public sealed class FlakyProxy : IDisposable
             var cut = CutAfterBytes;
             CutAfterBytes = -1;
             _ = PumpAsync(client, server, cut);
-            _ = PumpAsync(server, client, -1);
+            _ = PumpAsync(server, client, -2);
         }
     }
 
@@ -268,6 +271,8 @@ public sealed class FlakyProxy : IDisposable
     {
         var buffer = new byte[64 * 1024];
         long total = 0;
+        var limit = cutAfter == -2 ? 0 : BytesPerSecond;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             while (true)
@@ -284,6 +289,11 @@ public sealed class FlakyProxy : IDisposable
                 await to.SendAsync(buffer.AsMemory(0, read), SocketFlags.None);
                 total += read;
                 Interlocked.Add(ref BytesForwarded, read);
+                if (limit > 0)
+                {
+                    var due = TimeSpan.FromSeconds((double)total / limit) - clock.Elapsed;
+                    if (due > TimeSpan.Zero) await Task.Delay(due);
+                }
             }
         }
         catch

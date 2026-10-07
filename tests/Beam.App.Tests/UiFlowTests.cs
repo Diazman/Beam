@@ -112,10 +112,12 @@ public class UiFlowTests
         await app.InitializeAsync();
         await using var receiver = new TestNode("Laptop");
         receiver.Handler.DecisionDelay = TimeSpan.FromMilliseconds(700);
-        app.Node.Discovery.ReportReachable(receiver.AsDevice());
+        // Throttle so there is always a mid-transfer moment to observe, however fast the machine is.
+        using var throttle = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 40L * 1024 * 1024 };
+        app.Node.Discovery.ReportReachable(receiver.AsDevice(throttle.Port));
         await UiHarness.WaitForAsync(() => app.ViewModel.Home.SelectedDevice != null, "auto-selected only device");
 
-        var big = app.CreateFile("Project backup.zip", 400L * 1024 * 1024, 11);
+        var big = app.CreateFile("Project backup.zip", 160L * 1024 * 1024, 11);
         app.Ui.FilesToPick.Add(big);
         app.ViewModel.Home.ChooseFilesCommand.Execute(null);
         await UiHarness.WaitForAsync(() => app.ViewModel.Home.CanSend, "file added");
@@ -128,7 +130,7 @@ public class UiFlowTests
         Assert.Equal("Waiting for Laptop to accept…", card.StatusText);
 
         await UiHarness.WaitForAsync(() => card.Progress is > 15 and < 85 && card.SpeedText.Length > 0, "mid-transfer progress", 60000);
-        Assert.Matches(@"^[\d.]+ MB of 400 MB$", card.SizeText);
+        Assert.Matches(@"^[\d.]+ MB of 160 MB$", card.SizeText);
         Assert.EndsWith("/s", card.SpeedText);
         Assert.Equal("Sending", card.StatusText);
         app.Screenshot("08-sending-progress");
