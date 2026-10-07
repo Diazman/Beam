@@ -54,13 +54,14 @@ Each release also contains `Beam_<version>.0.msixbundle` for uploading to Partne
 
 ## Making a release
 
-Bump `<Version>` in `Directory.Build.props`, then push a tag:
+Bump `<Version>` in `Directory.Build.props` and push to `main` — the *Release* workflow builds everything on Windows and
+publishes release `v<Version>` automatically (versions that already have a release are skipped). Pushing a tag works too:
 
 ```bash
 git tag v1.0.1 && git push origin v1.0.1
 ```
 
-The *Release* workflow builds everything on Windows and publishes the GitHub release automatically.
+
 
 ## Build from source
 
