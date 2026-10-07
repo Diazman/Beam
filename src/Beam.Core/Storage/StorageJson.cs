@@ -14,6 +14,7 @@ namespace Beam.Core.Storage;
 [JsonSerializable(typeof(List<HistoryEntry>))]
 [JsonSerializable(typeof(StoredIdentity))]
 [JsonSerializable(typeof(ResumeRecord))]
+[JsonSerializable(typeof(Licensing.SendUsage))]
 internal sealed partial class StorageJson : JsonSerializerContext
 {
 }

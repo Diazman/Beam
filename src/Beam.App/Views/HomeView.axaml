@@ -43,6 +43,12 @@
             </Button>
           </Grid>
 
+          <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowMultiSendUpsell}" Margin="0,-4,0,0">
+            <TextBlock Classes="caption" Text="Want to send to several computers at once?" VerticalAlignment="Center" />
+            <Button Classes="link" Content="Get Beam Pro" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
+          </StackPanel>
+
           <Border Classes="notice warning" IsVisible="{Binding DiscoveryUnavailable}">
             <TextBlock Text="{Binding DiscoveryProblem}" TextWrapping="Wrap" />
           </Border>
@@ -185,8 +191,14 @@
     <Border Grid.Row="1" Background="{DynamicResource CardBrush}"
             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="36,14">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="{Binding SendSummary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                   Classes.secondary="{Binding !CanSend}" FontWeight="Normal" Margin="0,0,16,0" />
+        <StackPanel VerticalAlignment="Center" Margin="0,0,16,0" Spacing="2">
+          <TextBlock Text="{Binding SendSummary}" TextTrimming="CharacterEllipsis"
+                     Classes.secondary="{Binding !CanSend}" FontWeight="Normal" />
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsFree}">
+            <TextBlock Classes="caption" Text="{Binding PlanText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Button Classes="link" Content="Upgrade" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
+          </StackPanel>
+        </StackPanel>
         <Button Grid.Column="1" Classes="accent large" Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <PathIcon Data="{StaticResource IconSend}" Width="14" Height="14" />

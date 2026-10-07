@@ -214,7 +214,7 @@ public class UiFlowTests
         await gone.DisposeAsync();
 
         app.Node.Discovery.ReportReachable(device);
-        app.ViewModel.StartSend(device, new[] { app.CreateFile("a.txt", 10) });
+        await app.ViewModel.StartSendAsync(device, new[] { app.CreateFile("a.txt", 10) });
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.SingleOrDefault()?.IsFinished == true, "failure", 30000);
         var card = app.ViewModel.Transfers[0];
         Assert.True(card.IsError);
@@ -233,7 +233,7 @@ public class UiFlowTests
         await app.InitializeAsync();
         await using var receiver = new TestNode("Laptop");
         receiver.Handler.NeverAnswer = true;
-        app.ViewModel.StartSend(receiver.AsDevice(), new[] { app.CreateFile("a.txt", 10) });
+        await app.ViewModel.StartSendAsync(receiver.AsDevice(), new[] { app.CreateFile("a.txt", 10) });
         await UiHarness.WaitForAsync(() => app.ViewModel.HasActiveTransfers, "active transfer");
 
         var decision = app.ViewModel.ConfirmQuitAsync();

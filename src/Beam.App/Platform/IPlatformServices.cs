@@ -11,6 +11,9 @@ public interface IPlatformServices
 
     void OpenFile(string path);
 
+    /// <summary>Opens a web or store link.</summary>
+    void OpenUrl(string url);
+
     bool SupportsStartWithSystem { get; }
 
     bool GetStartWithSystem();

@@ -69,6 +69,8 @@ public sealed class FakePlatform : IPlatformServices
 
     public void OpenFile(string path) => Calls.Add("open-file:" + path);
 
+    public void OpenUrl(string url) => Calls.Add("open-url:" + url);
+
     public bool GetStartWithSystem() => StartWithSystem;
 
     public void SetStartWithSystem(bool enabled)
@@ -80,19 +82,49 @@ public sealed class FakePlatform : IPlatformServices
     public void ShowNotification(string title, string message, Action? onActivated = null) => Calls.Add($"notify:{title}|{message}");
 }
 
+/// <summary>Stands in for the Microsoft Store.</summary>
+public sealed class FakeStore : IStoreService
+{
+    public bool CanPurchase { get; set; } = true;
+
+    public bool Owns { get; set; }
+
+    public PurchaseOutcome NextOutcome { get; set; } = PurchaseOutcome.Purchased;
+
+    public int Purchases { get; private set; }
+
+    public event Action? LicenseChanged;
+
+    public Task<bool?> OwnsProAsync() => Task.FromResult<bool?>(Owns);
+
+    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? "$4.99" : null);
+
+    public Task<PurchaseOutcome> PurchaseProAsync()
+    {
+        Purchases++;
+        if (NextOutcome == PurchaseOutcome.Purchased) Owns = true;
+        return Task.FromResult(NextOutcome);
+    }
+
+    public void RaiseLicenseChanged() => LicenseChanged?.Invoke();
+}
+
 /// <summary>A Beam app (view model + real window + real node) running headless.</summary>
 public sealed class UiHarness : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760)
+    /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true)
     {
+        Store = new FakeStore { Owns = pro };
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
         Node = BeamNode.Create(new BeamNodeOptions
         {
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
+            Edition = new Beam.Core.Licensing.Edition(pro),
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
         });
         Node.Settings.Update(s =>
@@ -104,7 +136,7 @@ public sealed class UiHarness : IAsyncDisposable
         Ui = new FakeUi();
         Platform = new FakePlatform();
         Window = new MainWindow { Width = width, Height = height };
-        ViewModel = new MainViewModel(Node, Platform, Ui);
+        ViewModel = new MainViewModel(Node, Platform, Ui, Store);
         Window.DataContext = ViewModel;
         Window.Show();
     }
@@ -114,6 +146,8 @@ public sealed class UiHarness : IAsyncDisposable
     public FakeUi Ui { get; }
 
     public FakePlatform Platform { get; }
+
+    public FakeStore Store { get; }
 
     public MainWindow Window { get; }
 

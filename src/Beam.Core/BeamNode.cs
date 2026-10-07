@@ -21,7 +21,7 @@ public sealed class BeamNodeOptions
 
     public IIncomingTransferHandler? Handler { get; init; }
 
-    public IEditionPolicy Edition { get; init; } = new FreeEdition();
+    public IEditionPolicy Edition { get; init; } = new Edition();
 }
 
 /// <summary>
@@ -49,7 +49,9 @@ public sealed class BeamNode : IAsyncDisposable
         ResumeStore.CleanupExpired();
         _handler = new DelegatingHandler { Inner = options.Handler };
 
-        Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName);
+        Quota = new SendQuota(options.Paths.UsageFile, options.Edition);
+        Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName,
+            sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond);
         Transfers.SessionFinished += RecordHistory;
         Discovery = new DiscoveryService(options.Discovery,
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint, DeviceKinds.Desktop));
@@ -70,6 +72,9 @@ public sealed class BeamNode : IAsyncDisposable
     public DiscoveryService Discovery { get; }
 
     public IEditionPolicy Edition => _options.Edition;
+
+    /// <summary>The free edition's daily send limit.</summary>
+    public SendQuota Quota { get; }
 
     public AppDataPaths Paths => _options.Paths;
 
@@ -93,8 +98,18 @@ public sealed class BeamNode : IAsyncDisposable
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
-    public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths) =>
-        Transfers.Send(device, paths, () => Discovery.Find(device.Id) ?? device);
+    /// <summary>
+    /// Starts sending to one device. Each call counts as one send towards the free edition's daily
+    /// limit; throws <see cref="TransferException"/> (<see cref="TransferErrorKind.SendLimitReached"/>) when it is used up.
+    /// </summary>
+    public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
+        if (!Quota.TryUse())
+            throw new TransferException(TransferErrorKind.SendLimitReached,
+                $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.");
+        return Transfers.Send(device, paths, () => Discovery.Find(device.Id) ?? device);
+    }
 
     /// <summary>
     /// Connects to a device by the address shown on its screen ("192.168.1.20", "192.168.1.20:47822",

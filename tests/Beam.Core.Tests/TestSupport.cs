@@ -75,8 +75,10 @@ public sealed class TestNode : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    public TestNode(string name, bool startDiscovery = false)
+    /// <param name="pro">Most tests run as Pro so the free edition's speed and daily limits don't apply.</param>
+    public TestNode(string name, bool startDiscovery = false, bool pro = true)
     {
+        Edition = new Licensing.Edition(pro);
         Handler = new TestHandler();
         ReceiveFolder = _dir.Combine("received");
         Directory.CreateDirectory(ReceiveFolder);
@@ -85,6 +87,7 @@ public sealed class TestNode : IAsyncDisposable
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
             Handler = Handler,
+            Edition = Edition,
             Discovery = new DiscoveryOptions
             {
                 Port = 0,
@@ -106,6 +109,8 @@ public sealed class TestNode : IAsyncDisposable
     public BeamNode Node { get; }
 
     public TestHandler Handler { get; }
+
+    public Licensing.Edition Edition { get; }
 
     public string ReceiveFolder { get; }
 

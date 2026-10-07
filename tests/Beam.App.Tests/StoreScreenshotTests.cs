@@ -83,7 +83,7 @@ public class StoreScreenshotTests
         receiver.Handler.DecisionDelay = TimeSpan.Zero;
         using var throttle = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 60L * 1024 * 1024 };
         var big = app.CreateFile("Project backup.zip", 600L * 1024 * 1024, 10);
-        app.ViewModel.StartSend(receiver.AsDevice(throttle.Port), new[] { big });
+        await app.ViewModel.StartSendAsync(receiver.AsDevice(throttle.Port), new[] { big });
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.Any(t => t.Progress is > 25 and < 75 && t.SpeedText.Length > 0), "progress", 60000);
         app.Screenshot("3-transfer-progress", Folder);
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.All(t => t.IsFinished), "finish", 120000);

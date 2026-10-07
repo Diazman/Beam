@@ -14,6 +14,14 @@ share any personal data, and has no servers.**
 - Beam does not upload your files, file names or any other data to the internet or to the
   developer. There are no Beam servers.
 
+## Purchases
+
+Beam Pro is sold as an in-app purchase through the Microsoft Store. Payment is handled entirely by
+Microsoft under the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement); the
+developer never receives your payment details. To know whether you own Beam Pro, Beam asks the Microsoft
+Store on your computer for your license. Beam also counts how many sends you made today (for the free
+version's daily limit); that count is stored only on your computer.
+
 ## Information that stays on your computer
 
 To work, Beam stores the following **only on your own computer**, in its app data folder:

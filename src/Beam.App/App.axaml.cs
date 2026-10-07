@@ -58,7 +58,11 @@ public partial class App : Application
 
             var platform = PlatformServices.Create();
             _window = new MainWindow();
-            _viewModel = new MainViewModel(_node, platform, _window);
+            var window = _window;
+            var store = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)
+                ? WindowsStoreService.Create(() => window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero)
+                : new UnavailableStoreService();
+            _viewModel = new MainViewModel(_node, platform, _window, store);
             _window.DataContext = _viewModel;
 
             ApplyTheme(_node.Settings.Current.Theme);
