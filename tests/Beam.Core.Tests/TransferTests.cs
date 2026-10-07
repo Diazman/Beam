@@ -445,9 +445,9 @@ public class TransferTests
         Assert.True(session.CanResume);
 
         target = receiver.AsDevice();
-        session.Resume();
-        await Wait.UntilAsync(() => !session.IsFinished, TimeSpan.FromSeconds(5));
-        await Wait.ForFinishAsync(session);
+        session.Resume(); // immediately, as a user clicking "Try again" right away would
+        await Wait.UntilAsync(() => session.State == TransferState.Completed, TimeSpan.FromSeconds(30),
+            $"resumed transfer should complete (state {session.State})");
 
         Assert.Equal(TransferState.Completed, session.State);
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "a.bin")));

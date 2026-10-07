@@ -37,17 +37,9 @@ internal sealed class OutgoingTransfer
     public void Start()
     {
         if (Interlocked.Exchange(ref _running, 1) == 1) return;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await RunAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                Volatile.Write(ref _running, 0);
-            }
-        });
+        // RunAsync handles every exception and always ends in Finish(), which clears _running,
+        // or in a completed transfer (which can't be resumed).
+        _ = Task.Run(RunAsync);
     }
 
     private string PeerName => _session.PeerName;
@@ -102,7 +94,7 @@ internal sealed class OutgoingTransfer
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            _session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer."));
+            Finish(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer."));
         }
         catch (Exception ex)
         {
@@ -114,8 +106,18 @@ internal sealed class OutgoingTransfer
                 TransferErrorKind.CancelledByRemote => TransferState.Cancelled,
                 _ => TransferState.Failed,
             };
-            _session.SetState(state, error);
+            Finish(state, error);
         }
+    }
+
+    /// <summary>
+    /// Ends this run. The running flag is cleared *before* the final state is published, so a
+    /// "Try again" pressed the moment the failure appears always starts a new run.
+    /// </summary>
+    private void Finish(TransferState state, TransferError error)
+    {
+        Volatile.Write(ref _running, 0);
+        _session.SetState(state, error);
     }
 
     private static TimeSpan Backoff(int failures) => TimeSpan.FromSeconds(failures switch
