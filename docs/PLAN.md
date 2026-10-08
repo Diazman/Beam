@@ -2,6 +2,8 @@
 
 _Created October 8, 2026. Owner: Diazman. Review this plan every month and move dates if needed._
 
+_The code changes behind each step are in [ENGINEERING-PLAN.md](ENGINEERING-PLAN.md)._
+
 **Goal:** earn money from Beam by first getting many people to use it for free, then selling a small,
 clearly worth-it upgrade (Beam Pro) to some of them.
 
