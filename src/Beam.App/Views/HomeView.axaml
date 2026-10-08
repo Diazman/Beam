@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:l="using:Beam.App.Localization"
              x:Class="Beam.App.Views.HomeView"
              x:DataType="vm:HomeViewModel">
   <Grid RowDefinitions="*,Auto">
@@ -12,7 +13,7 @@
           <StackPanel Spacing="4">
             <TextBlock Classes="h1" Text="Send files" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="Send files and folders directly to a nearby computer. No cables, accounts, or internet needed." />
+                       Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.'}" />
           </StackPanel>
           <Button Grid.Column="1" Classes="chip" VerticalAlignment="Top" Margin="16,2,0,0"
                   Command="{Binding EditNameCommand}"
@@ -35,7 +36,7 @@
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
               <TextBlock Classes="h2" Text="Nearby computers" />
             </StackPanel>
-            <Button Grid.Column="1" Classes="link" Content="Can't find a computer?"
+            <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a computer?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding RefreshCommand}"
                     ToolTip.Tip="Look for nearby computers again" Margin="4,0,0,0">
