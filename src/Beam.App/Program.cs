@@ -15,6 +15,10 @@ internal static class Program
         var paths = AppDataPaths.Default();
         if (Environment.GetEnvironmentVariable(AppDataPaths.OverrideVariable) == null && Platform.PackageInfo.LocalDataFolder is { } packaged)
             paths = new AppDataPaths(packaged); // Store install: use the package's own data folder
+        // Started from Windows' Share dialog (Store version): treat the shared items like "--send <paths>".
+        var shared = OperatingSystem.IsWindows() ? Platform.PackageInfo.TakeSharedItems() : Array.Empty<string>();
+        if (shared.Count > 0) args = new[] { "--send" }.Concat(shared).ToArray();
+
         var key = SingleInstance.KeyFor(paths.Root);
         using var instance = SingleInstance.TryAcquire(key);
         if (instance == null)

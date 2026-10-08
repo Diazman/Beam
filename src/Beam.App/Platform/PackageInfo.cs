@@ -54,6 +54,39 @@ internal static partial class PackageInfo
         return false;
     }
 
+    /// <summary>
+    /// When Windows started Beam from its Share dialog, returns the shared files and folders (and tells
+    /// Windows the share is handled); otherwise an empty list.
+    /// </summary>
+    public static IReadOnlyList<string> TakeSharedItems()
+    {
+#if WINDOWS_WINRT
+        if (!IsPackaged || !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17134)) return Array.Empty<string>();
+        try
+        {
+            if (Windows.ApplicationModel.AppInstance.GetActivatedEventArgs() is not Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs share)
+                return Array.Empty<string>();
+            var operation = share.ShareOperation;
+            var paths = new List<string>();
+            if (operation.Data.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+            {
+                // Off the STA main thread: the WinRT call completes on a worker thread.
+                var items = Task.Run(async () => await operation.Data.GetStorageItemsAsync()).GetAwaiter().GetResult();
+                paths.AddRange(items.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p)));
+            }
+
+            operation.ReportCompleted();
+            Log.Info($"Started from the Share dialog with {paths.Count} item(s)");
+            return paths;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not read shared items", ex);
+        }
+#endif
+        return Array.Empty<string>();
+    }
+
     private static unsafe bool Detect()
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(6, 2)) return false;

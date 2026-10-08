@@ -92,6 +92,13 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 28. Display scaling 100 % / 150 % / 200 % and window resizing to the minimum size. ✅ Text stays readable and nothing clips.
 29. Run `Beam.exe --send "C:\some\file.txt"` while Beam is running. ✅ The running window comes forward with the file added.
 30. Uninstall via Settings → Apps. ✅ App, shortcuts and Run entry removed; received files untouched.
+31. Installer version: right-click a file, then a folder, then 20 selected files (Windows 11: *Show more options*)
+    → **Send with Beam**. ✅ Beam opens (or comes forward) with all of them in the send list. Uninstall removes the entry.
+32. Store version: right-click a file → **Share** → **Beam**. ✅ Beam opens with the file in the send list; the Share
+    dialog closes.
+33. Store version: after the 3rd completed transfer, the Store's rating dialog appears once (and never again).
+34. Store version during the launch period: Settings → **Claim Beam Pro free** → Store dialog shows "Free"; afterwards
+    Settings shows *Beam Pro*. Restart: still Pro.
 
 ## Performance notes
 

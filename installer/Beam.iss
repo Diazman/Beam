@@ -50,6 +50,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startup"; Description: "Start Beam when I sign in, so other computers can send me files"; GroupDescription: "Other:"
+Name: "contextmenu"; Description: "Add ""Send with Beam"" to the right-click menu of files and folders"; GroupDescription: "Other:"
 
 [Files]
 Source: "..\artifacts\publish\win-{#Arch}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
@@ -63,6 +64,17 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "
 ; Same value Beam writes itself when "Start Beam when I sign in" is switched on in Settings.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"" --minimized"; Tasks: startup; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\{#AppId}"; Flags: uninsdeletekey dontcreatekey
+; "Send with Beam" on files and folders (Windows 11: under "Show more options"). Each selected item runs
+; Beam.exe --send <item>; the running Beam collects them into one send list (single-instance pipe).
+; HKA = this user, or all users when installed for everyone.
+Root: HKA; Subkey: "Software\Classes\*\shell\BeamSend"; ValueType: string; ValueName: ""; ValueData: "Send with Beam"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\*\shell\BeamSend"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#AppExe}"",0"; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\*\shell\BeamSend"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\*\shell\BeamSend\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" --send ""%1"""; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\shell\BeamSend"; ValueType: string; ValueName: ""; ValueData: "Send with Beam"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Directory\shell\BeamSend"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#AppExe}"",0"; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\shell\BeamSend"; ValueType: string; ValueName: "MultiSelectModel"; ValueData: "Player"; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\Directory\shell\BeamSend\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" --send ""%1"""; Tasks: contextmenu
 
 [Run]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Allowing Beam through Windows Firewall..."
