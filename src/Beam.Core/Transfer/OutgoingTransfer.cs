@@ -199,10 +199,23 @@ internal sealed class OutgoingTransfer
             for (var round = 1; round <= 2 && toSend.Count > 0; round++)
             {
                 var expectedResults = state.ResultCount;
-                foreach (var (index, offset) in toSend)
+                // Small files are read ahead in parallel, so opening them (and antivirus scans) overlaps with sending.
+                var readAhead = new Dictionary<int, Task<SmallFile>>();
+                var nextToRead = 0;
+                for (var i = 0; i < toSend.Count; i++)
                 {
-                    if (await SendFileAsync(connection, index, offset, state, io, token).ConfigureAwait(false))
-                        expectedResults++;
+                    for (; nextToRead < toSend.Count && nextToRead <= i + TransferTuning.ReadAhead; nextToRead++)
+                    {
+                        var (readIndex, readOffset) = toSend[nextToRead];
+                        if (readOffset == 0 && entries[readIndex].Size <= TransferTuning.SmallFileLimit)
+                            readAhead[nextToRead] = Task.Run(() => ReadSmallFileAsync(entries[readIndex], token), CancellationToken.None);
+                    }
+
+                    var (index, offset) = toSend[i];
+                    var sent = readAhead.Remove(i, out var small)
+                        ? await SendSmallFileAsync(connection, index, await small.ConfigureAwait(false), state, io, token).ConfigureAwait(false)
+                        : await SendFileAsync(connection, index, offset, state, io, token).ConfigureAwait(false);
+                    if (sent) expectedResults++;
                 }
 
                 await WaitForResultsAsync(state, reader, expectedResults, token).ConfigureAwait(false);
@@ -371,6 +384,68 @@ internal sealed class OutgoingTransfer
                 _service.ReturnBuffers(buffers);
             }
         }
+    }
+
+    private sealed record SmallFile(byte[]? Data, string Sha256, Exception? Error);
+
+    /// <summary>Reads and hashes a whole small file. Never throws: problems are returned in <see cref="SmallFile.Error"/>.</summary>
+    private static async Task<SmallFile> ReadSmallFileAsync(ManifestEntry entry, CancellationToken token)
+    {
+        try
+        {
+            await using var stream = new FileStream(entry.SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
+            if (stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
+            var data = new byte[entry.Size];
+            await stream.ReadExactlyAsync(data, token).ConfigureAwait(false);
+            if (stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
+            return new SmallFile(data, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(), null);
+        }
+        catch (EndOfStreamException)
+        {
+            return new SmallFile(null, "", new IOException("The file got smaller while it was being sent."));
+        }
+        catch (Exception ex)
+        {
+            return new SmallFile(null, "", ex);
+        }
+    }
+
+    /// <summary>Sends a whole small file (header, data and footer) in a single write. Returns false if it couldn't be read.</summary>
+    private async Task<bool> SendSmallFileAsync(PeerConnection connection, int index, SmallFile file, ReaderState state, CancellationTokenSource io, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (file.Error is OperationCanceledException) throw file.Error;
+        if (file.Error != null || file.Data == null)
+        {
+            if (file.Error is not (IOException or UnauthorizedAccessException or System.Security.SecurityException))
+                Log.Warn($"Unexpected error reading {_manifest!.Entries[index].SourcePath}", file.Error);
+            await ReportUnreadableAsync(connection, index, 0, file.Error ?? new IOException("The file couldn't be read."), io, token).ConfigureAwait(false);
+            return false;
+        }
+
+        var data = file.Data;
+        var header = FrameChannel.Encode(FrameType.FileHeader, new FileHeaderMessage { Index = index, Offset = 0 });
+        var footer = FrameChannel.Encode(FrameType.FileFooter, new FileFooterMessage { Index = index, Length = data.Length, Sha256 = file.Sha256 });
+        var chunks = (data.Length + FrameChannel.DataChunkSize - 1) / FrameChannel.DataChunkSize;
+        var frames = new byte[header.Length + data.Length + chunks * FrameChannel.HeaderSize + footer.Length];
+        header.CopyTo(frames, 0);
+        var position = header.Length;
+        for (var offset = 0; offset < data.Length; offset += FrameChannel.DataChunkSize)
+        {
+            var length = Math.Min(FrameChannel.DataChunkSize, data.Length - offset);
+            FrameChannel.WriteDataHeader(frames.AsSpan(position), length);
+            data.AsSpan(offset, length).CopyTo(frames.AsSpan(position + FrameChannel.HeaderSize));
+            position += FrameChannel.HeaderSize + length;
+        }
+
+        footer.CopyTo(frames, position);
+
+        _session.SetCurrentFile(_manifest!.Entries[index].RelativePath);
+        if (data.Length > 0) await _service.SendLimiter.WaitAsync(data.Length, token).ConfigureAwait(false);
+        await WriteAsync(io, t => connection.Channel.SendFramesAsync(frames, t), token).ConfigureAwait(false);
+        _session.AddTransferred(data.Length);
+        if (state.RemoteCancel != null) ThrowIfRemoteCancelled(state);
+        return true;
     }
 
     private async Task ReportUnreadableAsync(PeerConnection connection, int index, long countedBytes, Exception ex, CancellationTokenSource io, CancellationToken token)
