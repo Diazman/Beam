@@ -21,7 +21,7 @@ public class ProUiTests
 
         Assert.True(home.IsFree);
         Assert.True(home.ShowMultiSendUpsell);
-        Assert.Equal("Free · up to 10 MB/s · 10 of 10 free sends left today", home.PlanText);
+        Assert.Equal("Free · up to 5 MB/s · 10 of 10 free sends left today", home.PlanText);
 
         home.Devices[0].SelectCommand.Execute(null);
         home.Devices[1].SelectCommand.Execute(null);

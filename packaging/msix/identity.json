@@ -1,7 +1,7 @@
 {
-  "_comment": "Replace these with the exact values from Partner Center > your app > Product management > Product identity. The Store rejects packages whose identity doesn't match.",
-  "identityName": "Diazman.Beam",
-  "publisher": "CN=Diazman",
+  "_comment": "Exact values from Partner Center > your app > Product management > Product identity. displayName must be the name reserved in Partner Center. The Store rejects packages whose identity doesn't match.",
+  "identityName": "Diazman.BeamFileTransfer",
+  "publisher": "CN=96324F7D-3F7B-40DF-B2F2-262D0EA88E90",
   "publisherDisplayName": "Diazman",
-  "displayName": "Beam"
+  "displayName": "Beam File Transfer"
 }

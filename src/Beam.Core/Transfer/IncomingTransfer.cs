@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
@@ -283,11 +284,14 @@ internal sealed class IncomingTransfer
         var retried = new HashSet<int>();
         ActiveFile? current = null;
         var lastSave = Environment.TickCount64;
+        var saveEvery = (long)SaveInterval.TotalMilliseconds;
+        var writes = new BackgroundWrites();
 
         try
         {
             while (true)
             {
+                writes.ThrowIfFailed();
                 Frame frame;
                 if (pendingRead != null)
                 {
@@ -317,7 +321,8 @@ internal sealed class IncomingTransfer
                         var payload = frame.Payload;
                         if (current.Written + payload.Length > current.File.Size) throw new ProtocolException("More data than announced.");
                         current.Hash.AppendData(payload.Span);
-                        await current.Writer.WriteAsync(payload, linked.Token).ConfigureAwait(false);
+                        if (current.Memory != null) payload.Span.CopyTo(current.Memory.AsSpan((int)current.Written));
+                        else await current.Writer!.WriteAsync(payload, linked.Token).ConfigureAwait(false);
                         current.Written += payload.Length;
                         session.AddTransferred(payload.Length);
                         break;
@@ -329,12 +334,37 @@ internal sealed class IncomingTransfer
                         if (current == null || footer.Index != current.File.Index) throw new ProtocolException("Unexpected file footer.");
                         var active = current;
                         current = null;
-                        var result = await FinishFileAsync(session, active, footer, retried).ConfigureAwait(false);
-                        await _connection.Channel.SendAsync(FrameType.FileResult, result, linked.Token).ConfigureAwait(false);
-                        if (Environment.TickCount64 - lastSave > SaveInterval.TotalMilliseconds)
+                        if (active.Memory != null)
                         {
+                            // Small file, verified in memory: write it to disk in the background while the next ones arrive.
+                            var verified = VerifySmallFile(session, active, footer, retried);
+                            if (verified != null)
+                            {
+                                await _connection.Channel.SendAsync(FrameType.FileResult, verified, linked.Token).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                var channelToken = linked.Token;
+                                await writes.StartAsync(async () =>
+                                {
+                                    var written = await WriteSmallFileAsync(session, active).ConfigureAwait(false);
+                                    await _connection.Channel.SendAsync(FrameType.FileResult, written, channelToken).ConfigureAwait(false);
+                                }, linked.Token).ConfigureAwait(false);
+                            }
+                        }
+                        else
+                        {
+                            var result = await FinishFileAsync(session, active, footer, retried).ConfigureAwait(false);
+                            await _connection.Channel.SendAsync(FrameType.FileResult, result, linked.Token).ConfigureAwait(false);
+                        }
+
+                        if (Environment.TickCount64 - lastSave > saveEvery)
+                        {
+                            // Saving the resume state of a huge folder takes a while; keep it to a few percent of the time.
+                            var started = Environment.TickCount64;
                             _service.ResumeStore.Save(record);
                             lastSave = Environment.TickCount64;
+                            saveEvery = Math.Max((long)SaveInterval.TotalMilliseconds, (lastSave - started) * 25);
                         }
 
                         break;
@@ -360,6 +390,8 @@ internal sealed class IncomingTransfer
                     case FrameType.Done:
                     {
                         if (current != null) throw new ProtocolException("Transfer ended in the middle of a file.");
+                        await writes.DrainAsync().ConfigureAwait(false);
+                        writes.ThrowIfFailed();
                         var snapshot = session.GetSnapshot();
                         await _connection.Channel.SendAsync(FrameType.Result, new ResultMessage
                         {
@@ -380,6 +412,7 @@ internal sealed class IncomingTransfer
                     {
                         var cancel = FrameChannel.Parse<CancelMessage>(frame);
                         if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+                        await writes.DrainAsync().ConfigureAwait(false);
                         current = null;
                         _service.ResumeStore.Delete(record, deleteParts: true);
                         session.SavedRootPaths = ComputeSavedRootPaths(record);
@@ -395,6 +428,7 @@ internal sealed class IncomingTransfer
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+            await writes.DrainAsync().ConfigureAwait(false);
             await _connection.SendCancelAndCloseAsync(_service.CancelReason).ConfigureAwait(false);
             _service.ResumeStore.Delete(record, deleteParts: true);
             session.SavedRootPaths = ComputeSavedRootPaths(record);
@@ -403,6 +437,7 @@ internal sealed class IncomingTransfer
         catch (LocalFileException ex)
         {
             if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+            await writes.DrainAsync().ConfigureAwait(false);
             _service.ResumeStore.Save(record);
             var error = ErrorTranslator.FromLocalFileException(ex.InnerException ?? ex, ex.Message);
             Log.Warn($"Receiving from {PeerName} failed locally: {error.Details}");
@@ -412,6 +447,7 @@ internal sealed class IncomingTransfer
         catch (ProtocolException ex)
         {
             if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+            await writes.DrainAsync().ConfigureAwait(false);
             Log.Warn($"Protocol error from {PeerName}: {ex.Message}");
             await _connection.SendCancelAndCloseAsync(Reasons.Protocol, ex.Message).ConfigureAwait(false);
             _service.ResumeStore.Delete(record, deleteParts: true);
@@ -421,6 +457,7 @@ internal sealed class IncomingTransfer
         {
             // Beam is closing: keep partial files so the transfer can resume after a restart.
             if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+            await writes.DrainAsync().ConfigureAwait(false);
             _service.ResumeStore.Save(record);
             await _connection.SendCancelAndCloseAsync(Reasons.Shutdown).ConfigureAwait(false);
             session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, "Beam was closed before the transfer finished.", ex.Message));
@@ -428,6 +465,7 @@ internal sealed class IncomingTransfer
         catch (Exception ex)
         {
             if (current != null) await current.DisposeAsync().ConfigureAwait(false);
+            await writes.DrainAsync().ConfigureAwait(false);
             _service.ResumeStore.Save(record);
             var error = ErrorTranslator.FromException(ex, PeerName);
             Log.Warn($"Connection from {PeerName} lost during {record.TransferId}: {error.Details}");
@@ -449,7 +487,7 @@ internal sealed class IncomingTransfer
         var written = active.Written;
         try
         {
-            await active.Writer.CompleteAsync().ConfigureAwait(false);
+            await active.Writer!.CompleteAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -470,6 +508,53 @@ internal sealed class IncomingTransfer
             return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
         }
 
+        return CompleteVerifiedFile(session, file);
+    }
+
+    /// <summary>Checks a small file received into memory. Returns a result to send now if it failed, or null if it's good.</summary>
+    private FileResultMessage? VerifySmallFile(TransferSession session, ActiveFile active, FileFooterMessage footer, HashSet<int> retried)
+    {
+        var file = active.File;
+        var hash = Convert.ToHexString(active.Hash.GetHashAndReset()).ToLowerInvariant();
+        var intact = footer.Length == file.Size && active.Written == file.Size && string.Equals(hash, footer.Sha256, StringComparison.OrdinalIgnoreCase);
+        if (intact) return null;
+
+        session.AddTransferred(-active.Written);
+        active.Hash.Dispose();
+        Log.Warn($"Verification failed for {file.RelativePath} from {PeerName} (got {active.Written} bytes, hash {hash}, expected {footer.Sha256})");
+        if (retried.Add(file.Index)) return new FileResultMessage { Index = file.Index, Ok = false, Retry = true };
+
+        file.Failed = true;
+        const string reason = "The file was damaged in transit and couldn't be verified.";
+        session.FileFailed(file.RelativePath, reason);
+        return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
+    }
+
+    /// <summary>Writes a verified small file to its partial file, then moves it into place (runs in the background).</summary>
+    private static async Task<FileResultMessage> WriteSmallFileAsync(TransferSession session, ActiveFile active)
+    {
+        var file = active.File;
+        active.Hash.Dispose();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file.PartPath)!);
+            await using (var stream = new FileStream(file.PartPath, FileMode.Create, FileAccess.Write, FileShare.None, 1))
+            {
+                await stream.WriteAsync(active.Memory.AsMemory(0, (int)active.Written)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            TryDelete(file.PartPath);
+            throw new LocalFileException($"Writing {file.PartPath}", ex);
+        }
+
+        return CompleteVerifiedFile(session, file);
+    }
+
+    /// <summary>Moves a verified partial file to its final name and records the result.</summary>
+    private static FileResultMessage CompleteVerifiedFile(TransferSession session, ResumeFile file)
+    {
         try
         {
             file.TargetPath = MoveIntoPlace(file);
@@ -536,6 +621,9 @@ internal sealed class IncomingTransfer
 
     private async Task<ActiveFile> OpenPartAsync(ResumeFile file, long offset, CancellationToken token)
     {
+        if (offset == 0 && file.Size <= TransferTuning.SmallFileLimit)
+            return new ActiveFile(file, null, IncrementalHash.CreateHash(HashAlgorithmName.SHA256)) { Memory = new byte[file.Size] };
+
         FileStream? stream = null;
         var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         try
@@ -883,7 +971,7 @@ internal sealed class IncomingTransfer
 
     private sealed class ActiveFile : IAsyncDisposable
     {
-        public ActiveFile(ResumeFile file, PipelinedFileWriter writer, IncrementalHash hash)
+        public ActiveFile(ResumeFile file, PipelinedFileWriter? writer, IncrementalHash hash)
         {
             File = file;
             Writer = writer;
@@ -892,7 +980,11 @@ internal sealed class IncomingTransfer
 
         public ResumeFile File { get; }
 
-        public PipelinedFileWriter Writer { get; }
+        /// <summary>Streams a large file to its partial file; null for small files.</summary>
+        public PipelinedFileWriter? Writer { get; }
+
+        /// <summary>Holds a small file until it is verified and written; null for large files.</summary>
+        public byte[]? Memory { get; init; }
 
         public IncrementalHash Hash { get; }
 
@@ -900,8 +992,60 @@ internal sealed class IncomingTransfer
 
         public async ValueTask DisposeAsync()
         {
-            await Writer.DisposeAsync().ConfigureAwait(false);
+            if (Writer != null) await Writer.DisposeAsync().ConfigureAwait(false);
             Hash.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Writes received small files to disk several at a time. Opening, closing and antivirus scans
+    /// dominate for small files, so doing them in parallel keeps the network busy.
+    /// </summary>
+    private sealed class BackgroundWrites
+    {
+        private readonly SemaphoreSlim _slots = new(TransferTuning.ParallelWrites, TransferTuning.ParallelWrites);
+        private readonly List<Task> _running = new();
+        private ExceptionDispatchInfo? _failure;
+
+        /// <summary>Waits for a free slot, then runs <paramref name="work"/> in the background.</summary>
+        public async Task StartAsync(Func<Task> work, CancellationToken token)
+        {
+            ThrowIfFailed();
+            await _slots.WaitAsync(token).ConfigureAwait(false);
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    await work().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.CompareExchange(ref _failure, ExceptionDispatchInfo.Capture(ex), null);
+                }
+                finally
+                {
+                    _slots.Release();
+                }
+            }, CancellationToken.None);
+            lock (_running)
+            {
+                _running.RemoveAll(t => t.IsCompleted);
+                _running.Add(task);
+            }
+        }
+
+        /// <summary>The first error from a background write (e.g. disk full), rethrown on the receiving loop.</summary>
+        public void ThrowIfFailed() => _failure?.Throw();
+
+        /// <summary>
+        /// Waits until every started write has finished (they never throw). Gives up after a while so a
+        /// stalled connection can't hang the transfer; closing the connection then ends those writes.
+        /// </summary>
+        public async Task DrainAsync()
+        {
+            Task[] running;
+            lock (_running) running = _running.ToArray();
+            await Task.WhenAny(Task.WhenAll(running), Task.Delay(TimeSpan.FromSeconds(30))).ConfigureAwait(false);
         }
     }
 }

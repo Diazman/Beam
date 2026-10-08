@@ -6,7 +6,7 @@
 dotnet test Beam.sln          # ~2 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (73 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (75 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 
 **`tests/Beam.App.Tests`** (17 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through

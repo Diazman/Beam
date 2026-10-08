@@ -35,15 +35,30 @@ public sealed class FrameChannel
         _stream = stream;
     }
 
-    public Task SendAsync<T>(FrameType type, T message, CancellationToken cancellationToken)
+    public Task SendAsync<T>(FrameType type, T message, CancellationToken cancellationToken) =>
+        WriteAsync(Encode(type, message), cancellationToken);
+
+    /// <summary>A complete frame (header and JSON payload) for <see cref="SendFramesAsync"/>.</summary>
+    public static byte[] Encode<T>(FrameType type, T message)
     {
         var typeInfo = (JsonTypeInfo<T>)ProtocolJson.Default.GetTypeInfo(typeof(T))!;
         var json = JsonSerializer.SerializeToUtf8Bytes(message, typeInfo);
         var buffer = new byte[HeaderSize + json.Length];
         WriteHeader(buffer, type, json.Length);
         json.CopyTo(buffer, HeaderSize);
-        return WriteAsync(buffer, cancellationToken);
+        return buffer;
     }
+
+    /// <summary>Writes the header of a <see cref="FrameType.FileData"/> frame carrying <paramref name="payloadLength"/> bytes.</summary>
+    public static void WriteDataHeader(Span<byte> destination, int payloadLength)
+    {
+        if (payloadLength > MaxDataPayload) throw new ArgumentOutOfRangeException(nameof(payloadLength));
+        destination[0] = (byte)FrameType.FileData;
+        BinaryPrimitives.WriteInt32BigEndian(destination[1..], payloadLength);
+    }
+
+    /// <summary>Sends several already-encoded frames in one write (much cheaper than one write per frame for small files).</summary>
+    public Task SendFramesAsync(ReadOnlyMemory<byte> frames, CancellationToken cancellationToken) => WriteAsync(frames, cancellationToken);
 
     /// <summary>
     /// Sends file bytes. <paramref name="buffer"/> must have <see cref="HeaderSize"/> free bytes at the

@@ -81,7 +81,7 @@ An MSIX must be signed to install it outside the Store. On Windows, create a tes
 subject equals `publisher` in `identity.json`, trust it, and sign:
 
 ```powershell
-$cert = New-SelfSignedCertificate -Type Custom -Subject "CN=Diazman" -KeyUsage DigitalSignature `
+$cert = New-SelfSignedCertificate -Type Custom -Subject "CN=96324F7D-3F7B-40DF-B2F2-262D0EA88E90" -KeyUsage DigitalSignature `
   -FriendlyName "Beam test" -CertStoreLocation Cert:\CurrentUser\My `
   -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
 $pwd = ConvertTo-SecureString -String "test" -Force -AsPlainText
@@ -107,7 +107,7 @@ Store users update automatically; Beam has no built-in updater (the Store doesn'
 |---|---|---|
 | Receiving | unlimited | unlimited |
 | Computers per send | 1 | several at once |
-| Sending speed | up to 10 MB/s | full network speed |
+| Sending speed | up to 5 MB/s | full network speed |
 | Sends per day | 10 (each computer counts as one) | unlimited |
 
 The limits live in `src/Beam.Core/Licensing/Edition.cs` (`FreeLimits`). Pro is bought and checked through

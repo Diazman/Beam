@@ -239,6 +239,58 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task SmallFilesSurviveAConnectionDropAndArriveIntact()
+    {
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        var sources = new List<string>();
+        for (var i = 0; i < 1500; i++) sources.Add(sender.CreateFile($"Project/src{i % 30}/file{i}.js", 3_000 + i * 7, i));
+        sources.Add(sender.CreateFile("Project/empty.txt", 0, 1));
+        sources.Add(sender.CreateFile("Project/exactly-limit.bin", 1024 * 1024, 2));
+        sources.Add(sender.CreateFile("Project/just-over-limit.bin", 1024 * 1024 + 1, 3));
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { CutAfterBytes = 3L * 1024 * 1024 };
+
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { sender.SourcePath("Project") });
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(120));
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.True(proxy.Connections >= 2, "the connection should have been cut and resumed");
+        Assert.Single(receiver.Handler.Requests);
+        var root = Path.Combine(sender.Root, "source");
+        foreach (var source in sources)
+        {
+            var received = Path.Combine(receiver.ReceiveFolder, Path.GetRelativePath(root, source));
+            Assert.True(File.Exists(received), $"missing {received}");
+            Assert.Equal(TestFiles.Hash(source), TestFiles.Hash(received));
+        }
+
+        Assert.Empty(Directory.GetFiles(receiver.ReceiveFolder, "*.beampart", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task UnreadableSmallFileIsReportedAndOthersStillArrive()
+    {
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        for (var i = 0; i < 50; i++) sender.CreateFile($"Docs/file{i}.txt", 2000 + i, i);
+        var missing = sender.SourcePath("Docs/file7.txt");
+        receiver.Handler.DecisionDelay = TimeSpan.FromMilliseconds(500);
+
+        var session = sender.Node.Send(receiver.AsDevice(), new[] { sender.SourcePath("Docs") });
+        // The offer (with the file list) has arrived; the file disappears before it is read.
+        await Wait.UntilAsync(() => receiver.Handler.Requests.Count == 1);
+        File.Delete(missing);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+
+        Assert.Equal(TransferState.CompletedWithErrors, session.State);
+        var snapshot = session.GetSnapshot();
+        Assert.Equal(1, snapshot.FailedFiles);
+        Assert.Equal(49, snapshot.CompletedFiles);
+        Assert.False(File.Exists(Path.Combine(receiver.ReceiveFolder, "Docs", "file7.txt")));
+        Assert.Equal(49, Directory.GetFiles(Path.Combine(receiver.ReceiveFolder, "Docs")).Length);
+    }
+
+    [Fact]
     public async Task ResumesAfterConnectionDropWithoutStartingOver()
     {
         await using var sender = new TestNode("Sender");
