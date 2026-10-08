@@ -194,10 +194,17 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool IsFree => !IsPro;
 
-    public string PlanTitle => IsPro ? "Beam Pro" : "Beam Free";
+    public bool IsLaunchPeriod => _node.Edition.IsLaunchPeriod;
+
+    public string PlanTitle => IsPro ? "Beam Pro" : IsLaunchPeriod ? "Beam Pro is free while Beam is new" : "Beam Free";
+
+    public string UpgradeButtonText => IsLaunchPeriod ? "Claim Beam Pro free" : "Upgrade to Pro";
 
     public string PlanDescription => IsPro
         ? "Thank you for supporting Beam! You can send to several computers at once, at full speed, as often as you like."
+        : IsLaunchPeriod
+            ? "Right now everything in Beam is free and unlimited. Claim Beam Pro and it stays yours for good, even after the launch period ends."
+              + (_main.Pro.CanPurchase ? "" : " Claiming works in the Microsoft Store version of Beam.")
         : $"Send to one computer at a time, at up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s, {FreeLimits.SendsPerDay} times a day. "
           + $"Today you've used {_node.Quota.UsedToday} of {FreeLimits.SendsPerDay}. Receiving files is always free and unlimited.";
 
@@ -240,7 +247,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     internal void OnEditionChanged()
     {
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(CanRestorePurchase), nameof(VersionText) })
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(UpgradeButtonText), nameof(CanRestorePurchase), nameof(VersionText) })
             OnPropertyChanged(name);
     }
 

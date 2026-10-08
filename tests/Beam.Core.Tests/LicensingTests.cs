@@ -10,7 +10,7 @@ public class LicensingTests
     [Fact]
     public void FreeEditionLocksOnlyProFeatures()
     {
-        var edition = new Edition();
+        var edition = new Edition(launchPeriod: false);
         Assert.Equal("Free", edition.EditionName);
         Assert.True(edition.IsEnabled(Feature.SendFiles));
         Assert.True(edition.IsEnabled(Feature.ReceiveFiles));
@@ -28,12 +28,25 @@ public class LicensingTests
     }
 
     [Fact]
+    public void LaunchPeriodMakesEverythingFreeWithoutClaimingPro()
+    {
+        var edition = new Edition(launchPeriod: true);
+        Assert.False(edition.IsPro);
+        Assert.True(Enum.GetValues<Feature>().All(edition.IsEnabled));
+
+        using var dir = new TempDir();
+        var quota = new SendQuota(dir.Combine("usage.json"), edition);
+        for (var i = 0; i < FreeLimits.SendsPerDay * 3; i++) Assert.True(quota.TryUse());
+        Assert.Null(quota.RemainingToday);
+    }
+
+    [Fact]
     public void DailyQuotaCountsResetsAndPersists()
     {
         using var dir = new TempDir();
         var path = dir.Combine("usage.json");
         var now = new DateTime(2026, 10, 7, 23, 0, 0);
-        var edition = new Edition();
+        var edition = new Edition(launchPeriod: false);
         var quota = new SendQuota(path, edition, () => now);
 
         for (var i = 0; i < FreeLimits.SendsPerDay; i++) Assert.True(quota.TryUse());

@@ -77,6 +77,14 @@ public sealed class ProService
 
     public string? Price { get; private set; }
 
+    /// <summary>
+    /// The Pro add-on currently costs nothing (it is priced Free during the launch period, so early users
+    /// can claim it and keep it). Detected from the store's formatted price: "Free", "$0.00", "0,00 ₺"…
+    /// </summary>
+    public bool PriceIsFree => Price != null && !Price.Any(c => c is >= '1' and <= '9');
+
+    public bool IsLaunchPeriod => Node.Edition.IsLaunchPeriod;
+
     public static string StorePageUrl => string.IsNullOrEmpty(StoreProductId)
         ? "https://apps.microsoft.com/search?query=Beam%20File%20Transfer"
         : $"ms-windows-store://pdp/?productid={StoreProductId}";

@@ -97,7 +97,9 @@ public sealed class FakeStore : IStoreService
 
     public Task<bool?> OwnsProAsync() => Task.FromResult<bool?>(Owns);
 
-    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? "$4.99" : null);
+    public string Price { get; set; } = "$4.99";
+
+    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? Price : null);
 
     public Task<PurchaseOutcome> PurchaseProAsync()
     {
@@ -115,7 +117,7 @@ public sealed class UiHarness : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true)
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false)
     {
         Store = new FakeStore { Owns = pro };
         ReceiveFolder = _dir.Combine("Downloads");
@@ -124,7 +126,7 @@ public sealed class UiHarness : IAsyncDisposable
         {
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
-            Edition = new Beam.Core.Licensing.Edition(pro),
+            Edition = new Beam.Core.Licensing.Edition(pro, launchPeriod),
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
         });
         Node.Settings.Update(s =>

@@ -45,13 +45,13 @@ PHONES TOO — NO APP NEEDED
 Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks automatic discovery,
 connect using the address Beam shows on the other computer.
 
-FREE AND PRO
-Beam is free to use: send to one computer at a time at up to 5 MB/s, 10 times a day. Receiving is
-always free and unlimited. Beam Pro, an optional one-time in-app purchase, adds:
+FREE WHILE BEAM IS NEW
+Right now everything in Beam is free and unlimited. Claim Beam Pro in the app at no cost and keep it
+for good — even after the launch period ends. Beam Pro includes:
 • Send to several computers at once
 • Full speed — as fast as your network allows
 • Unlimited sends
-• Sending to phones and tablets once Beam for Android and iPhone is available
+• Every future Pro feature in Beam for Windows
 
 ## What's new in this version
 First release.
@@ -103,5 +103,5 @@ Create it in Partner Center > your app > **Add-ons > Create a new add-on**:
 | Product ID | `BeamPro` (must be exactly this — the app looks for it) |
 | Title | Beam Pro |
 | Description | Send to several computers at once, at full speed, as often as you like. Includes sending to phones and tablets when Beam for Android and iPhone arrives. |
-| Price | your choice (e.g. USD 4.99 tier); the Store converts it to local prices, including Turkish lira |
+| Price | **Free during the launch period** (founding users claim it and keep it). When switching to freemium (docs/PLAN.md step 6.7), change it to a paid tier (e.g. USD 4.99); the Store converts it to local prices, including Turkish lira. People who claimed it free keep it. |
 | Store listing image | `packaging/msix/Assets/StoreLogo.scale-400.png` |

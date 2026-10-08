@@ -76,9 +76,9 @@ public sealed class TestNode : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's speed and daily limits don't apply.</param>
-    public TestNode(string name, bool startDiscovery = false, bool pro = true)
+    public TestNode(string name, bool startDiscovery = false, bool pro = true, bool launchPeriod = false)
     {
-        Edition = new Licensing.Edition(pro);
+        Edition = new Licensing.Edition(pro, launchPeriod);
         Handler = new TestHandler();
         ReceiveFolder = _dir.Combine("received");
         Directory.CreateDirectory(ReceiveFolder);

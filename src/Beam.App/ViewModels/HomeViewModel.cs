@@ -211,6 +211,9 @@ public sealed class HomeViewModel : ObservableObject
 
     public bool IsFree => !IsPro;
 
+    /// <summary>The free edition's limits apply (not Pro, and not during the free launch period).</summary>
+    public bool ShowFreeLimits => !_node.Edition.IsEnabled(Feature.UnlimitedSends);
+
     public bool CanSelectSeveral => _node.Edition.IsEnabled(Feature.SendToSeveralDevices);
 
     /// <summary>Free edition with several computers around: mention that Pro can send to all of them.</summary>
@@ -355,7 +358,7 @@ public sealed class HomeViewModel : ObservableObject
             foreach (var extra in _selected.Skip(1).ToList()) Deselect(extra);
         }
 
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(ShowFreeLimits), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
             OnPropertyChanged(name);
     }
 

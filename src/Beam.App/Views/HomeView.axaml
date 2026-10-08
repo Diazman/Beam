@@ -194,7 +194,7 @@
         <StackPanel VerticalAlignment="Center" Margin="0,0,16,0" Spacing="2">
           <TextBlock Text="{Binding SendSummary}" TextTrimming="CharacterEllipsis"
                      Classes.secondary="{Binding !CanSend}" FontWeight="Normal" />
-          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsFree}">
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowFreeLimits}">
             <TextBlock Classes="caption" Text="{Binding PlanText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <Button Classes="link" Content="Upgrade" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
           </StackPanel>

@@ -40,6 +40,9 @@ public interface IEditionPolicy
 
     bool IsPro { get; }
 
+    /// <summary>True while all features are free for everyone.</summary>
+    bool IsLaunchPeriod { get; }
+
     bool IsEnabled(Feature feature);
 
     /// <summary>Raised (on any thread) when the edition changes, e.g. after buying Pro.</summary>
@@ -52,12 +55,22 @@ public interface IEditionPolicy
 /// </summary>
 public sealed class Edition : IEditionPolicy
 {
+    /// <summary>
+    /// While Beam is new, every feature is free and unlimited (docs/PLAN.md, phase A). Set to false in the
+    /// release that switches to freemium (PLAN step 6.7); people who claimed Pro meanwhile keep it.
+    /// </summary>
+    public const bool LaunchPeriodActive = true;
+
     private volatile bool _isPro;
 
-    public Edition(bool isPro = false)
+    public Edition(bool isPro = false, bool launchPeriod = LaunchPeriodActive)
     {
         _isPro = isPro;
+        IsLaunchPeriod = launchPeriod;
     }
+
+    /// <summary>True while all features are free for everyone (see <see cref="LaunchPeriodActive"/>).</summary>
+    public bool IsLaunchPeriod { get; }
 
     public event Action? Changed;
 
@@ -68,7 +81,7 @@ public sealed class Edition : IEditionPolicy
     public static bool IsProFeature(Feature feature) =>
         feature is Feature.SendToSeveralDevices or Feature.FullSpeed or Feature.UnlimitedSends;
 
-    public bool IsEnabled(Feature feature) => _isPro || !IsProFeature(feature);
+    public bool IsEnabled(Feature feature) => _isPro || IsLaunchPeriod || !IsProFeature(feature);
 
     public void SetPro(bool isPro)
     {
