@@ -103,13 +103,14 @@ public class LicensingTests
         Assert.Equal(TransferState.Completed, session.State);
         Assert.True(freeTime >= TimeSpan.FromSeconds(1.1), $"free send took {freeTime}");
 
-        // Upgrading lifts the limit straight away.
+        // Upgrading lifts the limit straight away. (Comparing wall-clock times here is unreliable on busy CI runners,
+        // so check the pacing itself: unlimited, and a Pro send still completes.)
+        Assert.Equal(FreeLimits.MaxSendBytesPerSecond, free.Node.Transfers.SendLimiter.BytesPerSecond);
         free.Edition.SetPro(true);
-        clock.Restart();
+        Assert.Equal(0, free.Node.Transfers.SendLimiter.BytesPerSecond);
         session = free.Node.Send(receiver.AsDevice(), new[] { file });
         await Wait.ForFinishAsync(session);
         Assert.Equal(TransferState.Completed, session.State);
-        Assert.True(clock.Elapsed < freeTime, $"pro send took {clock.Elapsed}, free {freeTime}");
     }
 
     [Fact]
