@@ -27,6 +27,9 @@ public interface IStoreService
 
     Task<PurchaseOutcome> PurchaseProAsync();
 
+    /// <summary>Shows the store's own "Rate and review" dialog (it decides whether to show anything).</summary>
+    Task RequestReviewAsync();
+
     /// <summary>Raised when the store reports a license change (e.g. bought on another device, or refunded).</summary>
     event Action? LicenseChanged;
 }
@@ -47,6 +50,8 @@ public sealed class UnavailableStoreService : IStoreService
     public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(null);
 
     public Task<PurchaseOutcome> PurchaseProAsync() => Task.FromResult(PurchaseOutcome.NotAvailable);
+
+    public Task RequestReviewAsync() => Task.CompletedTask;
 }
 
 /// <summary>Keeps the node's edition in sync with what the user owns, and sells the upgrade.</summary>
@@ -102,6 +107,30 @@ public sealed class ProService
         {
             Log.Warn("Could not check the Pro license", ex);
         }
+    }
+
+    /// <summary>Completed transfers before Beam asks for a rating.</summary>
+    public const int TransfersBeforeRatingPrompt = 3;
+
+    /// <summary>
+    /// Asks for a store rating once, after a few successful transfers — a moment when the app just worked.
+    /// Only in the Store version (the GitHub builds can't open a Store review).
+    /// </summary>
+    public async Task<bool> MaybeAskForRatingAsync()
+    {
+        var settings = Node.Settings.Current;
+        if (!CanPurchase || settings.RatingRequested || settings.CompletedTransfers < TransfersBeforeRatingPrompt) return false;
+        Node.Settings.Update(s => s.RatingRequested = true);
+        try
+        {
+            await _store.RequestReviewAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not show the rating prompt", ex);
+        }
+
+        return true;
     }
 
     public async Task<PurchaseOutcome> PurchaseAsync()

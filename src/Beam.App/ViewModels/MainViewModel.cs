@@ -300,6 +300,17 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         Notify(s => s.NotifyOnDeviceFound, $"{device.Name} is nearby", "Open Beam to send files to it.");
     }
 
+    /// <summary>Waits a moment so the user sees the result, then asks for a rating if nothing else is going on.</summary>
+    private async Task AskForRatingWhenIdleAsync()
+    {
+        await Task.Delay(RatingPromptDelay);
+        if (HasActiveTransfers || HasDialog || !_ui.IsWindowActive) return;
+        await Pro.MaybeAskForRatingAsync();
+    }
+
+    /// <summary>Delay between a finished transfer and the rating prompt (shortened in tests).</summary>
+    internal static TimeSpan RatingPromptDelay { get; set; } = TimeSpan.FromSeconds(2);
+
     private void OnEditionChanged()
     {
         OnPropertyChanged(nameof(IsPro));
@@ -436,6 +447,12 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     {
         var session = vm.Session;
         var snapshot = session.GetSnapshot();
+        if (snapshot.State == TransferState.Completed)
+        {
+            Node.Settings.Update(s => s.CompletedTransfers++);
+            _ = AskForRatingWhenIdleAsync();
+        }
+
         var title = session.Title;
         switch (snapshot.State)
         {

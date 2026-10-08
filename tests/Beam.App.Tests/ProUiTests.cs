@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Beam.App.Services;
+using Beam.App.ViewModels;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core.Licensing;
 using Beam.Core.Tests;
@@ -172,6 +173,26 @@ public class ProUiTests
         app.ViewModel.Settings.UpgradeCommand.Execute(null);
         await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is UpgradeViewModel, "dialog");
         Assert.Equal("Upgrade · ₺149,99", ((UpgradeViewModel)app.ViewModel.Dialog!).BuyText);
+    }
+
+    [AvaloniaFact]
+    public async Task AsksForARatingOnceAfterThreeCompletedTransfers()
+    {
+        MainViewModel.RatingPromptDelay = TimeSpan.FromMilliseconds(50);
+        await using var app = new UiHarness();
+        await app.InitializeAsync();
+        await using var laptop = new TestNode("Laptop");
+        var file = app.CreateFile("a.txt", 100);
+        for (var i = 1; i <= 4; i++)
+        {
+            await app.ViewModel.StartSendAsync(laptop.AsDevice(), new[] { file });
+            await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.Count(t => t.IsFinished) == i, $"transfer {i}");
+            await UiHarness.PumpAsync(200);
+            Assert.Equal(i >= 3 ? 1 : 0, app.Store.ReviewRequests);
+        }
+
+        Assert.True(app.Node.Settings.Current.RatingRequested);
+        Assert.Equal(4, app.Node.Settings.Current.CompletedTransfers);
     }
 
     [AvaloniaFact]

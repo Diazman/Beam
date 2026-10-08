@@ -108,6 +108,14 @@ public sealed class FakeStore : IStoreService
         return Task.FromResult(NextOutcome);
     }
 
+    public int ReviewRequests { get; private set; }
+
+    public Task RequestReviewAsync()
+    {
+        ReviewRequests++;
+        return Task.CompletedTask;
+    }
+
     public void RaiseLicenseChanged() => LicenseChanged?.Invoke();
 }
 
