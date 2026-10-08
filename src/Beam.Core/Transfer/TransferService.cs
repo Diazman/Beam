@@ -213,6 +213,9 @@ public sealed class TransferService : IAsyncDisposable
         if (_bufferPool.Count < 8) _bufferPool.Add(buffers);
     }
 
+    /// <summary>Adds a transfer that runs outside this service (e.g. with a phone's browser) so it shows up and is recorded like the others.</summary>
+    internal void RegisterExternal(TransferSession session) => Register(session);
+
     private void Register(TransferSession session)
     {
         _sessions[session.Id + session.Direction] = session;

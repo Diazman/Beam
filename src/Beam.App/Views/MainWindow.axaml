@@ -18,6 +18,9 @@
     <DataTemplate DataType="vm:HomeViewModel">
       <views:HomeView />
     </DataTemplate>
+    <DataTemplate DataType="vm:PhoneViewModel">
+      <views:PhoneView />
+    </DataTemplate>
     <DataTemplate DataType="vm:HistoryViewModel">
       <views:HistoryView />
     </DataTemplate>
@@ -56,6 +59,8 @@
                  ToolTip.Tip="Beam" />
           <RadioButton Classes="nav" GroupName="nav" Content="Send"
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="Phone"
+                       Tag="{StaticResource IconPhone}" IsChecked="{Binding IsPhonePage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="History"
                        Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="Settings"

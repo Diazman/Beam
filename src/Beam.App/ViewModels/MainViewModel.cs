@@ -16,6 +16,7 @@ namespace Beam.App.ViewModels;
 public enum Page
 {
     Home,
+    Phone,
     History,
     Settings,
 }
@@ -46,6 +47,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         node.IncomingHandler = this;
 
         Home = new HomeViewModel(node, ui, this);
+        Phone = new PhoneViewModel(node, ui, this);
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
 
@@ -71,12 +73,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     public HomeViewModel Home { get; }
 
+    public PhoneViewModel Phone { get; }
+
     public HistoryViewModel History { get; }
 
     public SettingsViewModel Settings { get; }
 
     public object CurrentPage => _page switch
     {
+        Page.Phone => Phone,
         Page.History => History,
         Page.Settings => Settings,
         _ => Home,
@@ -90,6 +95,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         set
         {
             if (value) Navigate(Page.Home);
+        }
+    }
+
+    public bool IsPhonePage
+    {
+        get => _page == Page.Phone;
+        set
+        {
+            if (value) Navigate(Page.Phone);
         }
     }
 
@@ -206,6 +220,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageKind));
         OnPropertyChanged(nameof(IsHomePage));
+        OnPropertyChanged(nameof(IsPhonePage));
         OnPropertyChanged(nameof(IsHistoryPage));
         OnPropertyChanged(nameof(IsSettingsPage));
     }
@@ -297,7 +312,8 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var dialog = new IncomingRequestViewModel(request, _ui, Node.Edition.IsEnabled(Feature.TrustedDevices));
+            var canTrust = Node.Edition.IsEnabled(Feature.TrustedDevices) && request.SenderFingerprint.Length > 0;
+            var dialog = new IncomingRequestViewModel(request, _ui, canTrust);
             if (!_ui.IsWindowActive)
             {
                 Notify(s => s.NotifyOnIncomingRequest, "Incoming files", dialog.Title, bringToFront: false);

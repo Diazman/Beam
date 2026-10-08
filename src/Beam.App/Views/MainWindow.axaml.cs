@@ -130,8 +130,16 @@ public partial class MainWindow : Window, IUiServices
         if (vm.HasDialog) return;
         var paths = e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
         if (paths is not { Count: > 0 }) return;
-        vm.Navigate(Page.Home);
-        vm.Home.AddPaths(paths);
+        if (vm.CurrentPageKind == Page.Phone)
+        {
+            _ = vm.Phone.ShareAsync(paths); // dropped on the Phone page: share with the phone
+        }
+        else
+        {
+            vm.Navigate(Page.Home);
+            vm.Home.AddPaths(paths);
+        }
+
         e.Handled = true;
     }
 }

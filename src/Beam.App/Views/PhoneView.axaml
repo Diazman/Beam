@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.PhoneView"
+             x:DataType="vm:PhoneViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="36,30,36,36" Spacing="24" MaxWidth="860" HorizontalAlignment="Left">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="Phone" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap"
+                   Text="Send files between this computer and any phone or tablet — iPhone or Android. No app to install: the phone uses its web browser." />
+      </StackPanel>
+
+      <Border Classes="notice error" IsVisible="{Binding HasProblem}">
+        <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" />
+      </Border>
+
+      <!-- Off -->
+      <Border Classes="card" IsVisible="{Binding IsOff}" Padding="24">
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Classes="iconBadge" Width="56" Height="56" CornerRadius="28" VerticalAlignment="Top">
+            <PathIcon Data="{StaticResource IconPhone}" Width="24" Height="24" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="18,0,0,0" Spacing="8">
+            <TextBlock Classes="h3" Text="Connect a phone" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="Make sure the phone is on the same Wi-Fi as this computer. Beam will show a code to scan with the phone's camera." />
+            <Button Classes="accent large" Content="Show the code" Command="{Binding TurnOnCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- On -->
+      <Border Classes="card" IsVisible="{Binding IsOn}" Padding="24">
+        <Grid ColumnDefinitions="Auto,*">
+          <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
+          <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
+            <Path Data="{Binding Qr}" Fill="Black" Stretch="Uniform" Width="208" Height="208" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="10">
+            <TextBlock Classes="h3" Text="Scan with your phone's camera" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap">
+              <Run Text="1. Open the camera and point it at the code, then tap the link." />
+              <LineBreak />
+              <Run Text="2. On the page that opens, choose files to send here, or download what you share below." />
+            </TextBlock>
+            <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
+              <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
+                       Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding IsConnected}" />
+              <TextBlock Grid.Column="1" Text="{Binding ConnectionText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Classes="caption" Text="Or type this address in the phone's browser:" Margin="0,6,0,0" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <SelectableTextBlock Text="{Binding Link}" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" />
+              <Button Classes="link" Content="Copy" Command="{Binding CopyLinkCommand}" VerticalAlignment="Center" />
+              <TextBlock Classes="caption success" Text="{Binding CopyStatus}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Classes="caption" Text="{Binding OtherLinks}" IsVisible="{Binding HasOtherLinks}" TextWrapping="Wrap" />
+            <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Only someone with this code can connect, and files from the phone still need your OK. The code changes every time and stops working when you turn it off. Use it on networks you trust: unlike transfers between computers, phone transfers aren't encrypted." />
+            <Button Content="Turn off" Command="{Binding TurnOffCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Share -->
+      <StackPanel Spacing="10">
+        <TextBlock Classes="h2" Text="Send to your phone" />
+        <Border Classes="card">
+          <StackPanel Spacing="12">
+            <TextBlock Text="{Binding SharedSummary}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Command="{Binding ShareFilesCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <PathIcon Data="{StaticResource IconFile}" Width="14" Height="14" />
+                  <TextBlock Text="Share files" />
+                </StackPanel>
+              </Button>
+              <Button Command="{Binding ShareFolderCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+                  <TextBlock Text="Share a folder" />
+                </StackPanel>
+              </Button>
+              <Button Classes="link" Content="Stop sharing" Command="{Binding StopSharingCommand}" IsVisible="{Binding IsSharing}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="Files from the phone are saved to the same folder as files from other computers (see Settings)." />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

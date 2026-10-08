@@ -5,6 +5,7 @@ using Beam.Core.Discovery;
 using Beam.Core.History;
 using Beam.Core.Identity;
 using Beam.Core.Licensing;
+using Beam.Core.Phone;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
 using Beam.Core.Transfer;
@@ -53,6 +54,7 @@ public sealed class BeamNode : IAsyncDisposable
         Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName,
             sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond);
         Transfers.SessionFinished += RecordHistory;
+        PhoneLink = new PhoneLinkServer(Transfers, Quota, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint, DeviceKinds.Desktop));
         Discovery.Discoverable = Settings.Current.Discoverable;
@@ -72,6 +74,9 @@ public sealed class BeamNode : IAsyncDisposable
     public DiscoveryService Discovery { get; }
 
     public IEditionPolicy Edition => _options.Edition;
+
+    /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
+    public PhoneLinkServer PhoneLink { get; }
 
     /// <summary>The free edition's daily send limit.</summary>
     public SendQuota Quota { get; }
@@ -204,6 +209,7 @@ public sealed class BeamNode : IAsyncDisposable
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
         Discovery.Dispose();
+        await PhoneLink.DisposeAsync().ConfigureAwait(false);
         await Transfers.DisposeAsync().ConfigureAwait(false);
         if (_manualPeerTask != null)
         {

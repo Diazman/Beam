@@ -38,6 +38,10 @@ SIMPLE
 • Runs quietly in the notification area so others can send you files any time.
 • Light and dark themes.
 
+PHONES TOO — NO APP NEEDED
+• Send photos and videos from any iPhone or Android phone to your PC, and files from your PC to the phone.
+• Just scan the code Beam shows with the phone's camera. The phone uses its web browser; nothing to install.
+
 Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks automatic discovery,
 connect using the address Beam shows on the other computer.
 
@@ -53,6 +57,7 @@ always free and unlimited. Beam Pro, an optional one-time in-app purchase, adds:
 First release.
 
 ## Product features (up to 20, one per line)
+Send to and from any phone by scanning a code (no app needed)
 Find nearby computers automatically
 Send files and whole folders
 Drag and drop

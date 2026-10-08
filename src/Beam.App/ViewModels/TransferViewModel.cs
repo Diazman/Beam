@@ -198,6 +198,8 @@ public sealed class TransferViewModel : ObservableObject
                 return "Preparing files…";
             case TransferState.Connecting:
                 return $"Connecting to {peer}…";
+            case TransferState.WaitingForAcceptance when Session.PeerId == Beam.Core.Phone.PhoneLinkServer.PhonePeerId:
+                return "Ready to download on your phone";
             case TransferState.WaitingForAcceptance:
                 return $"Waiting for {peer} to accept…";
             case TransferState.AwaitingDecision:

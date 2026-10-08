@@ -63,6 +63,11 @@ public sealed class IncomingRequestViewModel : DialogViewModel
 
     public string SenderAddress => Request.SenderAddress;
 
+    /// <summary>Where the request comes from: the sender's security code, or the phone's address for browser uploads.</summary>
+    public string OriginText => VerificationCode.Length > 0
+        ? $"Security code {VerificationCode} · from {SenderAddress}"
+        : $"Sent from a web browser at {SenderAddress}, using the link this computer is showing";
+
     public bool CanTrust { get; }
 
     public string TrustText { get; }

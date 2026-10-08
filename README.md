@@ -28,6 +28,8 @@ structure intact. No cables, accounts, cloud, IP addresses, or network shares.
   received paths can never escape the chosen folder. No admin rights, no cloud, no telemetry.
 - **Windows integration**: tray icon (keeps receiving when the window is closed), toast notifications,
   start with Windows, single instance, `Beam.exe --send <paths>` for future Explorer integration, light/dark theme.
+- **Phones without an app**: the Phone page shows a QR code; any iPhone or Android phone that scans it gets a page to
+  send files to the PC (with approval) and download files the PC shares. LAN only, secret link, auto-off after 30 minutes.
 - **Free and Pro**: free to use (one computer per send, up to 5 MB/s, 10 sends a day; receiving unlimited).
   **Beam Pro** — a one-time Microsoft Store in-app purchase — sends to several computers at once, at full speed,
   without a daily limit. See [docs/STORE-SUBMISSION.md](docs/STORE-SUBMISSION.md#free-and-pro-editions).

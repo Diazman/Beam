@@ -57,6 +57,8 @@
     <desktop2:Extension Category="windows.firewallRules">
       <desktop2:FirewallRules Executable="Beam.exe">
         <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="domainAndPrivate" LocalPortMin="47821" LocalPortMax="47830" />
+        <!-- Phone link: the page phones open in their browser (Phone page in Beam). -->
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="domainAndPrivate" LocalPortMin="47831" LocalPortMax="47835" />
         <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="domainAndPrivate" LocalPortMin="47820" LocalPortMax="47820" />
       </desktop2:FirewallRules>
     </desktop2:Extension>
