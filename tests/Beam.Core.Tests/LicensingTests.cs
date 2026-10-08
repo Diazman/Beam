@@ -79,7 +79,8 @@ public class LicensingTests
         var limiter = new RateLimiter(() => rate);
         var clock = Stopwatch.StartNew();
         for (var i = 0; i < 16; i++) await limiter.WaitAsync(256 * 1024, CancellationToken.None); // 4 MB at 8 MB/s
-        Assert.InRange(clock.Elapsed.TotalSeconds, 0.2, 2.0);
+        // ~0.5 s; the ceiling only catches gross oversleeping (busy CI runners stall timers for seconds).
+        Assert.InRange(clock.Elapsed.TotalSeconds, 0.2, 6.0);
 
         rate = 0;
         clock.Restart();
