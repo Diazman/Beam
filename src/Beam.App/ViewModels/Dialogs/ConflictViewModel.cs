@@ -1,4 +1,5 @@
 using Beam.App.Infrastructure;
+using Beam.Core.Localization;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
 
@@ -14,16 +15,14 @@ public sealed class ConflictViewModel : DialogViewModel
     public ConflictViewModel(FileConflict conflict, string folderName, int remainingAfterThis)
     {
         var name = Path.GetFileName(conflict.RelativePath);
-        Title = $"“{name}” already exists";
+        Title = L.T("“{0}” already exists", name);
         Location = conflict.RelativePath == name
-            ? $"There's already a file with this name in {folderName}."
-            : $"There's already a file at {conflict.RelativePath.Replace('\\', '/')} in {folderName}.";
+            ? L.T("There's already a file with this name in {0}.", folderName)
+            : L.T("There's already a file at {0} in {1}.", conflict.RelativePath.Replace('\\', '/'), folderName);
         ExistingText = Describe(conflict.ExistingSize, conflict.ExistingModifiedUtc);
         IncomingText = Describe(conflict.IncomingSize, conflict.IncomingModifiedUtc);
         RemainingAfterThis = remainingAfterThis;
-        ApplyToAllText = remainingAfterThis == 1
-            ? "Do this for the other conflict too"
-            : $"Do this for the other {remainingAfterThis} conflicts";
+        ApplyToAllText = L.Plural(remainingAfterThis, "Do this for the other conflict too", "Do this for the other {0} conflicts");
 
         ReplaceCommand = new RelayCommand(() => Close(new ConflictChoice(ConflictAction.Replace, ApplyToAll)));
         KeepBothCommand = new RelayCommand(() => Close(new ConflictChoice(ConflictAction.KeepBoth, ApplyToAll)));
@@ -59,5 +58,5 @@ public sealed class ConflictViewModel : DialogViewModel
     private static string Describe(long size, DateTime modifiedUtc) =>
         modifiedUtc == default
             ? Format.Bytes(size)
-            : $"{Format.Bytes(size)} · modified {modifiedUtc.ToLocalTime():g}";
+            : L.T("{0} · modified {1:g}", Format.Bytes(size), modifiedUtc.ToLocalTime());
 }

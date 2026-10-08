@@ -1,6 +1,7 @@
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
 using Beam.Core.Protocol;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -31,7 +32,7 @@ internal static class TextTransfer
             if (connection.RemoteHello.Protocol < AppInfo.TextProtocolVersion)
             {
                 session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.IncompatibleVersion,
-                    $"{session.PeerName} has an older version of Beam that can't receive text. Update Beam on {session.PeerName}."));
+                    L.T("{0} has an older version of Beam that can't receive text. Update Beam on {0}.", session.PeerName)));
                 return;
             }
 
@@ -55,7 +56,7 @@ internal static class TextTransfer
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled sending the text."));
+            session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled sending the text.")));
         }
         catch (Exception ex)
         {
@@ -106,7 +107,7 @@ internal static class TextTransfer
         else
         {
             await connection.Channel.SendAsync(FrameType.Cancel, new CancelMessage { Reason = Reasons.Declined }, serviceToken).ConfigureAwait(false);
-            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, "You dismissed the text."));
+            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, L.T("You dismissed the text.")));
         }
     }
 
@@ -114,7 +115,7 @@ internal static class TextTransfer
     public static string Describe(string text)
     {
         var line = text.Trim().Split('\n', 2)[0].Trim();
-        if (line.Length == 0) line = "Text";
+        if (line.Length == 0) line = L.T("Text");
         return line.Length > 60 ? line[..57].TrimEnd() + "…" : line;
     }
 }

@@ -1,5 +1,6 @@
 using Beam.App.Infrastructure;
 using Beam.App.Services;
+using Beam.Core.Localization;
 
 namespace Beam.App.ViewModels.Dialogs;
 
@@ -13,7 +14,7 @@ public sealed class SendTextViewModel : DialogViewModel
     {
         _ui = ui;
         _text = initialText;
-        Title = $"Send text to {targets}";
+        Title = L.T("Send text to {0}", targets);
         SendCommand = new RelayCommand(() => Close(Text.Trim().Length > 0 ? Text : null), () => Text.Trim().Length > 0);
         CancelCommand = new RelayCommand(() => Close(null));
         PasteCommand = new AsyncCommand(PasteAsync);

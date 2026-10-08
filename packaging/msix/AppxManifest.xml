@@ -31,6 +31,10 @@
 
   <Resources>
     <Resource Language="en-us" />
+    <!-- Lets Partner Center take Store listings in these languages (the app itself is translated, see src/Beam.Core/Localization). -->
+    <Resource Language="tr-tr" />
+    <Resource Language="ru-ru" />
+    <Resource Language="uz-latn" />
   </Resources>
 
   <Applications>

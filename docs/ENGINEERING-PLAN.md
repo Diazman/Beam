@@ -64,23 +64,17 @@ testable pull requests. Every change keeps the existing guarantees:
 - **Installer version:** no prompt (it can't open a Store review).
 - **Tests:** counter logic unit test; `IStoreService.RequestReviewAsync` faked in the UI tests.
 
-### 1.4 Languages: Turkish, Russian, Uzbek (F7)
-- **Move every user-visible string into resources:**
-  - `Beam.App/Resources/Strings.resx` plus `.tr`, `.ru` and `.uz` variants;
-  - XAML gets a small markup extension `{l:T Key}`;
-  - view models use `Strings.Key`.
-- **Plurals:** Russian and Uzbek plural rules differ from English. Replace `Format.Count` with a plural
-  helper per language (`one/few/many`).
-- **Formatting:** dates, sizes and decimal separators follow the chosen culture.
-- **Settings:** add a **Language** option ("Windows setting" by default).
-- **Also translate:**
-  - the phone web page (`phone.html`), using the browser's language;
-  - error messages in `ErrorTranslator`;
-  - Store listings (`packaging/store/LISTING.*.md`).
-- **Tests:**
-  - every key exists in every language;
-  - screenshot tests per language at the minimum window size to catch text that doesn't fit;
-  - a native speaker reviews the Turkish and Uzbek text.
+### 1.4 Languages: Turkish, Russian, Uzbek (F7) — done in v1.2.0
+- Every user-visible string goes through `L.T` / `L.Plural` (C#) or `{l:T '…'}` (XAML); the English text is the key and
+  `src/Beam.Core/Localization/{tr,ru,uz}.json` hold the translations (simpler to review than resx, and nothing can be
+  left blank: missing text falls back to English). See [TRANSLATING.md](TRANSLATING.md).
+- Plurals per language (Russian one/few/many); sizes, numbers and dates follow the chosen language.
+- Settings → **Language** ("Use Windows language" by default; applies after a restart).
+- Also translated: the phone page (by the phone browser's language), error messages, Store listings
+  (`packaging/store/LISTING.*.md`; the MSIX manifest declares the languages so Partner Center accepts them).
+- Tests: `LocalizationTests` (every text translated, placeholders match, no leftovers), `LanguageUiTests`
+  (screens in each language, also at the minimum window size). Still to do: a native speaker reviews the Turkish and
+  Uzbek text.
 
 ### 1.5 Send text, links and clipboard (F6)
 - **Protocol v2:** the Offer can carry a `Text` item (up to 1 MB). Only send it to peers announcing protocol ≥ 2.

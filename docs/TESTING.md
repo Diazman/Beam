@@ -6,10 +6,10 @@
 dotnet test Beam.sln          # ~2 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (81 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (102 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 
-**`tests/Beam.App.Tests`** (18 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (28 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -99,6 +99,9 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 33. Store version: after the 3rd completed transfer, the Store's rating dialog appears once (and never again).
 34. Store version during the launch period: Settings → **Claim Beam Pro free** → Store dialog shows "Free"; afterwards
     Settings shows *Beam Pro*. Restart: still Pro.
+35. Settings → **Language** → Türkçe / Русский / Oʻzbekcha, restart Beam. ✅ Every screen, dialog, toast, tray menu
+    and the on/off switches are in that language; sizes use the local decimal separator ("7,63 MB"). Open the Phone
+    page on a phone set to that language: ✅ the page is translated too. Back to *Use Windows language*.
 
 ## Performance notes
 

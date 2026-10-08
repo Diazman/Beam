@@ -6,6 +6,7 @@ using Beam.Core.Discovery;
 using Beam.Core.Identity;
 using Beam.Core.Protocol;
 using Beam.Core.Util;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -119,7 +120,7 @@ public sealed class TransferService : IAsyncDisposable
     {
         if (string.IsNullOrEmpty(text)) throw new ArgumentException("Nothing to send.", nameof(text));
         if (text.Length > TextTransfer.MaxLength)
-            throw new TransferException(TransferErrorKind.NothingToSend, "That text is too long to send. Save it as a file and send the file instead.");
+            throw new TransferException(TransferErrorKind.NothingToSend, L.T("That text is too long to send. Save it as a file and send the file instead."));
         var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, target.Id, target.Name, target.Fingerprint)
         {
             Text = text,
@@ -140,7 +141,7 @@ public sealed class TransferService : IAsyncDisposable
         var hello = connection.RemoteHello;
         if (string.IsNullOrWhiteSpace(hello.DeviceId)) throw new ProtocolException("Device did not identify itself.");
         if (hello.DeviceId == Identity.DeviceId)
-            throw new TransferException(TransferErrorKind.ConnectFailed, "That address belongs to this computer.");
+            throw new TransferException(TransferErrorKind.ConnectFailed, L.T("That address belongs to this computer."));
         return new DeviceInfo
         {
             Id = hello.DeviceId,

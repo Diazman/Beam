@@ -59,6 +59,9 @@ public sealed class AppSettings
 
     public ThemePreference Theme { get; set; } = ThemePreference.System;
 
+    /// <summary>Interface language code ("en", "tr", "ru", "uz"); empty follows Windows.</summary>
+    public string Language { get; set; } = "";
+
     public List<TrustedDevice> TrustedDevices { get; set; } = new();
 
     /// <summary>Addresses the user added by hand because automatic discovery could not find them.</summary>

@@ -5,6 +5,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Beam.App.Services;
 using Beam.App.ViewModels;
+using Beam.Core.Localization;
 
 namespace Beam.App.Views;
 
@@ -38,7 +39,7 @@ public partial class MainWindow : Window, IUiServices
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose files to send",
+            Title = L.T("Choose files to send"),
             AllowMultiple = true,
         });
         return files.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
@@ -48,7 +49,7 @@ public partial class MainWindow : Window, IUiServices
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Choose folders to send",
+            Title = L.T("Choose folders to send"),
             AllowMultiple = true,
         });
         return folders.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();

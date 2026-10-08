@@ -1,6 +1,7 @@
 using Beam.App.Infrastructure;
 using Beam.App.Platform;
 using Beam.App.Services;
+using Beam.Core.Localization;
 
 namespace Beam.App.ViewModels.Dialogs;
 
@@ -15,7 +16,7 @@ public sealed class IncomingTextViewModel : DialogViewModel
         _ui = ui;
         Text = text;
         Link = TryGetLink(text);
-        Title = Link != null ? $"{senderName} sent you a link" : $"{senderName} sent you text";
+        Title = Link != null ? L.T("{0} sent you a link", senderName) : L.T("{0} sent you text", senderName);
         CopyCommand = new AsyncCommand(CopyAsync);
         OpenLinkCommand = new RelayCommand(() =>
         {
@@ -63,6 +64,6 @@ public sealed class IncomingTextViewModel : DialogViewModel
     private async Task CopyAsync()
     {
         await _ui.CopyToClipboardAsync(Text);
-        CopyStatus = "Copied";
+        CopyStatus = L.T("Copied");
     }
 }

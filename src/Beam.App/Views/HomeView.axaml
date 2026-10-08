@@ -11,7 +11,7 @@
         <!-- Header -->
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Spacing="4">
-            <TextBlock Classes="h1" Text="Send files" />
+            <TextBlock Classes="h1" Text="{l:T 'Send files'}" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
                        Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.'}" />
           </StackPanel>
@@ -23,7 +23,7 @@
                 <Ellipse Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding IsDiscoverable}" />
                 <Ellipse Fill="{DynamicResource TextTertiaryBrush}" IsVisible="{Binding !IsDiscoverable}" />
               </Panel>
-              <TextBlock Classes="caption" Text="This computer:" VerticalAlignment="Center" />
+              <TextBlock Classes="caption" Text="{l:T 'This computer:'}" VerticalAlignment="Center" />
               <TextBlock Text="{Binding LocalDeviceName}" FontWeight="SemiBold" VerticalAlignment="Center"
                          MaxWidth="200" TextTrimming="CharacterEllipsis" />
             </StackPanel>
@@ -34,20 +34,20 @@
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto,Auto">
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-              <TextBlock Classes="h2" Text="Nearby computers" />
+              <TextBlock Classes="h2" Text="{l:T 'Nearby computers'}" />
             </StackPanel>
             <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a computer?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding RefreshCommand}"
-                    ToolTip.Tip="Look for nearby computers again" Margin="4,0,0,0">
+                    ToolTip.Tip="{l:T 'Look for nearby computers again'}" Margin="4,0,0,0">
               <PathIcon Data="{StaticResource IconRefresh}" />
             </Button>
           </Grid>
 
           <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
           <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowMultiSendUpsell}" Margin="0,-4,0,0">
-            <TextBlock Classes="caption" Text="Want to send to several computers at once?" VerticalAlignment="Center" />
-            <Button Classes="link" Content="Get Beam Pro" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
+            <TextBlock Classes="caption" Text="{l:T 'Want to send to several computers at once?'}" VerticalAlignment="Center" />
+            <Button Classes="link" Content="{l:T 'Get Beam Pro'}" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
           </StackPanel>
 
           <Border Classes="notice warning" IsVisible="{Binding DiscoveryUnavailable}">
@@ -96,13 +96,13 @@
                 </Border>
               </Panel>
               <StackPanel Grid.Column="1" Margin="16,2,0,0" Spacing="4">
-                <TextBlock Classes="h3" Text="Looking for nearby computers…" />
+                <TextBlock Classes="h3" Text="{l:T 'Looking for nearby computers…'}" />
                 <TextBlock Classes="secondary" TextWrapping="Wrap"
-                           Text="Open Beam on the other computer. It will appear here automatically." />
+                           Text="{l:T 'Open Beam on the other computer. It will appear here automatically.'}" />
                 <StackPanel IsVisible="{Binding ShowSearchHint}" Spacing="8" Margin="0,10,0,0">
                   <TextBlock Classes="caption" TextWrapping="Wrap"
-                             Text="Still nothing? Make sure both computers are connected to the same Wi-Fi or network, and that Beam was allowed through Windows Firewall. You can also connect using the other computer's address." />
-                  <Button Content="Connect by address" Command="{Binding ConnectByAddressCommand}" />
+                             Text="{l:T 'Still nothing? Make sure both computers are connected to the same Wi-Fi or network, and that Beam was allowed through Windows Firewall. You can also connect using the other computer\'s address.'}" />
+                  <Button Content="{l:T 'Connect by address'}" Command="{Binding ConnectByAddressCommand}" />
                 </StackPanel>
               </StackPanel>
             </Grid>
@@ -112,27 +112,27 @@
         <!-- Step 2: files -->
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="Files to send" VerticalAlignment="Center" />
+            <TextBlock Classes="h2" Text="{l:T 'Files to send'}" VerticalAlignment="Center" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasItems}">
               <Button Classes="subtle" Command="{Binding ChooseFilesCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
-                  <TextBlock Text="Add files" />
+                  <TextBlock Text="{l:T 'Add files'}" />
                 </StackPanel>
               </Button>
               <Button Classes="subtle" Command="{Binding ChooseFolderCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
-                  <TextBlock Text="Add folder" />
+                  <TextBlock Text="{l:T 'Add folder'}" />
                 </StackPanel>
               </Button>
-              <Button Classes="subtle" Content="Clear" Command="{Binding ClearCommand}" />
+              <Button Classes="subtle" Content="{l:T 'Clear'}" Command="{Binding ClearCommand}" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasNoItems}">
-              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="Send a message or a link to the chosen computer">
+              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="{l:T 'Send a message or a link to the chosen computer'}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconEdit}" Width="12" Height="12" />
-                  <TextBlock Text="Send text or link" />
+                  <TextBlock Text="{l:T 'Send text or link'}" />
                 </StackPanel>
               </Button>
             </StackPanel>
@@ -146,19 +146,19 @@
               <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Center">
                 <PathIcon Data="{StaticResource IconUpload}" Width="22" Height="22" />
               </Border>
-              <TextBlock Classes="h3" Text="Drag files or folders here" HorizontalAlignment="Center" />
-              <TextBlock Classes="caption" Text="or" HorizontalAlignment="Center" />
+              <TextBlock Classes="h3" Text="{l:T 'Drag files or folders here'}" HorizontalAlignment="Center" />
+              <TextBlock Classes="caption" Text="{l:T 'or'}" HorizontalAlignment="Center" />
               <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                 <Button Command="{Binding ChooseFilesCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <PathIcon Data="{StaticResource IconFile}" Width="14" Height="14" />
-                    <TextBlock Text="Choose files" />
+                    <TextBlock Text="{l:T 'Choose files'}" />
                   </StackPanel>
                 </Button>
                 <Button Command="{Binding ChooseFolderCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
-                    <TextBlock Text="Choose a folder" />
+                    <TextBlock Text="{l:T 'Choose a folder'}" />
                   </StackPanel>
                 </Button>
               </StackPanel>
@@ -181,7 +181,7 @@
                           <TextBlock Classes="caption" Text="{Binding Details}" />
                         </StackPanel>
                         <Button Grid.Column="2" Classes="icon" Command="{Binding RemoveCommand}"
-                                ToolTip.Tip="Remove from the list" VerticalAlignment="Center">
+                                ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Center">
                           <PathIcon Data="{StaticResource IconClose}" />
                         </Button>
                       </Grid>
@@ -205,13 +205,13 @@
                      Classes.secondary="{Binding !CanSend}" FontWeight="Normal" />
           <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowFreeLimits}">
             <TextBlock Classes="caption" Text="{Binding PlanText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Classes="link" Content="Upgrade" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
+            <Button Classes="link" Content="{l:T 'Upgrade'}" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
           </StackPanel>
         </StackPanel>
         <Button Grid.Column="1" Classes="accent large" Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <PathIcon Data="{StaticResource IconSend}" Width="14" Height="14" />
-            <TextBlock Text="Send" />
+            <TextBlock Text="{l:T 'Send'}" />
           </StackPanel>
         </Button>
       </Grid>

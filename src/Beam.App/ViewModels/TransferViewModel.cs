@@ -3,6 +3,7 @@ using Avalonia.Media;
 using Beam.App.Infrastructure;
 using Beam.App.Platform;
 using Beam.App.Services;
+using Beam.Core.Localization;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
 
@@ -45,9 +46,9 @@ public sealed class TransferViewModel : ObservableObject
 
     public bool IsSend => Session.Direction == TransferDirection.Send;
 
-    public string Heading => IsSend ? $"To {Session.PeerName}" : $"From {Session.PeerName}";
+    public string Heading => IsSend ? L.T("To {0}", Session.PeerName) : L.T("From {0}", Session.PeerName);
 
-    public string ItemTitle => string.IsNullOrEmpty(Session.Title) ? "Files" : Session.Title;
+    public string ItemTitle => string.IsNullOrEmpty(Session.Title) ? L.T("Files") : Session.Title;
 
     public Geometry? Icon => Icons.Get(IsSend ? Icons.Send : Icons.Receive);
 
@@ -121,7 +122,7 @@ public sealed class TransferViewModel : ObservableObject
 
     public bool CanCancel => Session.CanCancel;
 
-    public string CancelText => State == TransferState.Interrupted ? "Discard" : "Cancel";
+    public string CancelText => State == TransferState.Interrupted ? L.T("Discard") : L.T("Cancel");
 
     public bool HasDetails => DetailsText.Length > 0;
 
@@ -136,7 +137,7 @@ public sealed class TransferViewModel : ObservableObject
         }
     }
 
-    public string DetailsToggleText => ShowDetails ? "Hide details" : "Details";
+    public string DetailsToggleText => ShowDetails ? L.T("Hide details") : L.T("Details");
 
     public RelayCommand CancelCommand { get; }
 
@@ -172,7 +173,7 @@ public sealed class TransferViewModel : ObservableObject
         Progress = snapshot.TotalBytes > 0
             ? Math.Clamp(snapshot.TransferredBytes * 100.0 / snapshot.TotalBytes, 0, 100)
             : snapshot.TotalFiles > 0 ? snapshot.CompletedFiles * 100.0 / snapshot.TotalFiles : 0;
-        SizeText = snapshot.TotalBytes > 0 ? $"{Format.Bytes(snapshot.TransferredBytes)} of {Format.Bytes(snapshot.TotalBytes)}" : "";
+        SizeText = snapshot.TotalBytes > 0 ? L.T("{0} of {1}", Format.Bytes(snapshot.TransferredBytes), Format.Bytes(snapshot.TotalBytes)) : "";
         SpeedText = _speed.BytesPerSecond > 0 ? Format.Speed(_speed.BytesPerSecond) : "";
         var eta = _speed.EstimateRemaining(Math.Max(0, snapshot.TotalBytes - snapshot.TransferredBytes));
         EtaText = eta == null ? "" : Format.Remaining(eta.Value);
@@ -207,31 +208,33 @@ public sealed class TransferViewModel : ObservableObject
         switch (s.State)
         {
             case TransferState.Preparing:
-                return "Preparing files…";
+                return L.T("Preparing files…");
             case TransferState.Connecting:
-                return $"Connecting to {peer}…";
+                return L.T("Connecting to {0}…", peer);
             case TransferState.WaitingForAcceptance when Session.PeerId == Beam.Core.Phone.PhoneLinkServer.PhonePeerId:
-                return "Ready to download on your phone";
+                return L.T("Ready to download on your phone");
             case TransferState.WaitingForAcceptance:
-                return $"Waiting for {peer} to accept…";
+                return L.T("Waiting for {0} to accept…", peer);
             case TransferState.AwaitingDecision:
-                return "Waiting for your answer…";
+                return L.T("Waiting for your answer…");
             case TransferState.Reconnecting:
-                return "Connection lost. Reconnecting…";
+                return L.T("Connection lost. Reconnecting…");
             case TransferState.Interrupted:
-                return s.Error?.Message ?? $"Connection lost. Waiting for {peer} to reconnect.";
+                return s.Error?.Message ?? L.T("Connection lost. Waiting for {0} to reconnect.", peer);
             case TransferState.Transferring:
-                if (s.TotalFiles <= 1) return IsSend ? "Sending" : "Receiving";
+                if (s.TotalFiles <= 1) return IsSend ? L.T("Sending") : L.T("Receiving");
                 var current = Math.Min(s.TotalFiles, s.CompletedFiles + s.FailedFiles + 1);
-                return $"Transferring {current:N0} of {s.TotalFiles:N0} files";
+                return L.Plural(s.TotalFiles, "Transferring {1:N0} of {0} file", "Transferring {1:N0} of {0} files", current);
             case TransferState.Completed when Session.IsText:
-                return IsSend ? "Text sent" : "Text received";
+                return IsSend ? L.T("Text sent") : L.T("Text received");
             case TransferState.Completed:
-                var done = IsSend ? $"Sent {Format.Count(s.CompletedFiles, "file")}" : $"Received {Format.Count(s.CompletedFiles, "file")}";
-                if (s.CompletedFiles == 0 && s.TotalFiles == 0) done = IsSend ? "Sent" : "Received";
-                return s.SkippedFiles > 0 ? $"{done} · {s.SkippedFiles:N0} skipped" : done;
+                var done = IsSend
+                    ? L.Plural(s.CompletedFiles, "Sent {0} file", "Sent {0} files")
+                    : L.Plural(s.CompletedFiles, "Received {0} file", "Received {0} files");
+                if (s.CompletedFiles == 0 && s.TotalFiles == 0) done = IsSend ? L.T("Sent") : L.T("Received");
+                return s.SkippedFiles > 0 ? L.T("{0} · {1:N0} skipped", done, s.SkippedFiles) : done;
             case TransferState.CompletedWithErrors:
-                return $"Finished, but {Format.Count(s.FailedFiles, "file")} couldn't be transferred";
+                return L.Plural(s.FailedFiles, "Finished, but {0} file couldn't be transferred", "Finished, but {0} files couldn't be transferred");
             default:
                 return s.Error?.Message ?? s.State.ToString();
         }
@@ -243,15 +246,16 @@ public sealed class TransferViewModel : ObservableObject
         var failures = Session.Failures;
         if (failures.Count > 0)
         {
-            builder.AppendLine("Files with problems:");
+            builder.AppendLine(L.T("Files with problems:"));
             foreach (var failure in failures.Take(20)) builder.AppendLine($"• {failure.RelativePath}: {failure.Reason}");
-            if (failures.Count > 20) builder.AppendLine($"…and {failures.Count - 20} more");
+            if (failures.Count > 20) builder.AppendLine(L.T("…and {0} more", failures.Count - 20));
         }
 
         if (s.Error?.Details is { Length: > 0 } details && s.Error.Kind != TransferErrorKind.CancelledByUser)
         {
             if (builder.Length > 0) builder.AppendLine();
-            builder.AppendLine("Technical details:");
+            builder.AppendLine(L.T("Technical details:"));
+
             builder.Append(details.Length > 1500 ? details[..1500] + "…" : details);
         }
 

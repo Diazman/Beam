@@ -9,6 +9,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Files;
 using Beam.Core.Licensing;
 using Beam.Core.Transfer;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Phone;
 
@@ -119,7 +120,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             try { await task.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false); } catch { /* ignore */ }
         }
 
-        foreach (var upload in _uploads.Values) upload.Finish("The connection to the phone was closed.");
+        foreach (var upload in _uploads.Values) upload.Finish(L.T("The connection to the phone was closed."));
         _uploads.Clear();
         StopSharing();
         Token = "";
@@ -153,10 +154,10 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             }
         }
 
-        if (entries.Count == 0) throw new TransferException(TransferErrorKind.NothingToSend, "There's nothing to share: the files are empty folders or can't be found.");
+        if (entries.Count == 0) throw new TransferException(TransferErrorKind.NothingToSend, L.T("There's nothing to share: the files are empty folders or can't be found."));
         if (!_quota.TryUse())
             throw new TransferException(TransferErrorKind.SendLimitReached,
-                $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.");
+                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
 
         StopSharing();
         var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, PhonePeerId, "your phone", "");
@@ -194,11 +195,11 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         {
             var snapshot = session.GetSnapshot();
             if (session.CancellationToken.IsCancellationRequested)
-                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You stopped sharing with your phone."));
+                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You stopped sharing with your phone.")));
             else if (snapshot.CompletedFiles > 0)
                 session.SetState(TransferState.Completed);
             else
-                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "Stopped sharing with your phone."));
+                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("Stopped sharing with your phone.")));
         }
 
         Activity?.Invoke();
@@ -310,7 +311,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
 
         if (request.Method == "POST" && segments.Length == 5 && segments[1] == "api" && segments[2] == "offer" && segments[4] == "finish")
         {
-            if (_uploads.TryRemove(segments[3], out var finished)) finished.Finish("The phone didn't send this file.");
+            if (_uploads.TryRemove(segments[3], out var finished)) finished.Finish(L.T("The phone didn't send this file."));
             await WriteJsonAsync(stream, new PhoneReply { Ok = true }, PhoneJson.Default.PhoneReply, serviceToken).ConfigureAwait(false);
             return;
         }
@@ -366,7 +367,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         }
 
         var files = offer.Files.Select(f => new PhoneUploadFile(SafePath.SanitizeSegment(Path.GetFileName(f.Name.Replace('\\', '/'))), f.Size)).ToList();
-        var visitor = LastVisitor ?? "Phone";
+        var visitor = LastVisitor ?? L.T("Phone");
         var id = Guid.NewGuid().ToString("N");
         var policy = _policy();
         var session = new TransferSession(id, TransferDirection.Receive, PhonePeerId, visitor, "");
@@ -405,7 +406,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
 
         if (!decision.Accepted)
         {
-            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, "You declined the files."));
+            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, L.T("You declined the files.")));
             await WriteJsonAsync(stream, new PhoneReply { Ok = false, Message = $"{_deviceName()} declined the files." }, PhoneJson.Default.PhoneReply, token).ConfigureAwait(false);
             return;
         }
@@ -417,7 +418,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         _uploads[id] = upload;
         session.CancellationToken.Register(() => Task.Run(() =>
         {
-            if (_uploads.TryRemove(id, out var cancelled)) cancelled.Finish("You cancelled the transfer.", cancelled: true);
+            if (_uploads.TryRemove(id, out var cancelled)) cancelled.Finish(L.T("You cancelled the transfer."), cancelled: true);
         }));
         Activity?.Invoke();
         await WriteJsonAsync(stream, new PhoneReply { Ok = true, OfferId = id }, PhoneJson.Default.PhoneReply, token).ConfigureAwait(false);
@@ -440,7 +441,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
 
         if (request.ContentLength != file.Size)
         {
-            upload.Fail(index, "The phone sent a different amount of data than announced.");
+            upload.Fail(index, L.T("The phone sent a different amount of data than announced."));
             if (upload.IsComplete) _uploads.TryRemove(offerId, out _);
             await MiniHttp.WriteTextAsync(stream, 400, "Size mismatch.", token).ConfigureAwait(false);
             return;
@@ -454,7 +455,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             error = ex is EndOfStreamException
-                ? "The phone stopped sending before the file was complete."
+                ? L.T("The phone stopped sending before the file was complete.")
                 : ErrorTranslator.FromLocalFileException(ex, "Saving a file from the phone").Message;
             upload.Fail(index, error);
         }
@@ -480,7 +481,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             foreach (var (id, upload) in _uploads)
             {
                 if (DateTime.UtcNow - upload.LastActivity > UploadIdleLimit && _uploads.TryRemove(id, out _))
-                    upload.Finish("The phone stopped sending.");
+                    upload.Finish(L.T("The phone stopped sending."));
             }
         }
     }
@@ -586,8 +587,8 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         userAgent.Contains("iPhone", StringComparison.OrdinalIgnoreCase) ? "iPhone" :
         userAgent.Contains("iPad", StringComparison.OrdinalIgnoreCase) ? "iPad" :
         userAgent.Contains("Android", StringComparison.OrdinalIgnoreCase)
-            ? userAgent.Contains("Mobile", StringComparison.OrdinalIgnoreCase) ? "Android phone" : "Android tablet"
-            : "Phone";
+            ? userAgent.Contains("Mobile", StringComparison.OrdinalIgnoreCase) ? L.T("Android phone") : L.T("Android tablet")
+            : L.T("Phone");
 
     private static Task WriteJsonAsync<T>(Stream stream, T value, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type, CancellationToken token) =>
         MiniHttp.WriteJsonAsync(stream, 200, JsonSerializer.Serialize(value, type), token);
@@ -720,7 +721,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             {
                 Session.AddTransferred(-received);
                 TryDelete(part);
-                Finish("You cancelled the transfer.", cancelled: true);
+                Finish(L.T("You cancelled the transfer."), cancelled: true);
             }
             catch
             {
@@ -768,7 +769,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             var snapshot = Session.GetSnapshot();
             Session.SetCurrentFile(null);
             if (snapshot.CompletedFiles == 0)
-                Session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, "No files arrived from the phone."));
+                Session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, L.T("No files arrived from the phone.")));
             else
                 Session.SetState(snapshot.FailedFiles > 0 ? TransferState.CompletedWithErrors : TransferState.Completed);
         }

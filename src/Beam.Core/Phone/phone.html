@@ -41,37 +41,128 @@
 <main>
   <header>
     <div class="logo">B</div>
-    <div><h1 id="title">Beam</h1><div class="sub">Connected over your Wi-Fi. Nothing goes through the internet.</div></div>
+    <div><h1 id="title">Beam</h1><div class="sub" data-t>Connected over your Wi-Fi. Nothing goes through the internet.</div></div>
   </header>
 
   <section>
-    <h2>Send to this computer</h2>
-    <div class="sub" id="sendHint">Pick photos, videos or any files. The computer will ask before saving them.</div>
-    <div style="margin-top:12px"><label for="pick" class="button" id="pickLabel">Choose files</label></div>
+    <h2 data-t>Send to this computer</h2>
+    <div class="sub" id="sendHint" data-t>Pick photos, videos or any files. The computer will ask before saving them.</div>
+    <div style="margin-top:12px"><label for="pick" class="button" id="pickLabel" data-t>Choose files</label></div>
     <input type="file" id="pick" multiple>
     <div class="bar" id="bar"><div></div></div>
     <div class="status" id="status"></div>
   </section>
 
   <section>
-    <h2>From the computer</h2>
-    <div class="sub">Files shared with this phone appear here.</div>
+    <h2 data-t>From the computer</h2>
+    <div class="sub" data-t>Files shared with this phone appear here.</div>
     <ul id="files"></ul>
-    <div class="empty" id="noFiles">Nothing shared yet. On the computer, add files and choose “Share with phone”.</div>
+    <div class="empty" id="noFiles" data-t>Nothing shared yet. On the computer, add files and choose “Share with phone”.</div>
   </section>
 
-  <footer>Keep this page open until transfers finish.</footer>
+  <footer data-t>Keep this page open until transfers finish.</footer>
 </main>
 <script>
 (function () {
   "use strict";
-  var device = "the computer";
   var $ = function (id) { return document.getElementById(id); };
 
+  // Translations of the English text, picked by the phone's language. {0}, {1} are filled in by t().
+  // A plural is [one, other] (Russian: [one, few, many]); see plural().
+  var STRINGS = {
+    tr: {
+      "Connected over your Wi-Fi. Nothing goes through the internet.": "Wi-Fi ağınız üzerinden bağlı. Hiçbir şey internetten geçmez.",
+      "Send to this computer": "Bu bilgisayara gönder",
+      "Pick photos, videos or any files. The computer will ask before saving them.": "Fotoğraf, video veya herhangi bir dosya seçin. Bilgisayar kaydetmeden önce onay isteyecek.",
+      "Choose files": "Dosya seç",
+      "From the computer": "Bilgisayardan",
+      "Files shared with this phone appear here.": "Bu telefonla paylaşılan dosyalar burada görünür.",
+      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Henüz paylaşılan bir şey yok. Bilgisayarda dosya ekleyip “Telefonla paylaş”ı seçin.",
+      "Keep this page open until transfers finish.": "Aktarımlar bitene kadar bu sayfayı açık tutun.",
+      "the computer": "bilgisayar",
+      "Choose files to send to {0}": "{0} adlı bilgisayara gönderilecek dosyaları seçin",
+      "Download": "İndir",
+      "Upload failed": "Yükleme başarısız oldu",
+      "Lost connection to {0}.": "{0} ile bağlantı kesildi.",
+      "Waiting for {1} to accept {0} files…": "{1} adlı bilgisayarın {0} dosyayı kabul etmesi bekleniyor…",
+      "{0} declined the files.": "{0} dosyaları reddetti.",
+      "Sending {0} of {1}: {2}": "Gönderiliyor: {0}/{1} — {2}",
+      "{0} sent, {1} couldn't be sent.": "{0} gönderildi, {1} gönderilemedi.",
+      "{0} files sent to {1}.": "{0} dosya {1} adlı bilgisayara gönderildi.",
+      "Something went wrong.": "Bir şeyler ters gitti.",
+      "B": "B", "KB": "KB", "MB": "MB", "GB": "GB", "TB": "TB"
+    },
+    ru: {
+      "Connected over your Wi-Fi. Nothing goes through the internet.": "Подключено через ваш Wi-Fi. Ничего не передаётся через интернет.",
+      "Send to this computer": "Отправить на этот компьютер",
+      "Pick photos, videos or any files. The computer will ask before saving them.": "Выберите фото, видео или любые файлы. Компьютер спросит разрешения перед сохранением.",
+      "Choose files": "Выбрать файлы",
+      "From the computer": "С компьютера",
+      "Files shared with this phone appear here.": "Здесь появятся файлы, которыми поделились с этим телефоном.",
+      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Пока ничего нет. На компьютере добавьте файлы и выберите «Поделиться с телефоном».",
+      "Keep this page open until transfers finish.": "Не закрывайте страницу, пока передача не завершится.",
+      "the computer": "компьютер",
+      "Choose files to send to {0}": "Выберите файлы для отправки на {0}",
+      "Download": "Скачать",
+      "Upload failed": "Не удалось отправить",
+      "Lost connection to {0}.": "Потеряно соединение с {0}.",
+      "Waiting for {1} to accept {0} files…": ["Ждём, пока {1} примет {0} файл…", "Ждём, пока {1} примет {0} файла…", "Ждём, пока {1} примет {0} файлов…"],
+      "{0} declined the files.": "{0} отклонил файлы.",
+      "Sending {0} of {1}: {2}": "Отправка {0} из {1}: {2}",
+      "{0} sent, {1} couldn't be sent.": "Отправлено: {0}, не удалось отправить: {1}.",
+      "{0} files sent to {1}.": ["{0} файл отправлен на {1}.", "{0} файла отправлено на {1}.", "{0} файлов отправлено на {1}."],
+      "Something went wrong.": "Что-то пошло не так.",
+      "B": "Б", "KB": "КБ", "MB": "МБ", "GB": "ГБ", "TB": "ТБ"
+    },
+    uz: {
+      "Connected over your Wi-Fi. Nothing goes through the internet.": "Wi-Fi tarmogʻingiz orqali ulangan. Hech narsa internet orqali oʻtmaydi.",
+      "Send to this computer": "Shu kompyuterga yuborish",
+      "Pick photos, videos or any files. The computer will ask before saving them.": "Rasm, video yoki istalgan fayllarni tanlang. Kompyuter saqlashdan oldin ruxsat soʻraydi.",
+      "Choose files": "Fayllarni tanlash",
+      "From the computer": "Kompyuterdan",
+      "Files shared with this phone appear here.": "Shu telefonga ulashilgan fayllar shu yerda chiqadi.",
+      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Hozircha hech narsa ulashilmagan. Kompyuterda fayllarni qoʻshib, “Telefonga ulashish”ni tanlang.",
+      "Keep this page open until transfers finish.": "Oʻtkazish tugaguncha bu sahifani yopmang.",
+      "the computer": "kompyuter",
+      "Choose files to send to {0}": "{0} kompyuteriga yuboriladigan fayllarni tanlang",
+      "Download": "Yuklab olish",
+      "Upload failed": "Yuborib boʻlmadi",
+      "Lost connection to {0}.": "{0} bilan aloqa uzildi.",
+      "Waiting for {1} to accept {0} files…": "{1} {0} ta faylni qabul qilishi kutilmoqda…",
+      "{0} declined the files.": "{0} fayllarni rad etdi.",
+      "Sending {0} of {1}: {2}": "Yuborilmoqda: {0}/{1} — {2}",
+      "{0} sent, {1} couldn't be sent.": "{0} ta yuborildi, {1} tasini yuborib boʻlmadi.",
+      "{0} files sent to {1}.": "{0} ta fayl {1} kompyuteriga yuborildi.",
+      "Something went wrong.": "Nimadir xato ketdi.",
+      "B": "B", "KB": "KB", "MB": "MB", "GB": "GB", "TB": "TB"
+    }
+  };
+  var lang = ((navigator.languages && navigator.languages[0]) || navigator.language || "en").slice(0, 2).toLowerCase();
+  var dict = STRINGS[lang] || {};
+  function fill(text, args) { return text.replace(/\{(\d)\}/g, function (m, i) { return args[+i]; }); }
+  function plural(n) {
+    if (lang === "ru") return n % 10 === 1 && n % 100 !== 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 1 : 2;
+    return n === 1 ? 0 : 1;
+  }
+  function t(en) {
+    var args = Array.prototype.slice.call(arguments, 1), v = dict[en];
+    return fill(typeof v === "string" ? v : en, args);
+  }
+  // "{0} files" in English; one = the English singular for count 1.
+  function tn(count, one, other) {
+    var args = Array.prototype.slice.call(arguments, 3), v = dict[other];
+    var text = Array.isArray(v) ? v[Math.min(plural(count), v.length - 1)] : typeof v === "string" ? v : count === 1 ? one : other;
+    return fill(text, [count].concat(args));
+  }
+  document.documentElement.lang = STRINGS[lang] ? lang : "en";
+  Array.prototype.forEach.call(document.querySelectorAll("[data-t]"), function (el) { el.textContent = t(el.textContent); });
+
+  var device = t("the computer");
+
   function size(n) {
-    var u = ["B", "KB", "MB", "GB", "TB"], i = 0;
+    var u = [t("B"), t("KB"), t("MB"), t("GB"), t("TB")], i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-    return (i === 0 ? n : n.toFixed(n >= 100 ? 0 : 1)) + " " + u[i];
+    return (i === 0 ? n : n.toLocaleString(lang, { maximumFractionDigits: n >= 100 ? 0 : 1 })) + " " + u[i];
   }
   function status(text, kind) { var s = $("status"); s.textContent = text; s.className = "status" + (kind ? " " + kind : ""); }
   function progress(fraction) {
@@ -84,7 +175,7 @@
     device = info.device || device;
     $("title").textContent = "Beam · " + device;
     document.title = "Beam · " + device;
-    $("pickLabel").textContent = "Choose files to send to " + device;
+    $("pickLabel").textContent = t("Choose files to send to {0}", device);
   }).catch(function () {});
 
   var lastList = "";
@@ -99,7 +190,7 @@
         var li = document.createElement("li");
         var name = document.createElement("span"); name.className = "name"; name.textContent = f.name;
         var sz = document.createElement("span"); sz.className = "size"; sz.textContent = size(f.size);
-        var a = document.createElement("a"); a.href = "api/files/" + encodeURIComponent(f.id); a.textContent = "Download";
+        var a = document.createElement("a"); a.href = "api/files/" + encodeURIComponent(f.id); a.textContent = t("Download");
         a.setAttribute("download", f.name.split("/").pop());
         li.appendChild(name); li.appendChild(sz); li.appendChild(a);
         ul.appendChild(li);
@@ -118,9 +209,9 @@
       xhr.onload = function () {
         var reply = {};
         try { reply = JSON.parse(xhr.responseText); } catch (e) {}
-        if (xhr.status === 200 && reply.ok) resolve(); else reject(new Error(reply.message || xhr.responseText || "Upload failed"));
+        if (xhr.status === 200 && reply.ok) resolve(); else reject(new Error(reply.message || xhr.responseText || t("Upload failed")));
       };
-      xhr.onerror = function () { reject(new Error("Lost connection to " + device + ".")); };
+      xhr.onerror = function () { reject(new Error(t("Lost connection to {0}.", device))); };
       xhr.send(file);
     });
   }
@@ -132,19 +223,19 @@
     var total = files.reduce(function (s, f) { return s + f.size; }, 0);
     $("pickLabel").style.pointerEvents = "none";
     progress(null);
-    status("Waiting for " + device + " to accept " + files.length + (files.length === 1 ? " file" : " files") + "…");
+    status(tn(files.length, "Waiting for {1} to accept {0} file…", "Waiting for {1} to accept {0} files…", device));
     fetch("api/offer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ files: files.map(function (f) { return { name: f.name, size: f.size }; }) })
     }).then(function (r) { return r.json(); }).then(function (reply) {
-      if (!reply.ok) throw new Error(reply.message || (device + " declined the files."));
+      if (!reply.ok) throw new Error(reply.message || t("{0} declined the files.", device));
       var done = 0, failed = 0, index = 0;
       progress(0);
       function next() {
         if (index >= files.length) return Promise.resolve();
         var i = index++, file = files[i];
-        status("Sending " + (i + 1) + " of " + files.length + ": " + file.name);
+        status(t("Sending {0} of {1}: {2}", i + 1, files.length, file.name));
         return put("api/upload/" + reply.offerId + "/" + i, file, function (loaded) { progress((done + loaded) / Math.max(total, 1)); })
           .catch(function (e) { failed++; status(e.message, "bad"); })
           .then(function () { done += file.size; progress(done / Math.max(total, 1)); return next(); });
@@ -153,11 +244,11 @@
         return fetch("api/offer/" + reply.offerId + "/finish", { method: "POST" }).catch(function () {});
       }).then(function () {
         var sent = files.length - failed;
-        if (failed) status(sent + " sent, " + failed + " couldn't be sent.", "bad");
-        else status((sent === 1 ? "File" : sent + " files") + " sent to " + device + ".", "ok");
+        if (failed) status(t("{0} sent, {1} couldn't be sent.", sent, failed), "bad");
+        else status(tn(sent, "{0} file sent to {1}.", "{0} files sent to {1}.", device), "ok");
       });
     }).catch(function (e) {
-      status(e.message || "Something went wrong.", "bad");
+      status(e.message || t("Something went wrong."), "bad");
     }).then(function () {
       $("pickLabel").style.pointerEvents = "";
     });

@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Beam.App.Localization">
 
   <!-- Typography -->
   <Style Selector="TextBlock">
@@ -247,7 +248,7 @@
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
       <ControlTemplate>
-        <Border Name="bg" Background="Transparent" CornerRadius="8" Padding="0,9,0,7" Width="60">
+        <Border Name="bg" Background="Transparent" CornerRadius="8" Padding="2,9,2,7" Width="76">
           <StackPanel Spacing="4" HorizontalAlignment="Center">
             <PathIcon Name="icon" Data="{TemplateBinding Tag}" Width="18" Height="18"
                       Foreground="{DynamicResource TextSecondaryBrush}" />
@@ -271,6 +272,12 @@
   <Style Selector="RadioButton.nav:checked /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Switch labels (Avalonia's own are English) -->
+  <Style Selector="ToggleSwitch">
+    <Setter Property="OnContent" Value="{l:T 'On'}" />
+    <Setter Property="OffContent" Value="{l:T 'Off'}" />
   </Style>
 
   <!-- Progress -->

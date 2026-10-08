@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
              xmlns:vm="using:Beam.App.ViewModels"
              x:Class="Beam.App.Views.TransferCard"
              x:DataType="vm:TransferViewModel">
@@ -17,7 +18,7 @@
           <TextBlock Classes="caption" Text="{Binding Heading}" TextTrimming="CharacterEllipsis" />
         </StackPanel>
         <Button Grid.Column="2" Classes="icon" Width="28" Height="28" VerticalAlignment="Top"
-                Command="{Binding DismissCommand}" IsVisible="{Binding IsFinished}" ToolTip.Tip="Remove from list">
+                Command="{Binding DismissCommand}" IsVisible="{Binding IsFinished}" ToolTip.Tip="{l:T 'Remove from list'}">
           <PathIcon Data="{StaticResource IconClose}" Width="11" Height="11" />
         </Button>
       </Grid>
@@ -38,10 +39,10 @@
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentFileText}" />
 
       <WrapPanel Orientation="Horizontal">
-        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding OpenCommand}" IsVisible="{Binding CanOpenFile}" Content="Open" />
-        <Button Margin="0,4,8,0" Command="{Binding ShowInFolderCommand}" IsVisible="{Binding CanOpen}" Content="Show in folder" />
-        <Button Margin="0,4,8,0" Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}" Content="Copy text" />
-        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" Content="Try again" />
+        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding OpenCommand}" IsVisible="{Binding CanOpenFile}" Content="{l:T 'Open'}" />
+        <Button Margin="0,4,8,0" Command="{Binding ShowInFolderCommand}" IsVisible="{Binding CanOpen}" Content="{l:T 'Show in folder'}" />
+        <Button Margin="0,4,8,0" Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}" Content="{l:T 'Copy text'}" />
+        <Button Classes="accent" Margin="0,4,8,0" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" Content="{l:T 'Try again'}" />
         <Button Margin="0,4,8,0" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" Content="{Binding CancelText}" />
         <Button Classes="link" Margin="0,4,0,0" Command="{Binding ToggleDetailsCommand}" IsVisible="{Binding HasDetails}"
                 Content="{Binding DetailsToggleText}" />

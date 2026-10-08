@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Beam.Core.Diagnostics;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Discovery;
 
@@ -113,7 +114,7 @@ public sealed class DiscoveryService : IDisposable
         catch (Exception ex)
         {
             IsRunning = false;
-            Problem = "Automatic discovery is unavailable because another program is using the network port it needs.";
+            Problem = L.T("Automatic discovery is unavailable because another program is using the network port it needs.");
             Log.Error($"Discovery could not bind UDP port {_options.Port}", ex);
             _socket?.Dispose();
             _socket = null;

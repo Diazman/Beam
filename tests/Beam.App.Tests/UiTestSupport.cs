@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Beam.App;
 using Beam.App.Platform;
 using Beam.App.Services;
@@ -9,6 +10,7 @@ using Beam.App.ViewModels;
 using Beam.App.Views;
 using Beam.Core;
 using Beam.Core.Discovery;
+using Beam.Core.Localization;
 using Beam.Core.Storage;
 using Beam.Core.Tests;
 
@@ -127,8 +129,11 @@ public sealed class UiHarness : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false)
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false,
+        string language = L.English)
     {
+        // Tests assert English text whatever the language of the machine running them.
+        L.SetLanguage(language);
         Store = new FakeStore { Owns = pro };
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
@@ -213,6 +218,16 @@ public sealed class UiHarness : IAsyncDisposable
             if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
             await PumpAsync(25);
         }
+    }
+
+    /// <summary>Text of every visible TextBlock in the window.</summary>
+    public IReadOnlyList<string> VisibleTexts()
+    {
+        Dispatcher.UIThread.RunJobs();
+        return Window.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+            .Where(t => t.IsEffectivelyVisible && !string.IsNullOrEmpty(t.Text))
+            .Select(t => t.Text!)
+            .ToList();
     }
 
     /// <summary>Renders the window to a PNG under artifacts/screenshots for visual review.</summary>

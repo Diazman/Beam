@@ -26,6 +26,8 @@ public static class L
         new("uz", "Oʻzbekcha"),
     };
 
+    private static readonly CultureInfo StartupCulture = CultureInfo.CurrentCulture;
+    private static readonly CultureInfo StartupUiCulture = CultureInfo.CurrentUICulture;
     private static Dictionary<string, string[]> _catalog = new();
 
     /// <summary>The language in use ("en", "tr", "ru" or "uz").</summary>
@@ -45,12 +47,11 @@ public static class L
         var code = Resolve(preference);
         _catalog = code == English ? new() : Load(code);
         Current = code;
-        if (code != English)
-        {
-            var culture = CultureInfo.GetCultureInfo(code);
-            CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = culture;
-            CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = culture;
-        }
+        // Numbers and dates follow the chosen language; English keeps the computer's own formats.
+        var culture = code == English ? StartupCulture : CultureInfo.GetCultureInfo(code);
+        var uiCulture = code == English ? StartupUiCulture : culture;
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.CurrentCulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.CurrentUICulture = uiCulture;
     }
 
     /// <summary>The translation of an English text.</summary>

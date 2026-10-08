@@ -1,3 +1,5 @@
+using Beam.Core.Localization;
+
 namespace Beam.Core.Licensing;
 
 /// <summary>
@@ -74,7 +76,7 @@ public sealed class Edition : IEditionPolicy
 
     public event Action? Changed;
 
-    public string EditionName => _isPro ? "Pro" : "Free";
+    public string EditionName => _isPro ? "Pro" : L.T("Free");
 
     public bool IsPro => _isPro;
 

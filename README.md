@@ -30,6 +30,8 @@ structure intact. No cables, accounts, cloud, IP addresses, or network shares.
   start with Windows, single instance, `Beam.exe --send <paths>` for future Explorer integration, light/dark theme.
 - **Phones without an app**: the Phone page shows a QR code; any iPhone or Android phone that scans it gets a page to
   send files to the PC (with approval) and download files the PC shares. LAN only, secret link, auto-off after 30 minutes.
+- **Speaks your language**: English, Turkish, Russian and Uzbek (follows Windows, or pick one in Settings); the
+  phone page follows the phone's language. See [docs/TRANSLATING.md](docs/TRANSLATING.md).
 - **Free launch, then Free and Pro**: while Beam is new everything is free and unlimited, and users can claim Pro at
   no cost and keep it (`Edition.LaunchPeriodActive`). Afterwards the free edition sends to one computer at a time, up to
   5 MB/s, 10 sends a day (receiving always unlimited).
@@ -103,7 +105,7 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | `tests/Beam.App.Tests` | Headless UI tests that drive real transfers through the UI and render screenshots. |
 | `installer/Beam.iss` | Inno Setup installer script. |
 | `packaging/` | Microsoft Store: MSIX manifest, logos, packaging script, listing text and screenshots. |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md). |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md). |
 
 ## Troubleshooting
 

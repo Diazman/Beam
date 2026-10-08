@@ -4,6 +4,7 @@ using Beam.App.Infrastructure;
 using Beam.App.Services;
 using Beam.Core;
 using Beam.Core.Diagnostics;
+using Beam.Core.Localization;
 using Beam.Core.Phone;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
@@ -73,8 +74,8 @@ public sealed class PhoneViewModel : ObservableObject
     public bool HasOtherLinks => OtherLinks.Length > 0;
 
     public string ConnectionText => _node.PhoneLink.LastVisitor is { } visitor
-        ? $"Connected: {visitor}. Keep the page open on the phone while files transfer."
-        : "Waiting for a phone to open the link…";
+        ? L.T("Connected: {0}. Keep the page open on the phone while files transfer.", visitor)
+        : L.T("Waiting for a phone to open the link…");
 
     public bool IsConnected => _node.PhoneLink.LastVisitor != null;
 
@@ -82,9 +83,16 @@ public sealed class PhoneViewModel : ObservableObject
 
     public bool IsSharing => SharedNames.Count > 0;
 
-    public string SharedSummary => IsSharing
-        ? $"Your phone can download {Format.Count(SharedNames.Count, "file")}: {string.Join(", ", SharedNames.Take(3).Select(n => n.Split('/')[^1]))}{(SharedNames.Count > 3 ? "…" : "")}"
-        : "Nothing shared yet. Files you share appear on the phone's page, ready to download.";
+    public string SharedSummary
+    {
+        get
+        {
+            if (!IsSharing) return L.T("Nothing shared yet. Files you share appear on the phone's page, ready to download.");
+            var count = SharedNames.Count;
+            var names = string.Join(", ", SharedNames.Take(3).Select(n => n.Split('/')[^1])) + (count > 3 ? "…" : "");
+            return L.Plural(count, "Your phone can download {0} file: {1}", "Your phone can download {0} files: {1}", names);
+        }
+    }
 
     public string Problem
     {
@@ -152,7 +160,7 @@ public sealed class PhoneViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.Error("Phone link failed to start", ex);
-            Problem = "Beam couldn't open a network port for phones. Restart Beam and try again.";
+            Problem = L.T("Beam couldn't open a network port for phones. Restart Beam and try again.");
         }
 
         Refresh();
@@ -169,7 +177,7 @@ public sealed class PhoneViewModel : ObservableObject
     {
         if (Link.Length == 0) return;
         await _ui.CopyToClipboardAsync(Link);
-        CopyStatus = "Copied";
+        CopyStatus = L.T("Copied");
     }
 
     private void Refresh()
@@ -189,11 +197,11 @@ public sealed class PhoneViewModel : ObservableObject
                 else
                 {
                     Qr = null;
-                    Problem = "This computer isn't connected to a network. Connect to Wi-Fi, then try again.";
+                    Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
                 }
             }
 
-            OtherLinks = links.Count > 1 ? "Other networks: " + string.Join("  ·  ", links.Skip(1)) : "";
+            OtherLinks = links.Count > 1 ? L.T("Other networks: {0}", string.Join("  ·  ", links.Skip(1))) : "";
         }
         else
         {
