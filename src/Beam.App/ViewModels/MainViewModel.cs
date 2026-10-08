@@ -325,9 +325,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     /// <summary>Waits a moment so the user sees the result, then asks for a rating if nothing else is going on.</summary>
     private async Task AskForRatingWhenIdleAsync()
     {
-        await Task.Delay(RatingPromptDelay);
-        if (HasActiveTransfers || HasDialog || !_ui.IsWindowActive) return;
-        await Pro.MaybeAskForRatingAsync();
+        // Wait for a quiet moment (no transfer running, no dialog open, Beam in front); if none comes soon, the next
+        // finished transfer tries again.
+        for (var attempt = 0; attempt < 15; attempt++)
+        {
+            await Task.Delay(RatingPromptDelay);
+            if (HasActiveTransfers || HasDialog || !_ui.IsWindowActive) continue;
+            await Pro.MaybeAskForRatingAsync();
+            return;
+        }
     }
 
     /// <summary>Delay between a finished transfer and the rating prompt (shortened in tests).</summary>

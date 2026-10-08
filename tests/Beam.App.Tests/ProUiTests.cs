@@ -187,7 +187,8 @@ public class ProUiTests
         {
             await app.ViewModel.StartSendAsync(laptop.AsDevice(), new[] { file });
             await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.Count(t => t.IsFinished) == i, $"transfer {i}");
-            await UiHarness.PumpAsync(200);
+            if (i == 3) await UiHarness.WaitForAsync(() => app.Store.ReviewRequests == 1, "rating prompt");
+            else await UiHarness.PumpAsync(300);
             Assert.Equal(i >= 3 ? 1 : 0, app.Store.ReviewRequests);
         }
 
