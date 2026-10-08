@@ -107,7 +107,7 @@ Store users update automatically; Beam has no built-in updater (the Store doesn'
 |---|---|---|
 | Receiving | unlimited | unlimited |
 | Computers per send | 1 | several at once |
-| Sending speed | up to 10 MB/s | full network speed |
+| Sending speed | up to 5 MB/s | full network speed |
 | Sends per day | 10 (each computer counts as one) | unlimited |
 
 The limits live in `src/Beam.Core/Licensing/Edition.cs` (`FreeLimits`). Pro is bought and checked through

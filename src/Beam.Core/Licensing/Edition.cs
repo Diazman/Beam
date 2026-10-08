@@ -27,8 +27,8 @@ public enum Feature
 /// <summary>What the free edition allows. Receiving is never limited.</summary>
 public static class FreeLimits
 {
-    /// <summary>Sending speed of the free edition: 10 MB/s (about 84 Mbit/s).</summary>
-    public const long MaxSendBytesPerSecond = 10L * 1024 * 1024;
+    /// <summary>Sending speed of the free edition: 5 MB/s (about 42 Mbit/s).</summary>
+    public const long MaxSendBytesPerSecond = 5L * 1024 * 1024;
 
     /// <summary>Sends per day in the free edition (each computer sent to counts as one).</summary>
     public const int SendsPerDay = 10;

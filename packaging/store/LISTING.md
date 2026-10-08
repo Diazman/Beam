@@ -42,7 +42,7 @@ Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks a
 connect using the address Beam shows on the other computer.
 
 FREE AND PRO
-Beam is free to use: send to one computer at a time at up to 10 MB/s, 10 times a day. Receiving is
+Beam is free to use: send to one computer at a time at up to 5 MB/s, 10 times a day. Receiving is
 always free and unlimited. Beam Pro, an optional one-time in-app purchase, adds:
 • Send to several computers at once
 • Full speed — as fast as your network allows

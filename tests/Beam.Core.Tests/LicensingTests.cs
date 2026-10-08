@@ -79,7 +79,7 @@ public class LicensingTests
     {
         await using var receiver = new TestNode("Receiver");
         await using var free = new TestNode("Free sender", pro: false);
-        var size = 15L * 1024 * 1024; // 1.5 s at the free limit
+        var size = 8L * 1024 * 1024; // 1.6 s at the free limit
         var file = free.CreateFile("big.bin", size);
 
         var clock = Stopwatch.StartNew();
