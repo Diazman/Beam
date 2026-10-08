@@ -1,6 +1,7 @@
 using Beam.App.Infrastructure;
 using Beam.App.Services;
 using Beam.Core.Identity;
+using Beam.Core.Localization;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
 
@@ -26,20 +27,19 @@ public sealed class IncomingRequestViewModel : DialogViewModel
         _folder = request.DefaultFolder;
         CanTrust = trustedDevicesAvailable;
 
-        var what = request.Items.Count == 1 && request.Items[0].IsDirectory
-            ? $"the folder “{request.Items[0].Name}”"
-            : Format.Count(request.FileCount, "file");
-        Title = $"{request.SenderName} wants to send you {what}";
+        Title = request.Items.Count == 1 && request.Items[0].IsDirectory
+            ? L.T("{0} wants to send you the folder “{1}”", request.SenderName, request.Items[0].Name)
+            : L.Plural(request.FileCount, "{1} wants to send you {0} file", "{1} wants to send you {0} files", request.SenderName);
         Summary = request.FolderCount > 0
-            ? $"{Format.Contents(request.FileCount, request.FolderCount)} · {Format.Bytes(request.TotalBytes)}"
+            ? $"{Contents(request.FileCount, request.FolderCount)} · {Format.Bytes(request.TotalBytes)}"
             : Format.Bytes(request.TotalBytes);
         Items = request.Items.Take(MaxListedItems).Select(i => new IncomingItemViewModel(
             i.Name,
-            i.IsDirectory ? $"{Format.Count(i.FileCount, "file")} · {Format.Bytes(i.Size)}" : Format.Bytes(i.Size),
+            i.IsDirectory ? $"{L.Plural(i.FileCount, "{0} file", "{0} files")} · {Format.Bytes(i.Size)}" : Format.Bytes(i.Size),
             i.IsDirectory)).ToList();
-        MoreItemsText = request.Items.Count > MaxListedItems ? $"and {request.Items.Count - MaxListedItems} more" : "";
+        MoreItemsText = request.Items.Count > MaxListedItems ? L.T("and {0} more", request.Items.Count - MaxListedItems) : "";
         VerificationCode = DeviceIdentity.ShortCode(request.SenderFingerprint);
-        TrustText = $"Always accept files from {request.SenderName}";
+        TrustText = L.T("Always accept files from {0}", request.SenderName);
 
         AcceptCommand = new RelayCommand(() => Close(true), () => !NotEnoughSpace);
         DeclineCommand = new RelayCommand(() => Close(false));
@@ -62,6 +62,11 @@ public sealed class IncomingRequestViewModel : DialogViewModel
     public string VerificationCode { get; }
 
     public string SenderAddress => Request.SenderAddress;
+
+    /// <summary>Where the request comes from: the sender's security code, or the phone's address for browser uploads.</summary>
+    public string OriginText => VerificationCode.Length > 0
+        ? L.T("Security code {0} · from {1}", VerificationCode, SenderAddress)
+        : L.T("Sent from a web browser at {0}, using the link this computer is showing", SenderAddress);
 
     public bool CanTrust { get; }
 
@@ -92,9 +97,17 @@ public sealed class IncomingRequestViewModel : DialogViewModel
 
     public AsyncCommand ChangeFolderCommand { get; }
 
+    /// <summary>"3 files", "1 folder, 12 files".</summary>
+    private static string Contents(int files, int folders)
+    {
+        if (folders == 0) return L.Plural(files, "{0} file", "{0} files");
+        if (files == 0) return L.Plural(folders, "{0} folder", "{0} folders");
+        return $"{L.Plural(folders, "{0} folder", "{0} folders")}, {L.Plural(files, "{0} file", "{0} files")}";
+    }
+
     private async Task ChangeFolderAsync()
     {
-        var folder = await _ui.PickFolderAsync("Choose where to save the files", Folder);
+        var folder = await _ui.PickFolderAsync(L.T("Choose where to save the files"), Folder);
         if (!string.IsNullOrEmpty(folder)) Folder = folder;
     }
 
@@ -103,7 +116,7 @@ public sealed class IncomingRequestViewModel : DialogViewModel
         var available = DiskSpace.GetAvailableBytes(Folder);
         NotEnoughSpace = available >= 0 && available < Request.TotalBytes;
         SpaceWarning = NotEnoughSpace
-            ? $"Not enough space: {Format.Bytes(Request.TotalBytes)} needed, {Format.Bytes(available)} free. Choose another folder or free up space."
+            ? L.T("Not enough space: {0} needed, {1} free. Choose another folder or free up space.", Format.Bytes(Request.TotalBytes), Format.Bytes(available))
             : "";
         OnPropertyChanged(nameof(NotEnoughSpace));
         OnPropertyChanged(nameof(SpaceWarning));

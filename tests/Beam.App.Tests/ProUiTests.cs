@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Beam.App.Services;
+using Beam.App.ViewModels;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core.Licensing;
 using Beam.Core.Tests;
@@ -122,6 +123,77 @@ public class ProUiTests
         Assert.Contains("open-url:" + ProService.StorePageUrl, app.Platform.Calls);
         Assert.Equal(0, app.Store.Purchases);
         Assert.False(app.Node.Edition.IsPro);
+    }
+
+    [AvaloniaFact]
+    public async Task LaunchPeriodIsUnlimitedAndOffersFreeProToKeep()
+    {
+        await using var app = new UiHarness(pro: false, launchPeriod: true);
+        app.Store.Price = "Free";
+        await app.InitializeAsync();
+        app.AddFakeDevice("Laptop");
+        app.AddFakeDevice("John's PC");
+        var home = app.ViewModel.Home;
+        await UiHarness.WaitForAsync(() => home.Devices.Count == 2, "devices");
+
+        Assert.False(home.ShowFreeLimits);
+        Assert.False(home.ShowMultiSendUpsell);
+        home.Devices[0].SelectCommand.Execute(null);
+        home.Devices[1].SelectCommand.Execute(null);
+        Assert.Equal(2, home.SelectedDevices.Count); // Pro feature, free during launch
+        for (var i = 0; i < FreeLimits.SendsPerDay * 2; i++) Assert.True(app.Node.Quota.TryUse());
+
+        var settings = app.ViewModel.Settings;
+        Assert.Equal("Beam Pro is free while Beam is new", settings.PlanTitle);
+        Assert.Equal("Claim Beam Pro free", settings.UpgradeButtonText);
+        app.ViewModel.ShowSettingsCommand.Execute(null);
+        await UiHarness.PumpAsync();
+        app.Screenshot("pro-05-launch-settings");
+
+        settings.UpgradeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is UpgradeViewModel, "claim dialog");
+        var dialog = (UpgradeViewModel)app.ViewModel.Dialog!;
+        Assert.Equal("Claim Beam Pro", dialog.Title);
+        Assert.Equal("Claim for free", dialog.BuyText);
+        Assert.Equal("Yours to keep", dialog.Benefits[0].Title);
+        app.Screenshot("pro-06-claim-dialog");
+
+        dialog.BuyCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => !app.ViewModel.HasDialog, "claimed");
+        Assert.True(app.Node.Edition.IsPro);
+        Assert.Equal("Beam Pro", settings.PlanTitle);
+    }
+
+    [AvaloniaFact]
+    public async Task PaidPriceIsNeverShownAsFree()
+    {
+        await using var app = new UiHarness(pro: false, launchPeriod: true);
+        app.Store.Price = "₺149,99";
+        await app.InitializeAsync();
+        app.ViewModel.Settings.UpgradeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is UpgradeViewModel, "dialog");
+        Assert.Equal("Upgrade · ₺149,99", ((UpgradeViewModel)app.ViewModel.Dialog!).BuyText);
+    }
+
+    [AvaloniaFact]
+    public async Task AsksForARatingOnceAfterThreeCompletedTransfers()
+    {
+        MainViewModel.RatingPromptDelay = TimeSpan.FromMilliseconds(50);
+        await using var app = new UiHarness();
+        await app.InitializeAsync();
+        await using var laptop = new TestNode("Laptop");
+        var file = app.CreateFile("a.txt", 100);
+        for (var i = 1; i <= 4; i++)
+        {
+            await app.ViewModel.StartSendAsync(laptop.AsDevice(), new[] { file });
+            await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.Count(t => t.IsFinished) == i, $"transfer {i}");
+            if (i == 3) await UiHarness.WaitForAsync(() => app.Store.ReviewRequests == 1, "rating prompt");
+            else await UiHarness.PumpAsync(300);
+            Assert.Equal(i >= 3 ? 1 : 0, app.Store.ReviewRequests);
+        }
+
+        Assert.True(app.Node.Settings.Current.RatingRequested);
+        Assert.Equal(4, app.Node.Settings.Current.CompletedTransfers);
     }
 
     [AvaloniaFact]

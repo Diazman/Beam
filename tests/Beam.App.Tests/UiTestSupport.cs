@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Beam.App;
 using Beam.App.Platform;
 using Beam.App.Services;
@@ -9,6 +10,7 @@ using Beam.App.ViewModels;
 using Beam.App.Views;
 using Beam.Core;
 using Beam.Core.Discovery;
+using Beam.Core.Localization;
 using Beam.Core.Storage;
 using Beam.Core.Tests;
 
@@ -38,7 +40,7 @@ public sealed class FakeUi : IUiServices
 
     public int BringToFrontCount { get; private set; }
 
-    public string? Clipboard { get; private set; }
+    public string? Clipboard { get; set; }
 
     public Task<IReadOnlyList<string>> PickFilesAsync() => Task.FromResult<IReadOnlyList<string>>(FilesToPick.ToList());
 
@@ -53,6 +55,8 @@ public sealed class FakeUi : IUiServices
         Clipboard = text;
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetClipboardTextAsync() => Task.FromResult(Clipboard);
 }
 
 public sealed class FakePlatform : IPlatformServices
@@ -97,13 +101,23 @@ public sealed class FakeStore : IStoreService
 
     public Task<bool?> OwnsProAsync() => Task.FromResult<bool?>(Owns);
 
-    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? "$4.99" : null);
+    public string Price { get; set; } = "$4.99";
+
+    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? Price : null);
 
     public Task<PurchaseOutcome> PurchaseProAsync()
     {
         Purchases++;
         if (NextOutcome == PurchaseOutcome.Purchased) Owns = true;
         return Task.FromResult(NextOutcome);
+    }
+
+    public int ReviewRequests { get; private set; }
+
+    public Task RequestReviewAsync()
+    {
+        ReviewRequests++;
+        return Task.CompletedTask;
     }
 
     public void RaiseLicenseChanged() => LicenseChanged?.Invoke();
@@ -115,8 +129,11 @@ public sealed class UiHarness : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true)
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false,
+        string language = L.English)
     {
+        // Tests assert English text whatever the language of the machine running them.
+        L.SetLanguage(language);
         Store = new FakeStore { Owns = pro };
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
@@ -124,7 +141,7 @@ public sealed class UiHarness : IAsyncDisposable
         {
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
-            Edition = new Beam.Core.Licensing.Edition(pro),
+            Edition = new Beam.Core.Licensing.Edition(pro, launchPeriod),
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
         });
         Node.Settings.Update(s =>
@@ -201,6 +218,16 @@ public sealed class UiHarness : IAsyncDisposable
             if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
             await PumpAsync(25);
         }
+    }
+
+    /// <summary>Text of every visible TextBlock in the window.</summary>
+    public IReadOnlyList<string> VisibleTexts()
+    {
+        Dispatcher.UIThread.RunJobs();
+        return Window.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+            .Where(t => t.IsEffectivelyVisible && !string.IsNullOrEmpty(t.Text))
+            .Select(t => t.Text!)
+            .ToList();
     }
 
     /// <summary>Renders the window to a PNG under artifacts/screenshots for visual review.</summary>

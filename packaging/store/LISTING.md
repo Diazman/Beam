@@ -20,6 +20,11 @@ Open Beam on both computers. They find each other automatically — no IP addres
 USB sticks or cloud uploads. Pick the other computer, drag in your files or whole folders, and
 press Send. The other person sees exactly what's coming and decides whether to accept it.
 
+SEND FROM ANYWHERE
+• Right-click files or folders in File Explorer and choose "Send with Beam" — or pick Beam in the
+  Windows Share dialog.
+• Send text and links, too. If the other computer trusts yours, they land straight on its clipboard.
+
 FAST AND RELIABLE
 • Transfers go directly between your computers, never through the internet.
 • Huge files and folders with thousands of files are no problem.
@@ -38,25 +43,36 @@ SIMPLE
 • Runs quietly in the notification area so others can send you files any time.
 • Light and dark themes.
 
+PHONES TOO — NO APP NEEDED
+• Send photos and videos from any iPhone or Android phone to your PC, and files from your PC to the phone.
+• Just scan the code Beam shows with the phone's camera. The phone uses its web browser; nothing to install.
+
 Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks automatic discovery,
 connect using the address Beam shows on the other computer.
 
-FREE AND PRO
-Beam is free to use: send to one computer at a time at up to 5 MB/s, 10 times a day. Receiving is
-always free and unlimited. Beam Pro, an optional one-time in-app purchase, adds:
+FREE WHILE BEAM IS NEW
+Right now everything in Beam is free and unlimited. Claim Beam Pro in the app at no cost and keep it
+for good — even after the launch period ends. Beam Pro includes:
 • Send to several computers at once
 • Full speed — as fast as your network allows
 • Unlimited sends
-• Sending to phones and tablets once Beam for Android and iPhone is available
+• Every future Pro feature in Beam for Windows
 
 ## What's new in this version
-First release.
+Version 1.2
+• Beam Pro is free during the launch period — claim it in the app and keep it for good.
+• "Send with Beam": right-click files or folders in File Explorer, or use the Windows Share dialog.
+• Send text and links between computers. If the other computer trusts yours, they go straight to its clipboard.
+• Beam now speaks Turkish, Russian and Uzbek.
+• The phone page now opens in your phone's language.
 
 ## Product features (up to 20, one per line)
+Send to and from any phone by scanning a code (no app needed)
 Find nearby computers automatically
-Send files and whole folders
-Drag and drop
-Receiver approves every transfer
+Drag and drop files and whole folders
+"Send with Beam" from the File Explorer right-click menu and the Windows Share dialog
+Send text and links — straight to the clipboard on computers that trust you
+You approve incoming files, or trust your own computers to skip asking
 Encrypted, direct computer-to-computer transfers
 Resumes interrupted transfers
 Verifies every file after transfer
@@ -98,5 +114,5 @@ Create it in Partner Center > your app > **Add-ons > Create a new add-on**:
 | Product ID | `BeamPro` (must be exactly this — the app looks for it) |
 | Title | Beam Pro |
 | Description | Send to several computers at once, at full speed, as often as you like. Includes sending to phones and tablets when Beam for Android and iPhone arrives. |
-| Price | your choice (e.g. USD 4.99 tier); the Store converts it to local prices, including Turkish lira |
+| Price | **Free during the launch period** (founding users claim it and keep it). When switching to freemium (docs/PLAN.md step 6.7), change it to a paid tier (e.g. USD 4.99); the Store converts it to local prices, including Turkish lira. People who claimed it free keep it. |
 | Store listing image | `packaging/msix/Assets/StoreLogo.scale-400.png` |

@@ -79,6 +79,12 @@ internal sealed class WindowsStoreService : IStoreService
         };
     }
 
+    public async Task RequestReviewAsync()
+    {
+        var result = await Context().RequestRateAndReviewAppAsync();
+        Log.Info($"Rating prompt: {result.Status}");
+    }
+
     private async Task<StoreProduct?> FindProductAsync()
     {
         var result = await Context().GetAssociatedStoreProductsAsync(new[] { "Durable" });
@@ -102,5 +108,7 @@ internal sealed class WindowsStoreService : IStoreService
     public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(null);
 
     public Task<PurchaseOutcome> PurchaseProAsync() => Task.FromResult(PurchaseOutcome.NotAvailable);
+
+    public Task RequestReviewAsync() => Task.CompletedTask;
 #endif
 }

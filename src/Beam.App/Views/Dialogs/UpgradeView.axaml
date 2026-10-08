@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.UpgradeView"
              x:DataType="dlg:UpgradeViewModel"
@@ -34,7 +35,7 @@
     <TextBlock Classes="caption error" Text="{Binding Status}" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
 
     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-      <Button Content="Not now" MinWidth="96" Command="{Binding NotNowCommand}" />
+      <Button Content="{l:T 'Not now'}" MinWidth="96" Command="{Binding NotNowCommand}" />
       <Button Classes="accent" Content="{Binding BuyText}" MinWidth="120" Command="{Binding BuyCommand}" IsDefault="True" />
     </StackPanel>
   </StackPanel>

@@ -42,6 +42,17 @@ public sealed class TestHandler : IIncomingTransferHandler
 
     public List<IncomingRequest> Requests { get; } = new();
 
+    public List<IncomingText> Texts { get; } = new();
+
+    /// <summary>What the receiving "user" does with text: true = read it, false = dismiss.</summary>
+    public bool ShowText { get; set; } = true;
+
+    public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken)
+    {
+        lock (Texts) Texts.Add(text);
+        return Task.FromResult(ShowText);
+    }
+
     public List<IReadOnlyList<FileConflict>> Conflicts { get; } = new();
 
     public bool ApprovalWasCancelled { get; private set; }
@@ -76,9 +87,9 @@ public sealed class TestNode : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's speed and daily limits don't apply.</param>
-    public TestNode(string name, bool startDiscovery = false, bool pro = true)
+    public TestNode(string name, bool startDiscovery = false, bool pro = true, bool launchPeriod = false)
     {
-        Edition = new Licensing.Edition(pro);
+        Edition = new Licensing.Edition(pro, launchPeriod);
         Handler = new TestHandler();
         ReceiveFolder = _dir.Combine("received");
         Directory.CreateDirectory(ReceiveFolder);

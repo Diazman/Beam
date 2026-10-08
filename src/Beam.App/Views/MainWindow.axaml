@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:Beam.App.Localization"
         xmlns:vm="using:Beam.App.ViewModels"
         xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
         xmlns:views="using:Beam.App.Views"
@@ -17,6 +18,9 @@
   <Window.DataTemplates>
     <DataTemplate DataType="vm:HomeViewModel">
       <views:HomeView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:PhoneViewModel">
+      <views:PhoneView />
     </DataTemplate>
     <DataTemplate DataType="vm:HistoryViewModel">
       <views:HistoryView />
@@ -39,6 +43,12 @@
     <DataTemplate DataType="dlg:WelcomeViewModel">
       <dviews:WelcomeView />
     </DataTemplate>
+    <DataTemplate DataType="dlg:SendTextViewModel">
+      <dviews:SendTextView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:IncomingTextViewModel">
+      <dviews:IncomingTextView />
+    </DataTemplate>
     <DataTemplate DataType="dlg:UpgradeViewModel">
       <dviews:UpgradeView />
     </DataTemplate>
@@ -47,18 +57,20 @@
   <Panel>
     <Grid ColumnDefinitions="Auto,*,Auto">
       <!-- Navigation rail -->
-      <Border Width="76"
+      <Border Width="88"
               Background="{DynamicResource RailBackgroundBrush}"
               BorderBrush="{DynamicResource DividerBrush}"
               BorderThickness="0,0,1,0">
         <StackPanel Margin="0,18,0,0" Spacing="4" HorizontalAlignment="Center">
           <Image Source="/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
                  ToolTip.Tip="Beam" />
-          <RadioButton Classes="nav" GroupName="nav" Content="Send"
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="History"
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Phone'}"
+                       Tag="{StaticResource IconPhone}" IsChecked="{Binding IsPhonePage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'History'}"
                        Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="Settings"
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Settings'}"
                        Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
         </StackPanel>
       </Border>
@@ -74,8 +86,8 @@
               BorderThickness="1,0,0,0">
         <DockPanel>
           <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="20,24,14,12">
-            <TextBlock Classes="h2" Text="Transfers" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="link" Content="Clear finished"
+            <TextBlock Classes="h2" Text="{l:T 'Transfers'}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}"
                     Command="{Binding ClearFinishedCommand}"
                     IsVisible="{Binding HasFinishedTransfers}" />
           </Grid>
@@ -104,8 +116,8 @@
           <Border Classes="iconBadge" Width="60" Height="60" CornerRadius="30" HorizontalAlignment="Center" Margin="0,0,0,6">
             <PathIcon Data="{StaticResource IconUpload}" Width="26" Height="26" />
           </Border>
-          <TextBlock Classes="h2" Text="Drop to add to your send list" HorizontalAlignment="Center" />
-          <TextBlock Classes="secondary" Text="Files and whole folders both work." HorizontalAlignment="Center" />
+          <TextBlock Classes="h2" Text="{l:T 'Drop to add to your send list'}" HorizontalAlignment="Center" />
+          <TextBlock Classes="secondary" Text="{l:T 'Files and whole folders both work.'}" HorizontalAlignment="Center" />
         </StackPanel>
       </Border>
     </Border>

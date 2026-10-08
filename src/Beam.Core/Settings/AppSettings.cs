@@ -40,6 +40,12 @@ public sealed class AppSettings
 
     public bool TrayHintShown { get; set; }
 
+    /// <summary>Completed transfers so far (decides when to ask for a rating).</summary>
+    public int CompletedTransfers { get; set; }
+
+    /// <summary>The "rate Beam" prompt was shown; it is never shown again.</summary>
+    public bool RatingRequested { get; set; }
+
     /// <summary>Whether nearby computers can see this one.</summary>
     public bool Discoverable { get; set; } = true;
 
@@ -52,6 +58,9 @@ public sealed class AppSettings
     public bool NotifyOnDeviceFound { get; set; }
 
     public ThemePreference Theme { get; set; } = ThemePreference.System;
+
+    /// <summary>Interface language code ("en", "tr", "ru", "uz"); empty follows Windows.</summary>
+    public string Language { get; set; } = "";
 
     public List<TrustedDevice> TrustedDevices { get; set; } = new();
 

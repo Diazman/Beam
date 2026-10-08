@@ -6,6 +6,7 @@ using Beam.App.Platform;
 using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core.History;
+using Beam.Core.Localization;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
 
@@ -16,12 +17,22 @@ public sealed class HistoryItemViewModel
     private readonly HistoryEntry _entry;
     private readonly IPlatformServices _platform;
 
-    public HistoryItemViewModel(HistoryEntry entry, IPlatformServices platform)
+    public HistoryItemViewModel(HistoryEntry entry, IPlatformServices platform, Func<string, Task>? copy = null)
     {
         _entry = entry;
         _platform = platform;
         ShowCommand = new RelayCommand(Show);
+        CopyTextCommand = new AsyncCommand(async () =>
+        {
+            if (_entry.Text != null && copy != null) await copy(_entry.Text);
+        });
     }
+
+    public bool IsText => _entry.Text != null;
+
+    public bool CanCopyText => IsText && _entry.Status == HistoryStatus.Completed;
+
+    public AsyncCommand CopyTextCommand { get; }
 
     public bool IsSend => _entry.Direction == TransferDirection.Send;
 
@@ -33,9 +44,10 @@ public sealed class HistoryItemViewModel
     {
         get
         {
-            var who = IsSend ? $"To {_entry.DeviceName}" : $"From {_entry.DeviceName}";
+            var who = IsSend ? L.T("To {0}", _entry.DeviceName) : L.T("From {0}", _entry.DeviceName);
             var parts = new List<string> { who };
-            if (_entry.FileCount > 0) parts.Add(Format.Count(_entry.FileCount, "file"));
+            if (_entry.Text != null) return L.T("{0} · Text", who);
+            if (_entry.FileCount > 0) parts.Add(L.Plural(_entry.FileCount, "{0} file", "{0} files"));
             if (_entry.TotalBytes > 0) parts.Add(Format.Bytes(_entry.TotalBytes));
             return string.Join(" · ", parts);
         }
@@ -47,20 +59,20 @@ public sealed class HistoryItemViewModel
         {
             var local = _entry.Timestamp.ToLocalTime();
             var today = DateTime.Today;
-            if (local.Date == today) return $"Today, {local:t}";
-            if (local.Date == today.AddDays(-1)) return $"Yesterday, {local:t}";
+            if (local.Date == today) return L.T("Today, {0:t}", local);
+            if (local.Date == today.AddDays(-1)) return L.T("Yesterday, {0:t}", local);
             return local.Year == today.Year ? local.ToString("MMM d, t") : local.ToString("MMM d yyyy, t");
         }
     }
 
     public string StatusText => _entry.Status switch
     {
-        HistoryStatus.Completed => "Completed",
-        HistoryStatus.CompletedWithErrors => "Some files failed",
-        HistoryStatus.Failed => "Failed",
-        HistoryStatus.Cancelled => "Cancelled",
-        HistoryStatus.Declined => "Declined",
-        HistoryStatus.Interrupted => "Interrupted",
+        HistoryStatus.Completed => L.T("Completed"),
+        HistoryStatus.CompletedWithErrors => L.T("Some files failed"),
+        HistoryStatus.Failed => L.T("Failed"),
+        HistoryStatus.Cancelled => L.T("Cancelled"),
+        HistoryStatus.Declined => L.T("Declined"),
+        HistoryStatus.Interrupted => L.T("Interrupted"),
         _ => _entry.Status.ToString(),
     };
 
@@ -114,7 +126,7 @@ public sealed class HistoryViewModel : ObservableObject
     public void Reload()
     {
         Items.Clear();
-        foreach (var entry in _store.Entries) Items.Add(new HistoryItemViewModel(entry, _platform));
+        foreach (var entry in _store.Entries) Items.Add(new HistoryItemViewModel(entry, _platform, _main.CopyToClipboardAsync));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasItems));
         ClearCommand.RaiseCanExecuteChanged();
@@ -123,9 +135,10 @@ public sealed class HistoryViewModel : ObservableObject
     private async Task ClearAsync()
     {
         var confirmed = await _main.ShowDialogAsync(new ConfirmViewModel(
-            "Clear transfer history?",
-            "The list of past transfers will be removed. Files you sent or received are not affected.",
-            "Clear history",
+            L.T("Clear transfer history?"),
+            L.T("The list of past transfers will be removed. Files you sent or received are not affected."),
+            L.T("Clear history"),
+
             isDestructive: true));
         if (confirmed is true) _store.Clear();
     }

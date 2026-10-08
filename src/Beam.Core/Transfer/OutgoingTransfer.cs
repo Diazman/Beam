@@ -3,6 +3,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
 using Beam.Core.Files;
 using Beam.Core.Protocol;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -56,7 +57,7 @@ internal sealed class OutgoingTransfer
                 if (_manifest.Entries.Count == 0)
                 {
                     throw new TransferException(TransferErrorKind.NothingToSend,
-                        "None of the selected files could be read. They may have been moved or deleted.",
+                        L.T("None of the selected files could be read. They may have been moved or deleted."),
                         string.Join(Environment.NewLine, _manifest.Warnings));
                 }
 
@@ -94,7 +95,7 @@ internal sealed class OutgoingTransfer
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            Finish(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer."));
+            Finish(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled the transfer.")));
         }
         catch (Exception ex)
         {
@@ -226,7 +227,7 @@ internal sealed class OutgoingTransfer
 
             // Anything still flagged for retry after the second round has failed for good.
             foreach (var index in state.TakeRetries())
-                _session.FileFailed(entries[index].RelativePath, "The file was damaged in transit and couldn't be verified.");
+                _session.FileFailed(entries[index].RelativePath, L.T("The file was damaged in transit and couldn't be verified."));
 
             ThrowIfRemoteCancelled(state);
             await WriteAsync(io, t => connection.Channel.SendAsync(FrameType.Done, new DoneMessage(), t), token).ConfigureAwait(false);
@@ -453,10 +454,10 @@ internal sealed class OutgoingTransfer
         var entry = _manifest!.Entries[index];
         Log.Warn($"Could not read {entry.SourcePath}: {ex.Message}");
         var reason = ex is UnauthorizedAccessException
-            ? "Beam isn't allowed to read this file."
+            ? L.T("Beam isn't allowed to read this file.")
             : ex.Message.Contains("changed", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("smaller", StringComparison.OrdinalIgnoreCase)
-                ? "The file changed while it was being sent. Send it again."
-                : "The file couldn't be read. It may be open in another program, moved, or deleted.";
+                ? L.T("The file changed while it was being sent. Send it again.")
+                : L.T("The file couldn't be read. It may be open in another program, moved, or deleted.");
         _session.FileFailed(entry.RelativePath, reason);
         _session.AddTransferred(-countedBytes);
         await WriteAsync(io, t => connection.Channel.SendAsync(FrameType.SourceFileError, new SourceFileErrorMessage { Index = index, Error = reason }, t), token)
@@ -559,7 +560,7 @@ internal sealed class OutgoingTransfer
                         }
                         else
                         {
-                            _session.FileFailed(entries[result.Index].RelativePath, result.Error ?? "The file couldn't be saved.");
+                            _session.FileFailed(entries[result.Index].RelativePath, result.Error ?? L.T("The file couldn't be saved."));
                         }
 
                         state.ResultReceived();

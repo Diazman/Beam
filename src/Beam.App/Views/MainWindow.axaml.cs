@@ -1,9 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Beam.App.Services;
 using Beam.App.ViewModels;
+using Beam.Core.Localization;
 
 namespace Beam.App.Views;
 
@@ -37,7 +39,7 @@ public partial class MainWindow : Window, IUiServices
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose files to send",
+            Title = L.T("Choose files to send"),
             AllowMultiple = true,
         });
         return files.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
@@ -47,7 +49,7 @@ public partial class MainWindow : Window, IUiServices
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Choose folders to send",
+            Title = L.T("Choose folders to send"),
             AllowMultiple = true,
         });
         return folders.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
@@ -70,6 +72,18 @@ public partial class MainWindow : Window, IUiServices
     public async Task CopyToClipboardAsync(string text)
     {
         if (Clipboard != null) await Clipboard.SetTextAsync(text);
+    }
+
+    public async Task<string?> GetClipboardTextAsync()
+    {
+        try
+        {
+            return Clipboard == null ? null : await Clipboard.TryGetTextAsync();
+        }
+        catch
+        {
+            return null; // another app holds the clipboard
+        }
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
@@ -130,8 +144,16 @@ public partial class MainWindow : Window, IUiServices
         if (vm.HasDialog) return;
         var paths = e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
         if (paths is not { Count: > 0 }) return;
-        vm.Navigate(Page.Home);
-        vm.Home.AddPaths(paths);
+        if (vm.CurrentPageKind == Page.Phone)
+        {
+            _ = vm.Phone.ShareAsync(paths); // dropped on the Phone page: share with the phone
+        }
+        else
+        {
+            vm.Navigate(Page.Home);
+            vm.Home.AddPaths(paths);
+        }
+
         e.Handled = true;
     }
 }

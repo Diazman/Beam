@@ -5,6 +5,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Beam.Core.Identity;
 using Beam.Core.Protocol;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -153,7 +154,7 @@ internal static class SecureTransport
     {
         if (endpoints.Count == 0)
             throw new TransferException(TransferErrorKind.ConnectFailed,
-                $"{peerName} isn't available right now. Make sure Beam is open on that computer.");
+                L.T("{0} isn't available right now. Make sure Beam is open on that computer.", peerName));
 
         Exception? lastError = null;
         foreach (var endpoint in endpoints)
@@ -189,7 +190,7 @@ internal static class SecureTransport
 
         var details = lastError?.Message;
         throw new TransferException(TransferErrorKind.ConnectFailed,
-            $"Couldn't reach {peerName}. Make sure Beam is open on that computer and both computers are on the same network.",
+            L.T("Couldn't reach {0}. Make sure Beam is open on that computer and both computers are on the same network.", peerName),
             details, lastError);
     }
 
@@ -215,7 +216,7 @@ internal static class SecureTransport
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    throw new TransferException(TransferErrorKind.ConnectFailed, $"{peerName} didn't respond.", "TLS handshake timed out");
+                    throw new TransferException(TransferErrorKind.ConnectFailed, L.T("{0} didn't respond.", peerName), "TLS handshake timed out");
                 }
             }
 
@@ -224,7 +225,7 @@ internal static class SecureTransport
             if (!string.IsNullOrEmpty(expectedFingerprint) && !string.Equals(fingerprint, expectedFingerprint, StringComparison.OrdinalIgnoreCase))
             {
                 throw new TransferException(TransferErrorKind.IdentityMismatch,
-                    $"Beam couldn't confirm this is really {peerName}, so nothing was sent. If Beam was reinstalled there, wait a few seconds and try again.",
+                    L.T("Beam couldn't confirm this is really {0}, so nothing was sent. If Beam was reinstalled there, wait a few seconds and try again.", peerName),
                     $"Expected fingerprint {expectedFingerprint}, got {fingerprint}");
             }
 
@@ -249,7 +250,7 @@ internal static class SecureTransport
         if (!IsCompatible(remote))
         {
             throw new TransferException(TransferErrorKind.IncompatibleVersion,
-                $"{peerName} is running a different version of Beam. Update Beam on both computers to the latest version.",
+                L.T("{0} is running a different version of Beam. Update Beam on both computers to the latest version.", peerName),
                 $"Remote protocol {remote.Protocol} (min {remote.MinProtocol}), local {AppInfo.ProtocolVersion} (min {AppInfo.MinimumProtocolVersion})");
         }
     }

@@ -7,6 +7,7 @@ using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
 using Beam.Core.Licensing;
+using Beam.Core.Localization;
 using Beam.Core.Util;
 
 namespace Beam.App.ViewModels;
@@ -49,9 +50,9 @@ public sealed class DeviceViewModel : ObservableObject
                 "linux" => "Linux",
                 "android" => "Android",
                 "ios" => "iPhone",
-                _ => "Computer",
+                _ => L.T("Computer"),
             };
-            return _device.IsManual ? $"{platform} · {_device.AddressText}" : $"{platform} · Nearby";
+            return _device.IsManual ? $"{platform} · {_device.AddressText}" : L.T("{0} · Nearby", platform);
         }
     }
 
@@ -122,7 +123,9 @@ public sealed class PendingItemViewModel : ObservableObject
     }
 
     public string Details => IsFolder
-        ? IsMeasuring ? $"Folder · counting files… {Format.Count(FileCount, "file")}" : $"Folder · {Format.Count(FileCount, "file")} · {Format.Bytes(Size)}"
+        ? IsMeasuring
+            ? L.Plural(FileCount, "Folder · counting files… {0} file", "Folder · counting files… {0} files")
+            : L.Plural(FileCount, "Folder · {0} file · {1}", "Folder · {0} files · {1}", Format.Bytes(Size))
         : Format.Bytes(Size);
 
     public RelayCommand RemoveCommand { get; }
@@ -152,6 +155,7 @@ public sealed class HomeViewModel : ObservableObject
         ClearCommand = new RelayCommand(ClearItems, () => Items.Count > 0);
         SendCommand = new AsyncCommand(SendAsync, () => CanSend);
         UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
+        SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
         RefreshCommand = new RelayCommand(Refresh);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
@@ -185,7 +189,7 @@ public sealed class HomeViewModel : ObservableObject
 
     public bool IsDiscoverable => _node.Settings.Current.Discoverable;
 
-    public string VisibilityText => IsDiscoverable ? "Visible to nearby computers" : "Hidden from nearby computers";
+    public string VisibilityText => IsDiscoverable ? L.T("Visible to nearby computers") : L.T("Hidden from nearby computers");
 
     public bool HasDevices => Devices.Count > 0;
 
@@ -211,12 +215,15 @@ public sealed class HomeViewModel : ObservableObject
 
     public bool IsFree => !IsPro;
 
+    /// <summary>The free edition's limits apply (not Pro, and not during the free launch period).</summary>
+    public bool ShowFreeLimits => !_node.Edition.IsEnabled(Feature.UnlimitedSends);
+
     public bool CanSelectSeveral => _node.Edition.IsEnabled(Feature.SendToSeveralDevices);
 
     /// <summary>Free edition with several computers around: mention that Pro can send to all of them.</summary>
     public bool ShowMultiSendUpsell => !CanSelectSeveral && Devices.Count > 1;
 
-    public string DeviceHint => CanSelectSeveral && Devices.Count > 1 ? "Choose one or more computers." : "";
+    public string DeviceHint => CanSelectSeveral && Devices.Count > 1 ? L.T("Choose one or more computers.") : "";
 
     public bool HasDeviceHint => DeviceHint.Length > 0;
 
@@ -226,10 +233,11 @@ public sealed class HomeViewModel : ObservableObject
         get
         {
             var left = _node.Quota.RemainingToday ?? 0;
-            var sends = left == 0
-                ? "no free sends left today"
-                : $"{left} of {_node.Quota.Limit} free sends left today";
-            return $"Free · up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s · {sends}";
+            var speed = Format.Bytes(FreeLimits.MaxSendBytesPerSecond);
+            var limit = _node.Quota.Limit;
+            return left == 0
+                ? L.T("Free · up to {0}/s · no free sends left today", speed)
+                : L.Plural(limit, "Free · up to {1}/s · {2} of {0} free send left today", "Free · up to {1}/s · {2} of {0} free sends left today", speed, left);
         }
     }
 
@@ -250,12 +258,13 @@ public sealed class HomeViewModel : ObservableObject
             var folders = Items.Count(i => i.IsFolder);
             var files = Items.Count - folders;
             var parts = new List<string>();
-            if (folders > 0) parts.Add(Format.Count(folders, "folder"));
-            if (files > 0) parts.Add(Format.Count(files, "file"));
-            var size = IsMeasuring ? "calculating size…" : Format.Bytes(TotalBytes);
+            if (folders > 0) parts.Add(L.Plural(folders, "{0} folder", "{0} folders"));
+            if (files > 0) parts.Add(L.Plural(files, "{0} file", "{0} files"));
+            var size = IsMeasuring ? L.T("calculating size…") : Format.Bytes(TotalBytes);
+            var contents = string.Join(", ", parts);
             return folders > 0 && !IsMeasuring
-                ? $"{string.Join(", ", parts)} · {Format.Count(TotalFiles, "file")} in total · {size}"
-                : $"{string.Join(", ", parts)} · {size}";
+                ? L.Plural(TotalFiles, "{1} · {0} file in total · {2}", "{1} · {0} files in total · {2}", contents, size)
+                : $"{contents} · {size}";
         }
     }
 
@@ -265,20 +274,27 @@ public sealed class HomeViewModel : ObservableObject
     {
         get
         {
-            if (Items.Count == 0 && _selected.Count == 0) return "Choose a computer and add files to send.";
-            if (Items.Count == 0) return $"Add files or folders to send to {TargetsText}.";
-            if (_selected.Count == 0) return "Choose a computer to send to.";
-            var what = Items.Count == 1 ? $"“{Items[0].Name}”" : Format.Count(Items.Count, "item");
-            var size = IsMeasuring ? "" : $" ({Format.Bytes(TotalBytes)})";
-            return $"Send {what}{size} to {TargetsText}";
+            if (Items.Count == 0 && _selected.Count == 0) return L.T("Choose a computer and add files to send.");
+            if (Items.Count == 0) return L.T("Add files or folders to send to {0}.", TargetsText);
+            if (_selected.Count == 0) return L.T("Choose a computer to send to.");
+            if (Items.Count == 1)
+            {
+                return IsMeasuring
+                    ? L.T("Send “{0}” to {1}", Items[0].Name, TargetsText)
+                    : L.T("Send “{0}” ({1}) to {2}", Items[0].Name, Format.Bytes(TotalBytes), TargetsText);
+            }
+
+            return IsMeasuring
+                ? L.Plural(Items.Count, "Send {0} item to {1}", "Send {0} items to {1}", TargetsText)
+                : L.Plural(Items.Count, "Send {0} item ({1}) to {2}", "Send {0} items ({1}) to {2}", Format.Bytes(TotalBytes), TargetsText);
         }
     }
 
     private string TargetsText => _selected.Count switch
     {
         1 => _selected[0].Name,
-        2 => $"{_selected[0].Name} and {_selected[1].Name}",
-        _ => $"{_selected.Count} computers",
+        2 => L.T("{0} and {1}", _selected[0].Name, _selected[1].Name),
+        _ => L.Plural(_selected.Count, "{0} computer", "{0} computers"),
     };
 
     public AsyncCommand ChooseFilesCommand { get; }
@@ -290,6 +306,9 @@ public sealed class HomeViewModel : ObservableObject
     public AsyncCommand SendCommand { get; }
 
     public AsyncCommand UpgradeCommand { get; }
+
+    /// <summary>Opens the "send text" box for the chosen computers (pre-filled with copied text, if any).</summary>
+    public AsyncCommand SendTextCommand { get; }
 
     public RelayCommand RefreshCommand { get; }
 
@@ -355,7 +374,7 @@ public sealed class HomeViewModel : ObservableObject
             foreach (var extra in _selected.Skip(1).ToList()) Deselect(extra);
         }
 
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(ShowFreeLimits), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
             OnPropertyChanged(name);
     }
 
@@ -386,6 +405,7 @@ public sealed class HomeViewModel : ObservableObject
 
     private void OnSelectionChanged()
     {
+        SendTextCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(SelectedDevice));
         OnPropertyChanged(nameof(SelectedDevices));
         UpdateSendState();
@@ -546,6 +566,21 @@ public sealed class HomeViewModel : ObservableObject
         if (vm != null && !vm.IsSelected) SelectDevice(vm);
     }
 
+    private async Task SendTextAsync()
+    {
+        if (_selected.Count == 0) return;
+        var targets = _selected.Select(d => d.Device).ToList();
+        var clip = await _ui.GetClipboardTextAsync();
+        var initial = clip is { Length: > 0 and <= 2000 } ? clip : "";
+        if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, initial, _ui)) is not string text) return;
+        if (!_node.Quota.CanSend(targets.Count))
+        {
+            if (!await _main.ShowUpgradeAsync(L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade for unlimited sends, or send again tomorrow."))) return;
+        }
+
+        foreach (var target in targets) await _main.StartSendTextAsync(target, text);
+    }
+
     private async Task SendAsync()
     {
         if (!CanSend) return;
@@ -555,8 +590,9 @@ public sealed class HomeViewModel : ObservableObject
         {
             var left = _node.Quota.RemainingToday ?? 0;
             var reason = left == 0
-                ? $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade for unlimited sends, or send again tomorrow."
-                : $"You have {Format.Count(left, "free send")} left today, which isn't enough for {targets.Count} computers.";
+                ? L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade for unlimited sends, or send again tomorrow.")
+                : L.Plural(left, "You have {0} free send left today, which isn't enough for {1} computers.", "You have {0} free sends left today, which isn't enough for {1} computers.", targets.Count);
+
             if (!await _main.ShowUpgradeAsync(reason)) return;
         }
 

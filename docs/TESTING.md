@@ -6,10 +6,10 @@
 dotnet test Beam.sln          # ~2 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (75 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (102 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 
-**`tests/Beam.App.Tests`** (17 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (28 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -92,6 +92,16 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 28. Display scaling 100 % / 150 % / 200 % and window resizing to the minimum size. ✅ Text stays readable and nothing clips.
 29. Run `Beam.exe --send "C:\some\file.txt"` while Beam is running. ✅ The running window comes forward with the file added.
 30. Uninstall via Settings → Apps. ✅ App, shortcuts and Run entry removed; received files untouched.
+31. Installer version: right-click a file, then a folder, then 20 selected files (Windows 11: *Show more options*)
+    → **Send with Beam**. ✅ Beam opens (or comes forward) with all of them in the send list. Uninstall removes the entry.
+32. Store version: right-click a file → **Share** → **Beam**. ✅ Beam opens with the file in the send list; the Share
+    dialog closes.
+33. Store version: after the 3rd completed transfer, the Store's rating dialog appears once (and never again).
+34. Store version during the launch period: Settings → **Claim Beam Pro free** → Store dialog shows "Free"; afterwards
+    Settings shows *Beam Pro*. Restart: still Pro.
+35. Settings → **Language** → Türkçe / Русский / Oʻzbekcha, restart Beam. ✅ Every screen, dialog, toast, tray menu
+    and the on/off switches are in that language; sizes use the local decimal separator ("7,63 MB"). Open the Phone
+    page on a phone set to that language: ✅ the page is translated too. Back to *Use Windows language*.
 
 ## Performance notes
 

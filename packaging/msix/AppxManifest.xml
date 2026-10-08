@@ -31,6 +31,10 @@
 
   <Resources>
     <Resource Language="en-us" />
+    <!-- Lets Partner Center take Store listings in these languages (the app itself is translated, see src/Beam.Core/Localization). -->
+    <Resource Language="tr-tr" />
+    <Resource Language="ru-ru" />
+    <Resource Language="uz-latn" />
   </Resources>
 
   <Applications>
@@ -44,6 +48,15 @@
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\SmallTile.png" ShortName="{{DisplayName}}" />
       </uap:VisualElements>
       <Extensions>
+        <!-- Beam appears in Windows' Share dialog (right-click a file > Share). See PackageInfo.TakeSharedItems. -->
+        <uap:Extension Category="windows.shareTarget">
+          <uap:ShareTarget Description="Send with Beam">
+            <uap:SupportedFileTypes>
+              <uap:SupportsAnyFileType />
+            </uap:SupportedFileTypes>
+            <uap:DataFormat>StorageItems</uap:DataFormat>
+          </uap:ShareTarget>
+        </uap:Extension>
         <!-- "Start Beam when I sign in" (Settings). Off until the user turns it on. -->
         <desktop:Extension Category="windows.startupTask" Executable="Beam.exe" EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask TaskId="BeamStartup" Enabled="false" DisplayName="{{DisplayName}}" />
@@ -57,6 +70,8 @@
     <desktop2:Extension Category="windows.firewallRules">
       <desktop2:FirewallRules Executable="Beam.exe">
         <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="domainAndPrivate" LocalPortMin="47821" LocalPortMax="47830" />
+        <!-- Phone link: the page phones open in their browser (Phone page in Beam). -->
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="domainAndPrivate" LocalPortMin="47831" LocalPortMax="47835" />
         <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="domainAndPrivate" LocalPortMin="47820" LocalPortMax="47820" />
       </desktop2:FirewallRules>
     </desktop2:Extension>

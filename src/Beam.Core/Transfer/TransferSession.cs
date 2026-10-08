@@ -94,6 +94,11 @@ public sealed class TransferSession
     /// <summary>Receiver: the folder files are saved into.</summary>
     public string? DestinationFolder { get; internal set; }
 
+    /// <summary>For text transfers: the text itself (otherwise null).</summary>
+    public string? Text { get; internal set; }
+
+    public bool IsText => Text != null;
+
     /// <summary>Receiver: full local paths of the top-level items that were saved.</summary>
     public IReadOnlyList<string> SavedRootPaths { get; internal set; } = Array.Empty<string>();
 

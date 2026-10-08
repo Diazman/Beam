@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
 using Beam.Core.Protocol;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -133,7 +134,7 @@ internal sealed class IncomingTransfer
                     Log.Info($"Request from {PeerName} expired without an answer");
                     await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.TimedOut }, serviceToken).ConfigureAwait(false);
                     session.SetState(TransferState.Declined,
-                        new TransferError(TransferErrorKind.TimedOut, $"The request from {PeerName} expired because nobody answered it."));
+                        new TransferError(TransferErrorKind.TimedOut, L.T("The request from {0} expired because nobody answered it.", PeerName)));
                     return;
                 }
             }
@@ -146,7 +147,7 @@ internal sealed class IncomingTransfer
         if (!decision.Accepted)
         {
             await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.Declined }, serviceToken).ConfigureAwait(false);
-            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, $"You declined the files from {PeerName}."));
+            session.SetState(TransferState.Declined, new TransferError(TransferErrorKind.Declined, L.T("You declined the files from {0}.", PeerName)));
             return;
         }
 
@@ -177,7 +178,7 @@ internal sealed class IncomingTransfer
                 catch (OperationCanceledException)
                 {
                     await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.Declined }, serviceToken).ConfigureAwait(false);
-                    session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer."));
+                    session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled the transfer.")));
                     return;
                 }
             }
@@ -237,7 +238,7 @@ internal sealed class IncomingTransfer
         if (!Directory.Exists(record.DestinationFolder))
         {
             await FailLocallyAsync(session, new TransferError(TransferErrorKind.DestinationUnavailable,
-                "The folder where files are being saved is no longer available. Check that the drive is connected.",
+                L.T("The folder where files are being saved is no longer available. Check that the drive is connected."),
                 record.DestinationFolder), sendResponse: true, serviceToken).ConfigureAwait(false);
             return;
         }
@@ -383,7 +384,7 @@ internal sealed class IncomingTransfer
                         }
 
                         file.Failed = true;
-                        session.FileFailed(file.RelativePath, $"Couldn't be read on {PeerName}: {Truncate(error.Error, 200)}");
+                        session.FileFailed(file.RelativePath, L.T("Couldn't be read on {0}: {1}", PeerName, Truncate(error.Error, 200)));
                         break;
                     }
 
@@ -432,7 +433,7 @@ internal sealed class IncomingTransfer
             await _connection.SendCancelAndCloseAsync(_service.CancelReason).ConfigureAwait(false);
             _service.ResumeStore.Delete(record, deleteParts: true);
             session.SavedRootPaths = ComputeSavedRootPaths(record);
-            session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer."));
+            session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled the transfer.")));
         }
         catch (LocalFileException ex)
         {
@@ -460,7 +461,7 @@ internal sealed class IncomingTransfer
             await writes.DrainAsync().ConfigureAwait(false);
             _service.ResumeStore.Save(record);
             await _connection.SendCancelAndCloseAsync(Reasons.Shutdown).ConfigureAwait(false);
-            session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, "Beam was closed before the transfer finished.", ex.Message));
+            session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, L.T("Beam was closed before the transfer finished."), ex.Message));
         }
         catch (Exception ex)
         {
@@ -473,10 +474,10 @@ internal sealed class IncomingTransfer
             session.SetDiscardAction(() =>
             {
                 _service.ResumeStore.Delete(record, deleteParts: true);
-                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, "You cancelled the transfer. Partial files were removed."));
+                session.SetState(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled the transfer. Partial files were removed.")));
             });
             session.SetState(TransferState.Interrupted, new TransferError(TransferErrorKind.ConnectionLost,
-                $"Connection to {PeerName} was lost. The transfer will continue if {PeerName} reconnects.", error.Details));
+                L.T("Connection to {0} was lost. The transfer will continue if {0} reconnects.", PeerName), error.Details));
         }
     }
 
@@ -503,7 +504,7 @@ internal sealed class IncomingTransfer
             if (retried.Add(file.Index)) return new FileResultMessage { Index = file.Index, Ok = false, Retry = true };
 
             file.Failed = true;
-            const string reason = "The file was damaged in transit and couldn't be verified.";
+            var reason = L.T("The file was damaged in transit and couldn't be verified.");
             session.FileFailed(file.RelativePath, reason);
             return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
         }
@@ -525,7 +526,7 @@ internal sealed class IncomingTransfer
         if (retried.Add(file.Index)) return new FileResultMessage { Index = file.Index, Ok = false, Retry = true };
 
         file.Failed = true;
-        const string reason = "The file was damaged in transit and couldn't be verified.";
+        var reason = L.T("The file was damaged in transit and couldn't be verified.");
         session.FileFailed(file.RelativePath, reason);
         return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
     }
@@ -575,8 +576,8 @@ internal sealed class IncomingTransfer
             TryDelete(file.PartPath);
             file.Failed = true;
             var reason = ex is UnauthorizedAccessException
-                ? "Couldn't be saved: the existing file is read-only or protected."
-                : "Couldn't be saved: the existing file may be open in another program.";
+                ? L.T("Couldn't be saved: the existing file is read-only or protected.")
+                : L.T("Couldn't be saved: the existing file may be open in another program.");
             Log.Warn($"Could not move {file.PartPath} to {file.TargetPath}: {ex.Message}");
             session.FileFailed(file.RelativePath, reason);
             return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
@@ -686,7 +687,7 @@ internal sealed class IncomingTransfer
         var available = DiskSpace.GetAvailableBytes(destination);
         if (available < 0 || available >= required + FreeSpaceMargin) return true;
         var error = new TransferError(TransferErrorKind.NotEnoughSpace,
-            $"There isn't enough free space to receive these files. {Util.Format.Bytes(required)} is needed but only {Util.Format.Bytes(available)} is free.",
+            L.T("There isn't enough free space to receive these files. {0} is needed but only {1} is free.", Util.Format.Bytes(required), Util.Format.Bytes(available)),
             destination);
         await FailLocallyAsync(session, error, sendResponse: true, token).ConfigureAwait(false);
         return false;
@@ -702,7 +703,7 @@ internal sealed class IncomingTransfer
 
     private void SenderWithdrew(TransferSession session, Task<Frame> pendingRead)
     {
-        var error = new TransferError(TransferErrorKind.CancelledByRemote, $"{PeerName} cancelled the request.");
+        var error = new TransferError(TransferErrorKind.CancelledByRemote, L.T("{0} cancelled the request.", PeerName));
         if (pendingRead.IsCompletedSuccessfully && pendingRead.Result.Type == FrameType.Cancel)
         {
             try

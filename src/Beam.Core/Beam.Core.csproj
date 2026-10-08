@@ -13,6 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The page phones open to send and receive files (see Phone/PhoneLinkServer.cs). -->
+    <EmbeddedResource Include="Phone\phone.html" LogicalName="Beam.Core.Phone.phone.html" />
+    <!-- Interface translations (see Localization/L.cs). -->
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Beam.Core.Localization.%(Filename).json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Beam.Core.Tests" />
   </ItemGroup>
 

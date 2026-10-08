@@ -2,6 +2,7 @@ using Beam.App.Infrastructure;
 using Beam.App.Platform;
 using Beam.App.Services;
 using Beam.Core.Licensing;
+using Beam.Core.Localization;
 using Beam.Core.Util;
 
 namespace Beam.App.ViewModels.Dialogs;
@@ -25,27 +26,41 @@ public sealed class UpgradeViewModel : DialogViewModel
         NotNowCommand = new RelayCommand(() => Close(false));
     }
 
-    public string Title => "Upgrade to Beam Pro";
+    public string Title => _pro.IsLaunchPeriod ? L.T("Claim Beam Pro") : L.T("Upgrade to Beam Pro");
 
     public string Reason { get; }
 
     public bool HasReason => Reason.Length > 0;
 
-    public IReadOnlyList<ProBenefit> Benefits { get; } = new[]
+    public IReadOnlyList<ProBenefit> Benefits => _pro.IsLaunchPeriod ? LaunchBenefits : RegularBenefits;
+
+    // Built when used (not in static fields) so they're in the language chosen at startup.
+    private static ProBenefit[] LaunchBenefits => new ProBenefit[]
     {
-        new ProBenefit("Send to several computers at once", "Pick as many nearby computers as you like and send to all of them in one go."),
-        new ProBenefit("Full speed", $"Send as fast as your network allows. The free version sends at up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s."),
-        new ProBenefit("Unlimited sends", $"No daily limit. The free version includes {FreeLimits.SendsPerDay} sends a day."),
-        new ProBenefit("Phones and tablets, when they arrive", "Beam for Android and iPhone is planned, and Pro will include sending to them."),
+        new(L.T("Yours to keep"), L.T("Everything in Beam is free while it's new. Claim Pro now and keep it when the launch period ends.")),
+        new(L.T("Send to several computers at once"), L.T("Pick as many nearby computers as you like and send to all of them in one go.")),
+        new(L.T("Full speed, unlimited sends"), L.T("Send as fast as your network allows, as often as you like.")),
+        new(L.T("Future Pro features included"), L.T("Every Pro feature added to Beam for Windows later is yours too.")),
     };
 
-    public string BuyText => _pro.CanPurchase
-        ? string.IsNullOrEmpty(_pro.Price) ? "Upgrade" : $"Upgrade · {_pro.Price}"
-        : "Get Beam from the Microsoft Store";
+    private static ProBenefit[] RegularBenefits => new ProBenefit[]
+    {
+        new(L.T("Send to several computers at once"), L.T("Pick as many nearby computers as you like and send to all of them in one go.")),
+        new(L.T("Full speed"), L.T("Send as fast as your network allows. The free version sends at up to {0}/s.", Format.Bytes(FreeLimits.MaxSendBytesPerSecond))),
+        new(L.T("Unlimited sends"), L.T("No daily limit. The free version includes {0} sends a day.", FreeLimits.SendsPerDay)),
+        new(L.T("Phones and tablets, when they arrive"), L.T("Beam for Android and iPhone is planned, and Pro will include sending to them.")),
+    };
 
-    public string Footnote => _pro.CanPurchase
-        ? "One-time purchase through the Microsoft Store. Receiving files is always free and unlimited."
-        : "Beam Pro is sold in the Microsoft Store version of Beam. Receiving files is always free and unlimited.";
+    public string BuyText => !_pro.CanPurchase
+        ? L.T("Get Beam from the Microsoft Store")
+        : _pro.PriceIsFree ? L.T("Claim for free")
+        : string.IsNullOrEmpty(_pro.Price) ? L.T("Upgrade") : L.T("Upgrade · {0}", _pro.Price);
+
+    public string Footnote => _pro.CanPurchase && _pro.PriceIsFree
+        ? L.T("Claimed through the Microsoft Store with your Microsoft account. It costs nothing and stays yours on all your Windows PCs.")
+        : _pro.CanPurchase
+        ? L.T("One-time purchase through the Microsoft Store. Receiving files is always free and unlimited.")
+        : L.T("Beam Pro is sold in the Microsoft Store version of Beam. Receiving files is always free and unlimited.");
 
     public string Status
     {
@@ -96,10 +111,10 @@ public sealed class UpgradeViewModel : DialogViewModel
                 case PurchaseOutcome.Cancelled:
                     break;
                 case PurchaseOutcome.NotAvailable:
-                    Status = "Beam Pro isn't available in the Store right now. Please try again later.";
+                    Status = L.T("Beam Pro isn't available in the Store right now. Please try again later.");
                     break;
                 default:
-                    Status = "The purchase couldn't be completed. Check your internet connection and try again.";
+                    Status = L.T("The purchase couldn't be completed. Check your internet connection and try again.");
                     break;
             }
         }

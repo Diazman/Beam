@@ -7,6 +7,7 @@ using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Identity;
 using Beam.Core.Licensing;
+using Beam.Core.Localization;
 using Beam.Core.Util;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
@@ -14,6 +15,12 @@ using Beam.Core.Storage;
 namespace Beam.App.ViewModels;
 
 public sealed record ThemeOption(ThemePreference Value, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>A choice in the language list; an empty code follows Windows.</summary>
+public sealed record LanguageOption(string Code, string Label)
 {
     public override string ToString() => Label;
 }
@@ -30,7 +37,7 @@ public sealed class TrustedDeviceViewModel
 
     public string Name => Device.Name;
 
-    public string Details => $"Security code {DeviceIdentity.ShortCode(Device.Fingerprint)} · added {Device.AddedAt.ToLocalTime():d}";
+    public string Details => L.T("Security code {0} · added {1:d}", DeviceIdentity.ShortCode(Device.Fingerprint), Device.AddedAt.ToLocalTime());
 
     public RelayCommand RemoveCommand { get; }
 }
@@ -82,10 +89,15 @@ public sealed class SettingsViewModel : ObservableObject
 
         ThemeOptions = new[]
         {
-            new ThemeOption(ThemePreference.System, "Use Windows setting"),
-            new ThemeOption(ThemePreference.Light, "Light"),
-            new ThemeOption(ThemePreference.Dark, "Dark"),
+            new ThemeOption(ThemePreference.System, L.T("Use Windows setting")),
+            new ThemeOption(ThemePreference.Light, L.T("Light")),
+            new ThemeOption(ThemePreference.Dark, L.T("Dark")),
         };
+
+        // Each language is listed in its own name so people can find theirs whatever language Beam is in.
+        LanguageOptions = new[] { new LanguageOption("", L.T("Use Windows language")) }
+            .Concat(L.Languages.Select(l => new LanguageOption(l.Code, l.NativeName)))
+            .ToArray();
 
         node.Settings.Changed += _ => Dispatcher.UIThread.Post(Reload);
         Reload();
@@ -158,6 +170,20 @@ public sealed class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
+    public IReadOnlyList<LanguageOption> LanguageOptions { get; }
+
+    public LanguageOption SelectedLanguage
+    {
+        get => LanguageOptions.FirstOrDefault(o => o.Code == _node.Settings.Current.Language) ?? LanguageOptions[0];
+        set
+        {
+            if (value != null) Apply(s => s.Language = value.Code);
+        }
+    }
+
+    /// <summary>The chosen language takes effect the next time Beam starts.</summary>
+    public bool LanguageNeedsRestart => L.Resolve(_node.Settings.Current.Language) != L.Current;
+
     public ThemeOption SelectedTheme
     {
         get => ThemeOptions.First(o => o.Value == _node.Settings.Current.Theme);
@@ -180,7 +206,7 @@ public sealed class SettingsViewModel : ObservableObject
         get
         {
             var addresses = _node.GetLocalAddresses();
-            return addresses.Count == 0 ? "Not connected to a network" : string.Join(", ", addresses);
+            return addresses.Count == 0 ? L.T("Not connected to a network") : string.Join(", ", addresses);
         }
     }
 
@@ -194,12 +220,20 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool IsFree => !IsPro;
 
-    public string PlanTitle => IsPro ? "Beam Pro" : "Beam Free";
+    public bool IsLaunchPeriod => _node.Edition.IsLaunchPeriod;
+
+    public string PlanTitle => IsPro ? "Beam Pro" : IsLaunchPeriod ? L.T("Beam Pro is free while Beam is new") : "Beam Free";
+
+    public string UpgradeButtonText => IsLaunchPeriod ? L.T("Claim Beam Pro free") : L.T("Upgrade to Pro");
 
     public string PlanDescription => IsPro
-        ? "Thank you for supporting Beam! You can send to several computers at once, at full speed, as often as you like."
-        : $"Send to one computer at a time, at up to {Format.Bytes(FreeLimits.MaxSendBytesPerSecond)}/s, {FreeLimits.SendsPerDay} times a day. "
-          + $"Today you've used {_node.Quota.UsedToday} of {FreeLimits.SendsPerDay}. Receiving files is always free and unlimited.";
+        ? L.T("Thank you for supporting Beam! You can send to several computers at once, at full speed, as often as you like.")
+        : IsLaunchPeriod
+            ? _main.Pro.CanPurchase
+                ? L.T("Right now everything in Beam is free and unlimited. Claim Beam Pro and it stays yours for good, even after the launch period ends.")
+                : L.T("Right now everything in Beam is free and unlimited. Claim Beam Pro and it stays yours for good, even after the launch period ends. Claiming works in the Microsoft Store version of Beam.")
+        : L.T("Send to one computer at a time, at up to {0}/s, {1} times a day. Today you've used {2} of {1}. Receiving files is always free and unlimited.",
+            Format.Bytes(FreeLimits.MaxSendBytesPerSecond), FreeLimits.SendsPerDay, _node.Quota.UsedToday);
 
     public bool CanRestorePurchase => _main.Pro.CanPurchase && IsFree;
 
@@ -232,7 +266,7 @@ public sealed class SettingsViewModel : ObservableObject
         if (normalized != _node.Settings.Current.DeviceName)
         {
             _node.Settings.Update(s => s.DeviceName = normalized);
-            NameStatus = "Saved. Nearby computers will see the new name.";
+            NameStatus = L.T("Saved. Nearby computers will see the new name.");
         }
 
         if (DeviceName != normalized) DeviceName = normalized;
@@ -240,15 +274,15 @@ public sealed class SettingsViewModel : ObservableObject
 
     internal void OnEditionChanged()
     {
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(CanRestorePurchase), nameof(VersionText) })
+        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(UpgradeButtonText), nameof(CanRestorePurchase), nameof(VersionText) })
             OnPropertyChanged(name);
     }
 
     private async Task RestorePurchaseAsync()
     {
-        ProStatus = "Checking…";
+        ProStatus = L.T("Checking…");
         await _main.Pro.RefreshAsync();
-        ProStatus = IsPro ? "" : "No Beam Pro purchase was found for the Microsoft account signed in to the Store.";
+        ProStatus = IsPro ? "" : L.T("No Beam Pro purchase was found for the Microsoft account signed in to the Store.");
     }
 
     private void Apply(Action<AppSettings> change, Action? sideEffect = null)
@@ -268,7 +302,8 @@ public sealed class SettingsViewModel : ObservableObject
                      {
                          nameof(ReceiveFolder), nameof(UsesDefaultFolder), nameof(StartWithWindows), nameof(CloseToTray),
                          nameof(Discoverable), nameof(NotificationsEnabled), nameof(NotifyOnIncomingRequest),
-                         nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(LocalAddresses),
+                         nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(SelectedLanguage),
+                         nameof(LanguageNeedsRestart), nameof(LocalAddresses),
                          nameof(PlanDescription),
                      })
             {
@@ -293,7 +328,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task ChangeFolderAsync()
     {
-        var folder = await _ui.PickFolderAsync("Choose where received files are saved", ReceiveFolder);
+        var folder = await _ui.PickFolderAsync(L.T("Choose where received files are saved"), ReceiveFolder);
         if (string.IsNullOrEmpty(folder)) return;
         _node.Settings.Update(s => s.ReceiveFolder = string.Equals(folder, KnownFolders.Downloads, StringComparison.OrdinalIgnoreCase) ? null : folder);
     }
@@ -301,9 +336,9 @@ public sealed class SettingsViewModel : ObservableObject
     private async void RemoveTrusted(TrustedDeviceViewModel device)
     {
         var confirmed = await _main.ShowDialogAsync(new ConfirmViewModel(
-            $"Stop trusting {device.Name}?",
-            $"Beam will ask you again before accepting files from {device.Name}.",
-            "Stop trusting"));
+            L.T("Stop trusting {0}?", device.Name),
+            L.T("Beam will ask you again before accepting files from {0}.", device.Name),
+            L.T("Stop trusting")));
         if (confirmed is true)
             _node.Settings.Update(s => s.TrustedDevices.RemoveAll(t => t.Fingerprint == device.Device.Fingerprint));
     }

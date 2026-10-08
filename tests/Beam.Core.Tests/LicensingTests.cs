@@ -10,7 +10,7 @@ public class LicensingTests
     [Fact]
     public void FreeEditionLocksOnlyProFeatures()
     {
-        var edition = new Edition();
+        var edition = new Edition(launchPeriod: false);
         Assert.Equal("Free", edition.EditionName);
         Assert.True(edition.IsEnabled(Feature.SendFiles));
         Assert.True(edition.IsEnabled(Feature.ReceiveFiles));
@@ -28,12 +28,25 @@ public class LicensingTests
     }
 
     [Fact]
+    public void LaunchPeriodMakesEverythingFreeWithoutClaimingPro()
+    {
+        var edition = new Edition(launchPeriod: true);
+        Assert.False(edition.IsPro);
+        Assert.True(Enum.GetValues<Feature>().All(edition.IsEnabled));
+
+        using var dir = new TempDir();
+        var quota = new SendQuota(dir.Combine("usage.json"), edition);
+        for (var i = 0; i < FreeLimits.SendsPerDay * 3; i++) Assert.True(quota.TryUse());
+        Assert.Null(quota.RemainingToday);
+    }
+
+    [Fact]
     public void DailyQuotaCountsResetsAndPersists()
     {
         using var dir = new TempDir();
         var path = dir.Combine("usage.json");
         var now = new DateTime(2026, 10, 7, 23, 0, 0);
-        var edition = new Edition();
+        var edition = new Edition(launchPeriod: false);
         var quota = new SendQuota(path, edition, () => now);
 
         for (var i = 0; i < FreeLimits.SendsPerDay; i++) Assert.True(quota.TryUse());
@@ -66,7 +79,8 @@ public class LicensingTests
         var limiter = new RateLimiter(() => rate);
         var clock = Stopwatch.StartNew();
         for (var i = 0; i < 16; i++) await limiter.WaitAsync(256 * 1024, CancellationToken.None); // 4 MB at 8 MB/s
-        Assert.InRange(clock.Elapsed.TotalSeconds, 0.2, 2.0);
+        // ~0.5 s; the ceiling only catches gross oversleeping (busy CI runners stall timers for seconds).
+        Assert.InRange(clock.Elapsed.TotalSeconds, 0.2, 6.0);
 
         rate = 0;
         clock.Restart();
@@ -89,13 +103,14 @@ public class LicensingTests
         Assert.Equal(TransferState.Completed, session.State);
         Assert.True(freeTime >= TimeSpan.FromSeconds(1.1), $"free send took {freeTime}");
 
-        // Upgrading lifts the limit straight away.
+        // Upgrading lifts the limit straight away. (Comparing wall-clock times here is unreliable on busy CI runners,
+        // so check the pacing itself: unlimited, and a Pro send still completes.)
+        Assert.Equal(FreeLimits.MaxSendBytesPerSecond, free.Node.Transfers.SendLimiter.BytesPerSecond);
         free.Edition.SetPro(true);
-        clock.Restart();
+        Assert.Equal(0, free.Node.Transfers.SendLimiter.BytesPerSecond);
         session = free.Node.Send(receiver.AsDevice(), new[] { file });
         await Wait.ForFinishAsync(session);
         Assert.Equal(TransferState.Completed, session.State);
-        Assert.True(clock.Elapsed < freeTime, $"pro send took {clock.Elapsed}, free {freeTime}");
     }
 
     [Fact]

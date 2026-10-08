@@ -21,12 +21,18 @@ public enum FrameType : byte
     Done = 10,
     Result = 11,
     Cancel = 12,
+
+    /// <summary>Protocol 2: a piece of text or a link (connection purpose <see cref="ConnectionPurpose.Text"/>).</summary>
+    Text = 13,
 }
 
 public static class ConnectionPurpose
 {
     public const string Transfer = "transfer";
     public const string Probe = "probe";
+
+    /// <summary>Protocol 2: the connection carries one <see cref="TextMessage"/>, answered with Result or Cancel.</summary>
+    public const string Text = "text";
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>
@@ -64,6 +70,13 @@ public sealed class HelloMessage
 
     /// <summary>TCP port the sender itself listens on, so the receiver can show/offer it.</summary>
     public int Port { get; set; }
+}
+
+public sealed class TextMessage
+{
+    public string TransferId { get; set; } = "";
+
+    public string Text { get; set; } = "";
 }
 
 public sealed class OfferEntry
@@ -187,6 +200,7 @@ public sealed class CancelMessage
 [JsonSerializable(typeof(DoneMessage))]
 [JsonSerializable(typeof(ResultMessage))]
 [JsonSerializable(typeof(CancelMessage))]
+[JsonSerializable(typeof(TextMessage))]
 internal sealed partial class ProtocolJson : JsonSerializerContext
 {
 }

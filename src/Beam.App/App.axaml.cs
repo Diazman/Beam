@@ -11,6 +11,7 @@ using Beam.App.ViewModels;
 using Beam.App.Views;
 using Beam.Core;
 using Beam.Core.Diagnostics;
+using Beam.Core.Localization;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
 
@@ -35,7 +36,20 @@ public partial class App : Application
 
     public bool IsQuitting => _quitting;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        // Before any style or window loads: text is translated when it is created.
+        try
+        {
+            L.SetLanguage(new SettingsStore(DataPaths.SettingsFile).Current.Language);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not read the language setting", ex);
+        }
+
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -125,9 +139,9 @@ public partial class App : Application
     /// <summary>Last-resort window when Beam can't initialise (instead of a crash dialog).</summary>
     private void ShowStartupError(IClassicDesktopStyleApplicationLifetime desktop, Exception ex)
     {
-        var close = new Button { Content = "Close", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 96 };
+        var close = new Button { Content = L.T("Close"), HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, MinWidth = 96 };
         close.Classes.Add("accent");
-        var heading = new TextBlock { Text = "Beam couldn't start", FontSize = 20, FontWeight = Avalonia.Media.FontWeight.SemiBold };
+        var heading = new TextBlock { Text = L.T("Beam couldn't start"), FontSize = 20, FontWeight = Avalonia.Media.FontWeight.SemiBold };
         var window = new Window
         {
             Title = "Beam",
@@ -146,14 +160,13 @@ public partial class App : Application
                     new TextBlock
                     {
                         TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                        Text = "Something on this computer stopped Beam from starting. Restarting the computer often helps. " +
-                               "If it keeps happening, the details below help with troubleshooting.",
+                        Text = L.T("Something on this computer stopped Beam from starting. Restarting the computer often helps. If it keeps happening, the details below help with troubleshooting."),
                     },
                     new SelectableTextBlock
                     {
                         TextWrapping = Avalonia.Media.TextWrapping.Wrap,
                         FontSize = 12,
-                        Text = $"{ex.GetType().Name}: {ex.Message}\nLog folder: {DataPaths.LogDirectory}",
+                        Text = L.T("{0}: {1}\nLog folder: {2}", ex.GetType().Name, ex.Message, DataPaths.LogDirectory),
                     },
                     close,
                 },
@@ -176,9 +189,9 @@ public partial class App : Application
     {
         try
         {
-            var open = new NativeMenuItem("Open Beam");
+            var open = new NativeMenuItem(L.T("Open Beam"));
             open.Click += (_, _) => _window?.BringToFront();
-            var quit = new NativeMenuItem("Quit Beam");
+            var quit = new NativeMenuItem(L.T("Quit Beam"));
             quit.Click += (_, _) => Quit();
             var menu = new NativeMenu();
             menu.Items.Add(open);
@@ -188,7 +201,7 @@ public partial class App : Application
             _trayIcon = new TrayIcon
             {
                 Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Beam/Assets/beam.ico"))),
-                ToolTipText = "Beam — ready to receive files",
+                ToolTipText = L.T("Beam — ready to receive files"),
                 Menu = menu,
                 IsVisible = true,
             };

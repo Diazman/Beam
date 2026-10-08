@@ -16,4 +16,7 @@ public interface IUiServices
     bool IsWindowActive { get; }
 
     Task CopyToClipboardAsync(string text);
+
+    /// <summary>Text currently on the clipboard, if any.</summary>
+    Task<string?> GetClipboardTextAsync();
 }

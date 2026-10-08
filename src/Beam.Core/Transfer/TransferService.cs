@@ -6,6 +6,7 @@ using Beam.Core.Discovery;
 using Beam.Core.Identity;
 using Beam.Core.Protocol;
 using Beam.Core.Util;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
@@ -114,6 +115,23 @@ public sealed class TransferService : IAsyncDisposable
         return session;
     }
 
+    /// <summary>Sends a piece of text or a link to a device. The other side shows it (or copies it, if it trusts this device).</summary>
+    public TransferSession SendText(DeviceInfo target, string text, Func<DeviceInfo>? refreshTarget = null)
+    {
+        if (string.IsNullOrEmpty(text)) throw new ArgumentException("Nothing to send.", nameof(text));
+        if (text.Length > TextTransfer.MaxLength)
+            throw new TransferException(TransferErrorKind.NothingToSend, L.T("That text is too long to send. Save it as a file and send the file instead."));
+        var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, target.Id, target.Name, target.Fingerprint)
+        {
+            Text = text,
+        };
+        session.SetDescription(new[] { TextTransfer.Describe(text) });
+        session.SetTotals(1, text.Length, 0, 0, 0);
+        Register(session);
+        _ = Task.Run(() => TextTransfer.SendAsync(this, session, text, refreshTarget ?? (() => target)));
+        return session;
+    }
+
     /// <summary>Connects to an address to learn which device is there (used for manual connections).</summary>
     public async Task<DeviceInfo> ProbeAsync(IPEndPoint endpoint, CancellationToken cancellationToken)
     {
@@ -123,7 +141,7 @@ public sealed class TransferService : IAsyncDisposable
         var hello = connection.RemoteHello;
         if (string.IsNullOrWhiteSpace(hello.DeviceId)) throw new ProtocolException("Device did not identify itself.");
         if (hello.DeviceId == Identity.DeviceId)
-            throw new TransferException(TransferErrorKind.ConnectFailed, "That address belongs to this computer.");
+            throw new TransferException(TransferErrorKind.ConnectFailed, L.T("That address belongs to this computer."));
         return new DeviceInfo
         {
             Id = hello.DeviceId,
@@ -213,6 +231,9 @@ public sealed class TransferService : IAsyncDisposable
         if (_bufferPool.Count < 8) _bufferPool.Add(buffers);
     }
 
+    /// <summary>Adds a transfer that runs outside this service (e.g. with a phone's browser) so it shows up and is recorded like the others.</summary>
+    internal void RegisterExternal(TransferSession session) => Register(session);
+
     private void Register(TransferSession session)
     {
         _sessions[session.Id + session.Direction] = session;
@@ -291,6 +312,11 @@ public sealed class TransferService : IAsyncDisposable
             }
 
             if (hello.Purpose == ConnectionPurpose.Probe || string.IsNullOrWhiteSpace(hello.DeviceId)) return;
+            if (hello.Purpose == ConnectionPurpose.Text)
+            {
+                await TextTransfer.ReceiveAsync(this, connection, token).ConfigureAwait(false);
+                return;
+            }
 
             await new IncomingTransfer(this, connection).RunAsync(token).ConfigureAwait(false);
         }

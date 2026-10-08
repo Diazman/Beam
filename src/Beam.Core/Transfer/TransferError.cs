@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Security.Authentication;
+using Beam.Core.Localization;
 using Beam.Core.Protocol;
 
 namespace Beam.Core.Transfer;
@@ -89,44 +90,44 @@ public static class ErrorTranslator
             case LocalFileException lf:
                 return FromLocalFileException(lf.InnerException ?? lf, lf.Message);
             case OperationCanceledException:
-                return new TransferError(TransferErrorKind.CancelledByUser, "The transfer was cancelled.");
+                return new TransferError(TransferErrorKind.CancelledByUser, L.T("The transfer was cancelled."));
             case AuthenticationException:
                 return new TransferError(TransferErrorKind.SecureConnectionFailed,
-                    $"A secure connection with {peerName} couldn't be established.", ex.Message);
+                    L.T("A secure connection with {0} couldn't be established.", peerName), ex.Message);
             case ProtocolException:
                 return new TransferError(TransferErrorKind.Protocol,
-                    $"{peerName} sent something Beam didn't understand. Make sure both computers run the latest version.", ex.Message);
+                    L.T("{0} sent something Beam didn't understand. Make sure both computers run the latest version.", peerName), ex.Message);
             case SocketException se when se.SocketErrorCode is SocketError.ConnectionRefused or SocketError.HostUnreachable
                 or SocketError.NetworkUnreachable or SocketError.TimedOut or SocketError.HostNotFound or SocketError.HostDown:
                 return new TransferError(TransferErrorKind.ConnectFailed,
-                    $"Couldn't reach {peerName}. Make sure Beam is open on that computer and both computers are on the same network.",
+                    L.T("Couldn't reach {0}. Make sure Beam is open on that computer and both computers are on the same network.", peerName),
                     $"{se.SocketErrorCode}: {se.Message}");
             case TimeoutException:
                 return new TransferError(TransferErrorKind.ConnectionLost,
-                    $"{peerName} stopped responding. The transfer could not be completed.", ex.Message);
+                    L.T("{0} stopped responding. The transfer could not be completed.", peerName), ex.Message);
             case SocketException or EndOfStreamException or IOException or ObjectDisposedException:
                 return new TransferError(TransferErrorKind.ConnectionLost,
-                    "Connection was lost. The transfer could not be completed.", Describe(ex));
+                    L.T("Connection was lost. The transfer could not be completed."), Describe(ex));
             default:
-                return new TransferError(TransferErrorKind.Unknown, "Something went wrong and the transfer stopped.", ex.ToString());
+                return new TransferError(TransferErrorKind.Unknown, L.T("Something went wrong and the transfer stopped."), ex.ToString());
         }
     }
 
     public static TransferError FromRemoteReason(string reason, string peerName, string? detail = null) => reason switch
     {
-        Reasons.Declined => new(TransferErrorKind.Declined, $"{peerName} declined the files.", detail),
-        Reasons.TimedOut => new(TransferErrorKind.TimedOut, $"{peerName} didn't respond to the request in time.", detail),
-        Reasons.Busy => new(TransferErrorKind.Busy, $"{peerName} is busy with another request. Try again in a moment.", detail),
-        Reasons.NoSpace => new(TransferErrorKind.NotEnoughSpace, $"{peerName} doesn't have enough free disk space.", detail),
+        Reasons.Declined => new(TransferErrorKind.Declined, L.T("{0} declined the files.", peerName), detail),
+        Reasons.TimedOut => new(TransferErrorKind.TimedOut, L.T("{0} didn't respond to the request in time.", peerName), detail),
+        Reasons.Busy => new(TransferErrorKind.Busy, L.T("{0} is busy with another request. Try again in a moment.", peerName), detail),
+        Reasons.NoSpace => new(TransferErrorKind.NotEnoughSpace, L.T("{0} doesn't have enough free disk space.", peerName), detail),
         Reasons.DestinationUnavailable => new(TransferErrorKind.DestinationUnavailable,
-            $"The folder on {peerName} where files are saved isn't available.", detail),
+            L.T("The folder on {0} where files are saved isn't available.", peerName), detail),
         Reasons.PermissionDenied => new(TransferErrorKind.PermissionDenied,
-            $"{peerName} isn't allowed to save files in its receive folder.", detail),
-        Reasons.WriteFailed => new(TransferErrorKind.DestinationUnavailable, $"{peerName} couldn't save the files.", detail),
-        Reasons.Shutdown => new(TransferErrorKind.CancelledByRemote, $"Beam was closed on {peerName}.", detail),
+            L.T("{0} isn't allowed to save files in its receive folder.", peerName), detail),
+        Reasons.WriteFailed => new(TransferErrorKind.DestinationUnavailable, L.T("{0} couldn't save the files.", peerName), detail),
+        Reasons.Shutdown => new(TransferErrorKind.CancelledByRemote, L.T("Beam was closed on {0}.", peerName), detail),
         Reasons.Protocol => new(TransferErrorKind.Protocol,
-            $"{peerName} couldn't understand this transfer. Make sure both computers run the latest version of Beam.", detail),
-        _ => new(TransferErrorKind.CancelledByRemote, $"{peerName} cancelled the transfer.", detail),
+            L.T("{0} couldn't understand this transfer. Make sure both computers run the latest version of Beam.", peerName), detail),
+        _ => new(TransferErrorKind.CancelledByRemote, L.T("{0} cancelled the transfer.", peerName), detail),
     };
 
     /// <summary>Maps a local disk problem to a friendly error.</summary>
@@ -134,16 +135,16 @@ public static class ErrorTranslator
     {
         var details = context == null ? Describe(ex) : $"{context}: {Describe(ex)}";
         if (IsDiskFull(ex))
-            return new TransferError(TransferErrorKind.NotEnoughSpace, "The disk is full. Free up some space and try again.", details);
+            return new TransferError(TransferErrorKind.NotEnoughSpace, L.T("The disk is full. Free up some space and try again."), details);
         return ex switch
         {
             UnauthorizedAccessException => new TransferError(TransferErrorKind.PermissionDenied,
-                "Beam doesn't have permission to save files in this folder. Choose a different folder in Settings.", details),
+                L.T("Beam doesn't have permission to save files in this folder. Choose a different folder in Settings."), details),
             DirectoryNotFoundException or DriveNotFoundException => new TransferError(TransferErrorKind.DestinationUnavailable,
-                "The folder where files are saved is no longer available. Check that the drive is connected.", details),
+                L.T("The folder where files are saved is no longer available. Check that the drive is connected."), details),
             PathTooLongException => new TransferError(TransferErrorKind.DestinationUnavailable,
-                "A file name is too long to be saved in this folder.", details),
-            _ => new TransferError(TransferErrorKind.DestinationUnavailable, "A file couldn't be saved.", details),
+                L.T("A file name is too long to be saved in this folder."), details),
+            _ => new TransferError(TransferErrorKind.DestinationUnavailable, L.T("A file couldn't be saved."), details),
         };
     }
 

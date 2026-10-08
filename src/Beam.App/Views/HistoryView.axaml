@@ -1,18 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
              xmlns:vm="using:Beam.App.ViewModels"
              x:Class="Beam.App.Views.HistoryView"
              x:DataType="vm:HistoryViewModel">
   <DockPanel Margin="36,30,36,24">
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,20">
       <StackPanel Spacing="4">
-        <TextBlock Classes="h1" Text="History" />
-        <TextBlock Classes="secondary" Text="Files you've recently sent and received. Beam doesn't keep copies of them." TextWrapping="Wrap" />
+        <TextBlock Classes="h1" Text="{l:T 'History'}" />
+        <TextBlock Classes="secondary" Text="{l:T 'Files you\'ve recently sent and received. Beam doesn\'t keep copies of them.'}" TextWrapping="Wrap" />
       </StackPanel>
       <Button Grid.Column="1" VerticalAlignment="Top" Command="{Binding ClearCommand}" IsVisible="{Binding HasItems}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <PathIcon Data="{StaticResource IconDelete}" Width="14" Height="14" />
-          <TextBlock Text="Clear history" />
+          <TextBlock Text="{l:T 'Clear history'}" />
         </StackPanel>
       </Button>
     </Grid>
@@ -23,8 +24,8 @@
         <Border Classes="iconBadge neutral" Width="56" Height="56" CornerRadius="28" HorizontalAlignment="Center">
           <PathIcon Data="{StaticResource IconHistory}" Width="24" Height="24" />
         </Border>
-        <TextBlock Classes="h3" Text="No transfers yet" HorizontalAlignment="Center" />
-        <TextBlock Classes="secondary" Text="Files you send or receive will be listed here." HorizontalAlignment="Center" />
+        <TextBlock Classes="h3" Text="{l:T 'No transfers yet'}" HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary" Text="{l:T 'Files you send or receive will be listed here.'}" HorizontalAlignment="Center" />
       </StackPanel>
 
       <Border Classes="card" Padding="0" IsVisible="{Binding HasItems}" VerticalAlignment="Top">
@@ -49,9 +50,12 @@
                                  Classes.error="{Binding IsError}" Classes.secondary="{Binding IsNeutral}" />
                       <TextBlock Classes="caption" Text="{Binding When}" HorizontalAlignment="Right" />
                     </StackPanel>
-                    <Button Grid.Column="3" Content="Show" VerticalAlignment="Center" MinWidth="72"
+                    <Button Grid.Column="3" Content="{l:T 'Show'}" VerticalAlignment="Center" MinWidth="72"
                             Command="{Binding ShowCommand}" IsVisible="{Binding CanShow}"
-                            ToolTip.Tip="Show the received files in their folder" />
+                            ToolTip.Tip="{l:T 'Show the received files in their folder'}" />
+                    <Button Grid.Column="3" Content="{l:T 'Copy'}" VerticalAlignment="Center" MinWidth="72"
+                            Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}"
+                            ToolTip.Tip="{l:T 'Copy the text again'}" />
                   </Grid>
                 </Border>
               </DataTemplate>

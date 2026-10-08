@@ -14,6 +14,15 @@ share any personal data, and has no servers.**
 - Beam does not upload your files, file names or any other data to the internet or to the
   developer. There are no Beam servers.
 
+## Phones (the Phone page)
+
+When you turn on the Phone page, Beam runs a small web page on your local network that phones can
+open by scanning the code Beam shows. The link contains a random secret that changes every time, and the
+page stops when you turn it off or after 30 minutes without use. Files a phone sends are saved only if
+you accept them. Beam sees the phone's local network address and the type of phone (from its browser) to
+show who is connecting; neither is stored or sent anywhere. Phone transfers go directly over your Wi-Fi
+but, unlike transfers between computers, are not encrypted by Beam, so use them on networks you trust.
+
 ## Purchases
 
 Beam Pro is sold as an in-app purchase through the Microsoft Store. Payment is handled entirely by

@@ -39,6 +39,9 @@ public sealed class HistoryEntry
     /// <summary>Received files: folder they were saved in.</summary>
     public string? Folder { get; set; }
 
+    /// <summary>Text transfers: the text (shortened to <see cref="HistoryStore.MaxTextLength"/> characters).</summary>
+    public string? Text { get; set; }
+
     /// <summary>Received files: full paths of the top-level items, used for "Show in folder".</summary>
     public List<string> Paths { get; set; } = new();
 }

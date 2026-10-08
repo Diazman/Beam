@@ -5,9 +5,11 @@ using Beam.Core.Discovery;
 using Beam.Core.History;
 using Beam.Core.Identity;
 using Beam.Core.Licensing;
+using Beam.Core.Phone;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
 using Beam.Core.Transfer;
+using Beam.Core.Localization;
 
 namespace Beam.Core;
 
@@ -35,6 +37,7 @@ public sealed class BeamNode : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private Task? _manualPeerTask;
     private bool _started;
+    private int _disposed;
 
     private BeamNode(BeamNodeOptions options)
     {
@@ -53,6 +56,7 @@ public sealed class BeamNode : IAsyncDisposable
         Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName,
             sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond);
         Transfers.SessionFinished += RecordHistory;
+        PhoneLink = new PhoneLinkServer(Transfers, Quota, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint, DeviceKinds.Desktop));
         Discovery.Discoverable = Settings.Current.Discoverable;
@@ -72,6 +76,9 @@ public sealed class BeamNode : IAsyncDisposable
     public DiscoveryService Discovery { get; }
 
     public IEditionPolicy Edition => _options.Edition;
+
+    /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
+    public PhoneLinkServer PhoneLink { get; }
 
     /// <summary>The free edition's daily send limit.</summary>
     public SendQuota Quota { get; }
@@ -107,8 +114,18 @@ public sealed class BeamNode : IAsyncDisposable
         if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
         if (!Quota.TryUse())
             throw new TransferException(TransferErrorKind.SendLimitReached,
-                $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.");
+                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
         return Transfers.Send(device, paths, () => Discovery.Find(device.Id) ?? device);
+    }
+
+    /// <summary>Sends a piece of text or a link (counts as a send for the free edition).</summary>
+    public TransferSession SendText(DeviceInfo device, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Nothing to send.", nameof(text));
+        if (!Quota.TryUse())
+            throw new TransferException(TransferErrorKind.SendLimitReached,
+                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
+        return Transfers.SendText(device, text, () => Discovery.Find(device.Id) ?? device);
     }
 
     /// <summary>
@@ -128,11 +145,11 @@ public sealed class BeamNode : IAsyncDisposable
         }
         catch (SocketException ex)
         {
-            throw new TransferException(TransferErrorKind.ConnectFailed, $"Couldn't find a computer called \"{host}\" on this network.", ex.Message, ex);
+            throw new TransferException(TransferErrorKind.ConnectFailed, L.T("Couldn't find a computer called \"{0}\" on this network.", host), ex.Message, ex);
         }
 
         if (addresses.Length == 0)
-            throw new TransferException(TransferErrorKind.ConnectFailed, $"Couldn't find a computer called \"{host}\" on this network.");
+            throw new TransferException(TransferErrorKind.ConnectFailed, L.T("Couldn't find a computer called \"{0}\" on this network.", host));
 
         var ports = port != null ? new[] { port.Value } : Enumerable.Range(AppInfo.TransferPort, 4).ToArray();
         Exception? last = null;
@@ -160,8 +177,8 @@ public sealed class BeamNode : IAsyncDisposable
         }
 
         if (last is TransferException te) throw new TransferException(new TransferError(TransferErrorKind.ConnectFailed,
-            $"Couldn't connect to {text.Trim()}. Check the address, and make sure Beam is open on that computer.", te.Error.Details), last);
-        throw new TransferException(TransferErrorKind.ConnectFailed, $"Couldn't connect to {text.Trim()}.");
+            L.T("Couldn't connect to {0}. Check the address, and make sure Beam is open on that computer.", text.Trim()), te.Error.Details), last);
+        throw new TransferException(TransferErrorKind.ConnectFailed, L.T("Couldn't connect to {0}.", text.Trim()));
     }
 
     public void ForgetManualAddress(string address)
@@ -201,9 +218,11 @@ public sealed class BeamNode : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return; // safe to call more than once
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
         Discovery.Dispose();
+        await PhoneLink.DisposeAsync().ConfigureAwait(false);
         await Transfers.DisposeAsync().ConfigureAwait(false);
         if (_manualPeerTask != null)
         {
@@ -217,12 +236,12 @@ public sealed class BeamNode : IAsyncDisposable
     internal static (string Host, int? Port) ParseAddress(string text)
     {
         var trimmed = (text ?? "").Trim();
-        if (trimmed.Length == 0) throw new TransferException(TransferErrorKind.ConnectFailed, "Enter the address shown on the other computer.");
+        if (trimmed.Length == 0) throw new TransferException(TransferErrorKind.ConnectFailed, L.T("Enter the address shown on the other computer."));
         var colon = trimmed.LastIndexOf(':');
         if (colon > 0 && trimmed.IndexOf(':') == colon)
         {
             if (!int.TryParse(trimmed[(colon + 1)..], out var port) || port is <= 0 or > 65535)
-                throw new TransferException(TransferErrorKind.ConnectFailed, "That address doesn't look right. It should look like 192.168.1.20.");
+                throw new TransferException(TransferErrorKind.ConnectFailed, L.T("That address doesn't look right. It should look like 192.168.1.20."));
             return (trimmed[..colon], port);
         }
 
@@ -333,12 +352,16 @@ public sealed class BeamNode : IAsyncDisposable
             Message = snapshot.Error?.Message,
             Folder = session.DestinationFolder,
             Paths = session.SavedRootPaths.ToList(),
+            Text = session.Text is { } text ? (text.Length > HistoryStore.MaxTextLength ? text[..HistoryStore.MaxTextLength] : text) : null,
         });
     }
 
     private sealed class DelegatingHandler : IIncomingTransferHandler
     {
         public IIncomingTransferHandler? Inner { get; set; }
+
+        public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken) =>
+            Inner?.ReceiveTextAsync(text, session, cancellationToken) ?? Task.FromResult(false);
 
         public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
             Inner?.RequestApprovalAsync(request, session, cancellationToken) ?? Task.FromResult(IncomingDecision.Decline());

@@ -8,6 +8,7 @@ using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
 using Beam.Core.Licensing;
+using Beam.Core.Localization;
 using Beam.Core.Settings;
 using Beam.Core.Transfer;
 
@@ -16,6 +17,7 @@ namespace Beam.App.ViewModels;
 public enum Page
 {
     Home,
+    Phone,
     History,
     Settings,
 }
@@ -46,6 +48,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         node.IncomingHandler = this;
 
         Home = new HomeViewModel(node, ui, this);
+        Phone = new PhoneViewModel(node, ui, this);
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
 
@@ -71,12 +74,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     public HomeViewModel Home { get; }
 
+    public PhoneViewModel Phone { get; }
+
     public HistoryViewModel History { get; }
 
     public SettingsViewModel Settings { get; }
 
     public object CurrentPage => _page switch
     {
+        Page.Phone => Phone,
         Page.History => History,
         Page.Settings => Settings,
         _ => Home,
@@ -90,6 +96,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         set
         {
             if (value) Navigate(Page.Home);
+        }
+    }
+
+    public bool IsPhonePage
+    {
+        get => _page == Page.Phone;
+        set
+        {
+            if (value) Navigate(Page.Phone);
         }
     }
 
@@ -173,9 +188,9 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         {
             Log.Error("Networking failed to start", ex);
             await ShowDialogAsync(new ConfirmViewModel(
-                "Beam can't use the network",
-                "Another program may be blocking Beam's network port. Restart your computer and try again. You can still look at your transfer history.",
-                "OK", ""));
+                L.T("Beam can't use the network"),
+                L.T("Another program may be blocking Beam's network port. Restart your computer and try again. You can still look at your transfer history."),
+                L.T("OK"), ""));
         }
 
         HandleCommandLine(commandLine);
@@ -206,6 +221,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageKind));
         OnPropertyChanged(nameof(IsHomePage));
+        OnPropertyChanged(nameof(IsPhonePage));
         OnPropertyChanged(nameof(IsHistoryPage));
         OnPropertyChanged(nameof(IsSettingsPage));
     }
@@ -226,6 +242,28 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         catch (Exception ex)
         {
             Log.Error("Could not start transfer", ex);
+            return false;
+        }
+    }
+
+    internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);
+
+    /// <summary>Sends text to one device. Returns false (after telling the user why) if it couldn't start.</summary>
+    public async Task<bool> StartSendTextAsync(DeviceInfo device, string text)
+    {
+        try
+        {
+            Node.SendText(device, text);
+            return true;
+        }
+        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
+        {
+            if (!await ShowUpgradeAsync(ex.Error.Message)) return false;
+            return await StartSendTextAsync(device, text);
+        }
+        catch (TransferException ex)
+        {
+            await ShowDialogAsync(new ConfirmViewModel(L.T("Can't send this text"), ex.Error.Message, L.T("OK"), ""));
             return false;
         }
     }
@@ -257,10 +295,10 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         var active = ActiveTransferCount;
         if (active == 0) return true;
         var result = await ShowDialogAsync(new ConfirmViewModel(
-            active == 1 ? "A transfer is still in progress" : $"{active} transfers are still in progress",
-            "If you quit Beam now, the transfer will stop and unfinished files won't be saved.",
-            "Stop and quit",
-            "Keep transferring",
+            L.Plural(active, "A transfer is still in progress", "{0} transfers are still in progress"),
+            L.T("If you quit Beam now, the transfer will stop and unfinished files won't be saved."),
+            L.T("Stop and quit"),
+            L.T("Keep transferring"),
             isDestructive: true));
         return result is true;
     }
@@ -271,8 +309,8 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         if (Node.Settings.Current.TrayHintShown) return;
         Node.Settings.Update(s => s.TrayHintShown = true);
         _platform.ShowNotification(
-            "Beam is still running",
-            "Nearby computers can still send you files. To quit, right-click the Beam icon in the notification area.",
+            L.T("Beam is still running"),
+            L.T("Nearby computers can still send you files. To quit, right-click the Beam icon in the notification area."),
             () => Dispatcher.UIThread.Post(_ui.BringToFront));
     }
 
@@ -282,8 +320,25 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         if (DateTime.UtcNow - _startedAt < TimeSpan.FromSeconds(15)) return;
         if (_deviceNotifiedAt.TryGetValue(device.Id, out var last) && DateTime.UtcNow - last < TimeSpan.FromMinutes(30)) return;
         _deviceNotifiedAt[device.Id] = DateTime.UtcNow;
-        Notify(s => s.NotifyOnDeviceFound, $"{device.Name} is nearby", "Open Beam to send files to it.");
+        Notify(s => s.NotifyOnDeviceFound, L.T("{0} is nearby", device.Name), L.T("Open Beam to send files to it."));
     }
+
+    /// <summary>Waits a moment so the user sees the result, then asks for a rating if nothing else is going on.</summary>
+    private async Task AskForRatingWhenIdleAsync()
+    {
+        // Wait for a quiet moment (no transfer running, no dialog open, Beam in front); if none comes soon, the next
+        // finished transfer tries again.
+        for (var attempt = 0; attempt < 15; attempt++)
+        {
+            await Task.Delay(RatingPromptDelay);
+            if (HasActiveTransfers || HasDialog || !_ui.IsWindowActive) continue;
+            await Pro.MaybeAskForRatingAsync();
+            return;
+        }
+    }
+
+    /// <summary>Delay between a finished transfer and the rating prompt (shortened in tests).</summary>
+    internal static TimeSpan RatingPromptDelay { get; set; } = TimeSpan.FromSeconds(2);
 
     private void OnEditionChanged()
     {
@@ -294,13 +349,38 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     // ----- IIncomingTransferHandler (called by the engine on background threads) -----
 
+    public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken) =>
+        Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            if (text.IsTrusted)
+            {
+                // From a trusted device: no prompt — copy it and say so.
+                await _ui.CopyToClipboardAsync(text.Text);
+                var link = IncomingTextViewModel.TryGetLink(text.Text);
+                _platform.ShowNotification(link != null ? L.T("Link from {0} copied", text.SenderName) : L.T("Text from {0} copied", text.SenderName),
+                    text.Text.Length > 120 ? text.Text[..117] + "…" : text.Text,
+                    () => Dispatcher.UIThread.Post(_ui.BringToFront));
+                return true;
+            }
+
+            var dialog = new IncomingTextViewModel(text.SenderName, text.Text, _ui, _platform);
+            if (!_ui.IsWindowActive)
+            {
+                Notify(s => s.NotifyOnIncomingRequest, dialog.Title, L.T("Open Beam to read it."), bringToFront: false);
+                _ui.BringToFront();
+            }
+
+            return await ShowDialogAsync(dialog, cancellationToken) is true;
+        });
+
     public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var dialog = new IncomingRequestViewModel(request, _ui, Node.Edition.IsEnabled(Feature.TrustedDevices));
+            var canTrust = Node.Edition.IsEnabled(Feature.TrustedDevices) && request.SenderFingerprint.Length > 0;
+            var dialog = new IncomingRequestViewModel(request, _ui, canTrust);
             if (!_ui.IsWindowActive)
             {
-                Notify(s => s.NotifyOnIncomingRequest, "Incoming files", dialog.Title, bringToFront: false);
+                Notify(s => s.NotifyOnIncomingRequest, L.T("Incoming files"), dialog.Title, bringToFront: false);
                 _ui.BringToFront();
             }
 
@@ -354,9 +434,11 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private void AddTransfer(TransferSession session)
     {
         if (Transfers.Any(t => t.Session == session)) return;
-        var vm = new TransferViewModel(session, _platform, Dismiss);
+        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync);
         Transfers.Insert(0, vm);
         session.StateChanged += s => Dispatcher.UIThread.Post(() => OnSessionStateChanged(vm));
+        // A short transfer can finish before this subscription; catch up so it is still announced and counted.
+        Dispatcher.UIThread.Post(() => OnSessionStateChanged(vm));
         OnTransfersChanged();
         _progressTimer.Start();
     }
@@ -376,6 +458,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         if (vm.IsFinished) AnnounceFinished(vm);
+        else vm.Announced = false; // "Try again" after a failure: announce the new outcome
         OnTransfersChanged();
         if (!vm.IsFinished) _progressTimer.Start();
     }
@@ -418,29 +501,39 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     private void AnnounceFinished(TransferViewModel vm)
     {
+        // State-change events can arrive more than once for the same final state; announce and count each transfer once.
+        if (vm.Announced) return;
+        vm.Announced = true;
         var session = vm.Session;
         var snapshot = session.GetSnapshot();
+        if (snapshot.State == TransferState.Completed)
+        {
+            Node.Settings.Update(s => s.CompletedTransfers++);
+            _ = AskForRatingWhenIdleAsync();
+        }
+
         var title = session.Title;
         switch (snapshot.State)
         {
             case TransferState.Completed when session.Direction == TransferDirection.Receive:
                 var folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(session.DestinationFolder ?? ""));
-                Notify(s => s.NotifyOnTransferFinished, "Files received",
-                    $"{title} from {session.PeerName} was saved to {folder}.", () => vm.OpenCommand.Execute(null));
+                Notify(s => s.NotifyOnTransferFinished, L.T("Files received"),
+                    L.T("{0} from {1} was saved to {2}.", title, session.PeerName, folder), () => vm.OpenCommand.Execute(null));
                 break;
             case TransferState.Completed:
-                Notify(s => s.NotifyOnTransferFinished, "Files sent", $"{title} was sent to {session.PeerName}.");
+                Notify(s => s.NotifyOnTransferFinished, L.T("Files sent"), L.T("{0} was sent to {1}.", title, session.PeerName));
                 break;
             case TransferState.CompletedWithErrors:
-                Notify(s => s.NotifyOnTransferFinished, "Transfer finished with problems",
-                    $"{snapshot.FailedFiles} of {snapshot.TotalFiles} files couldn't be transferred.");
+                Notify(s => s.NotifyOnTransferFinished, L.T("Transfer finished with problems"),
+                    L.Plural(snapshot.TotalFiles, "{1} of {0} file couldn't be transferred.", "{1} of {0} files couldn't be transferred.", snapshot.FailedFiles));
                 break;
             case TransferState.Failed:
-                Notify(s => s.NotifyOnTransferFinished, "Transfer failed", snapshot.Error?.Message ?? "The transfer could not be completed.");
+                Notify(s => s.NotifyOnTransferFinished, L.T("Transfer failed"), snapshot.Error?.Message ?? L.T("The transfer could not be completed."));
                 break;
             case TransferState.Declined when session.Direction == TransferDirection.Send:
             case TransferState.Cancelled when snapshot.Error?.Kind == TransferErrorKind.CancelledByRemote:
-                Notify(s => s.NotifyOnTransferFinished, "Transfer stopped", snapshot.Error?.Message ?? "The transfer was stopped.");
+                Notify(s => s.NotifyOnTransferFinished, L.T("Transfer stopped"), snapshot.Error?.Message ?? L.T("The transfer was stopped."));
+
                 break;
         }
     }

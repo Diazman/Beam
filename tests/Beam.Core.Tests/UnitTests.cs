@@ -143,8 +143,8 @@ public class FormatTests
     [Fact]
     public void Counts()
     {
-        Assert.Equal("1 file", Format.Count(1, "file"));
-        Assert.Equal("1,024 files", Format.Count(1024, "file"));
+        Assert.Equal("1 file", Beam.Core.Localization.L.Plural(1, "{0} file", "{0} files"));
+        Assert.Equal("1,024 files", Beam.Core.Localization.L.Plural(1024, "{0} file", "{0} files"));
         Assert.Equal("2 folders, 1 file", Format.Contents(1, 2));
     }
 

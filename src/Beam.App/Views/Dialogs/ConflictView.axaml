@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.ConflictView"
              x:DataType="dlg:ConflictViewModel"
@@ -15,9 +16,9 @@
 
     <Border Classes="details" Padding="12,10">
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
-        <TextBlock Classes="caption" Text="Already there:" Margin="0,0,12,4" />
+        <TextBlock Classes="caption" Text="{l:T 'Already there:'}" Margin="0,0,12,4" />
         <TextBlock Grid.Column="1" Text="{Binding ExistingText}" FontSize="13" Margin="0,0,0,4" />
-        <TextBlock Grid.Row="1" Classes="caption" Text="Incoming:" Margin="0,0,12,0" />
+        <TextBlock Grid.Row="1" Classes="caption" Text="{l:T 'Incoming:'}" Margin="0,0,12,0" />
         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding IncomingText}" FontSize="13" />
       </Grid>
     </Border>
@@ -25,10 +26,10 @@
     <CheckBox Content="{Binding ApplyToAllText}" IsChecked="{Binding ApplyToAll}" IsVisible="{Binding HasMore}" />
 
     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
-      <Button Content="Skip" MinWidth="88" Command="{Binding SkipCommand}" ToolTip.Tip="Don't receive this file" />
-      <Button Content="Replace" MinWidth="88" Command="{Binding ReplaceCommand}" ToolTip.Tip="Overwrite the existing file" />
-      <Button Classes="accent" Content="Keep both" MinWidth="100" Command="{Binding KeepBothCommand}"
-              ToolTip.Tip="Save the incoming file with a new name" />
+      <Button Content="{l:T 'Skip'}" MinWidth="88" Command="{Binding SkipCommand}" ToolTip.Tip="{l:T 'Don\'t receive this file'}" />
+      <Button Content="{l:T 'Replace'}" MinWidth="88" Command="{Binding ReplaceCommand}" ToolTip.Tip="{l:T 'Overwrite the existing file'}" />
+      <Button Classes="accent" Content="{l:T 'Keep both'}" MinWidth="100" Command="{Binding KeepBothCommand}"
+              ToolTip.Tip="{l:T 'Save the incoming file with a new name'}" />
     </StackPanel>
   </StackPanel>
 </UserControl>

@@ -1,3 +1,5 @@
+using Beam.Core.Localization;
+
 namespace Beam.Core.Files;
 
 /// <summary>One file or folder to send.</summary>
@@ -37,9 +39,8 @@ public sealed class Manifest
     /// <summary>"report.pdf", "Photos", or "report.pdf and 2 more".</summary>
     public static string Describe(IReadOnlyList<string> rootNames) => rootNames.Count switch
     {
-        0 => "Nothing",
+        0 => L.T("Nothing"),
         1 => rootNames[0],
-        2 => $"{rootNames[0]} and 1 more",
-        _ => $"{rootNames[0]} and {rootNames.Count - 1} more",
+        _ => L.Plural(rootNames.Count - 1, "{1} and {0} more", "{1} and {0} more", rootNames[0]),
     };
 }

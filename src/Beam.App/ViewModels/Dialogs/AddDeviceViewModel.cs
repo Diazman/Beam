@@ -2,6 +2,7 @@ using Beam.App.Infrastructure;
 using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
+using Beam.Core.Localization;
 using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels.Dialogs;
@@ -19,7 +20,7 @@ public sealed class AddDeviceViewModel : DialogViewModel
     {
         _node = node;
         var addresses = node.GetLocalAddresses();
-        LocalAddresses = addresses.Count == 0 ? "Not connected to a network" : string.Join("   or   ", addresses);
+        LocalAddresses = addresses.Count == 0 ? L.T("Not connected to a network") : string.Join("   " + L.T("or") + "   ", addresses);
         ConnectCommand = new AsyncCommand(ConnectAsync, () => !IsBusy && Address.Trim().Length > 0);
         CancelCommand = new RelayCommand(() =>
         {
@@ -86,11 +87,11 @@ public sealed class AddDeviceViewModel : DialogViewModel
         }
         catch (OperationCanceledException)
         {
-            Error = "Connecting took too long. Check the address and that Beam is open on the other computer.";
+            Error = L.T("Connecting took too long. Check the address and that Beam is open on the other computer.");
         }
         catch (Exception ex)
         {
-            Error = "Couldn't connect to that address.";
+            Error = L.T("Couldn't connect to that address.");
             Log.Warn($"Manual connect to '{Address}' failed", ex);
         }
         finally
