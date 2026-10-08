@@ -23,9 +23,13 @@ public sealed class TransferViewModel : ObservableObject
     private string _currentFileText = "";
     private double _progress;
 
-    public TransferViewModel(TransferSession session, IPlatformServices platform, Action<TransferViewModel> dismiss)
+    public TransferViewModel(TransferSession session, IPlatformServices platform, Action<TransferViewModel> dismiss, Func<string, Task>? copy = null)
     {
         Session = session;
+        CopyTextCommand = new AsyncCommand(async () =>
+        {
+            if (Session.Text != null && copy != null) await copy(Session.Text);
+        });
         _platform = platform;
         _dismiss = dismiss;
         CancelCommand = new RelayCommand(Session.Cancel, () => Session.CanCancel);
@@ -146,6 +150,14 @@ public sealed class TransferViewModel : ObservableObject
 
     public RelayCommand ToggleDetailsCommand { get; }
 
+    /// <summary>Text transfers: copy the text again.</summary>
+    public AsyncCommand CopyTextCommand { get; }
+
+    /// <summary>The finished transfer was already announced (notification, counters).</summary>
+    internal bool Announced { get; set; }
+
+    public bool CanCopyText => Session.IsText && State == TransferState.Completed;
+
     /// <summary>Pulls the latest numbers from the engine. Called on the UI thread.</summary>
     public void Refresh()
     {
@@ -176,7 +188,7 @@ public sealed class TransferViewModel : ObservableObject
         foreach (var name in new[]
                  {
                      nameof(State), nameof(IsFinished), nameof(IsActive), nameof(IsSuccess), nameof(IsWarning), nameof(IsError),
-                     nameof(IsNeutral), nameof(IsIndeterminate), nameof(ShowProgress), nameof(CanOpen), nameof(CanOpenFile),
+                     nameof(IsNeutral), nameof(IsIndeterminate), nameof(ShowProgress), nameof(CanOpen), nameof(CanOpenFile), nameof(CanCopyText),
                      nameof(CanResume), nameof(CanCancel), nameof(CancelText), nameof(HasDetails), nameof(DetailsText), nameof(ItemTitle),
                  })
         {
@@ -212,6 +224,8 @@ public sealed class TransferViewModel : ObservableObject
                 if (s.TotalFiles <= 1) return IsSend ? "Sending" : "Receiving";
                 var current = Math.Min(s.TotalFiles, s.CompletedFiles + s.FailedFiles + 1);
                 return $"Transferring {current:N0} of {s.TotalFiles:N0} files";
+            case TransferState.Completed when Session.IsText:
+                return IsSend ? "Text sent" : "Text received";
             case TransferState.Completed:
                 var done = IsSend ? $"Sent {Format.Count(s.CompletedFiles, "file")}" : $"Received {Format.Count(s.CompletedFiles, "file")}";
                 if (s.CompletedFiles == 0 && s.TotalFiles == 0) done = IsSend ? "Sent" : "Received";

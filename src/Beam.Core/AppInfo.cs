@@ -8,7 +8,10 @@ public static class AppInfo
     public const string ProductName = "Beam";
 
     /// <summary>Version of the wire protocol. Bump when making incompatible changes.</summary>
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
+
+    /// <summary>First protocol version that can receive text (<see cref="Protocol.ConnectionPurpose.Text"/>).</summary>
+    public const int TextProtocolVersion = 2;
 
     /// <summary>Oldest protocol version this build can still talk to.</summary>
     public const int MinimumProtocolVersion = 1;

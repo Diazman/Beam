@@ -16,12 +16,22 @@ public sealed class HistoryItemViewModel
     private readonly HistoryEntry _entry;
     private readonly IPlatformServices _platform;
 
-    public HistoryItemViewModel(HistoryEntry entry, IPlatformServices platform)
+    public HistoryItemViewModel(HistoryEntry entry, IPlatformServices platform, Func<string, Task>? copy = null)
     {
         _entry = entry;
         _platform = platform;
         ShowCommand = new RelayCommand(Show);
+        CopyTextCommand = new AsyncCommand(async () =>
+        {
+            if (_entry.Text != null && copy != null) await copy(_entry.Text);
+        });
     }
+
+    public bool IsText => _entry.Text != null;
+
+    public bool CanCopyText => IsText && _entry.Status == HistoryStatus.Completed;
+
+    public AsyncCommand CopyTextCommand { get; }
 
     public bool IsSend => _entry.Direction == TransferDirection.Send;
 
@@ -35,6 +45,7 @@ public sealed class HistoryItemViewModel
         {
             var who = IsSend ? $"To {_entry.DeviceName}" : $"From {_entry.DeviceName}";
             var parts = new List<string> { who };
+            if (_entry.Text != null) return $"{who} · Text";
             if (_entry.FileCount > 0) parts.Add(Format.Count(_entry.FileCount, "file"));
             if (_entry.TotalBytes > 0) parts.Add(Format.Bytes(_entry.TotalBytes));
             return string.Join(" · ", parts);
@@ -114,7 +125,7 @@ public sealed class HistoryViewModel : ObservableObject
     public void Reload()
     {
         Items.Clear();
-        foreach (var entry in _store.Entries) Items.Add(new HistoryItemViewModel(entry, _platform));
+        foreach (var entry in _store.Entries) Items.Add(new HistoryItemViewModel(entry, _platform, _main.CopyToClipboardAsync));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasItems));
         ClearCommand.RaiseCanExecuteChanged();

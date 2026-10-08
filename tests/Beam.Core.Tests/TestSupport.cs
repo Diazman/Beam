@@ -42,6 +42,17 @@ public sealed class TestHandler : IIncomingTransferHandler
 
     public List<IncomingRequest> Requests { get; } = new();
 
+    public List<IncomingText> Texts { get; } = new();
+
+    /// <summary>What the receiving "user" does with text: true = read it, false = dismiss.</summary>
+    public bool ShowText { get; set; } = true;
+
+    public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken)
+    {
+        lock (Texts) Texts.Add(text);
+        return Task.FromResult(ShowText);
+    }
+
     public List<IReadOnlyList<FileConflict>> Conflicts { get; } = new();
 
     public bool ApprovalWasCancelled { get; private set; }

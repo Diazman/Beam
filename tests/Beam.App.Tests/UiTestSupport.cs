@@ -38,7 +38,7 @@ public sealed class FakeUi : IUiServices
 
     public int BringToFrontCount { get; private set; }
 
-    public string? Clipboard { get; private set; }
+    public string? Clipboard { get; set; }
 
     public Task<IReadOnlyList<string>> PickFilesAsync() => Task.FromResult<IReadOnlyList<string>>(FilesToPick.ToList());
 
@@ -53,6 +53,8 @@ public sealed class FakeUi : IUiServices
         Clipboard = text;
         return Task.CompletedTask;
     }
+
+    public Task<string?> GetClipboardTextAsync() => Task.FromResult(Clipboard);
 }
 
 public sealed class FakePlatform : IPlatformServices

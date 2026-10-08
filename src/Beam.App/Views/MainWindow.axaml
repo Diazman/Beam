@@ -42,6 +42,12 @@
     <DataTemplate DataType="dlg:WelcomeViewModel">
       <dviews:WelcomeView />
     </DataTemplate>
+    <DataTemplate DataType="dlg:SendTextViewModel">
+      <dviews:SendTextView />
+    </DataTemplate>
+    <DataTemplate DataType="dlg:IncomingTextViewModel">
+      <dviews:IncomingTextView />
+    </DataTemplate>
     <DataTemplate DataType="dlg:UpgradeViewModel">
       <dviews:UpgradeView />
     </DataTemplate>

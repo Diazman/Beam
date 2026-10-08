@@ -52,6 +52,9 @@
                     <Button Grid.Column="3" Content="Show" VerticalAlignment="Center" MinWidth="72"
                             Command="{Binding ShowCommand}" IsVisible="{Binding CanShow}"
                             ToolTip.Tip="Show the received files in their folder" />
+                    <Button Grid.Column="3" Content="Copy" VerticalAlignment="Center" MinWidth="72"
+                            Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}"
+                            ToolTip.Tip="Copy the text again" />
                   </Grid>
                 </Border>
               </DataTemplate>

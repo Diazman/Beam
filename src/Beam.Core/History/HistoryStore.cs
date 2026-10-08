@@ -9,6 +9,9 @@ public sealed class HistoryStore
 {
     public const int MaxEntries = 500;
 
+    /// <summary>Longest text kept in history (the full text is only in the transfer).</summary>
+    public const int MaxTextLength = 4000;
+
     private readonly string _path;
     private readonly object _gate = new();
     private List<HistoryEntry> _entries;

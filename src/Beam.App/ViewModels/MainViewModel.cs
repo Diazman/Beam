@@ -245,6 +245,28 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
     }
 
+    internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);
+
+    /// <summary>Sends text to one device. Returns false (after telling the user why) if it couldn't start.</summary>
+    public async Task<bool> StartSendTextAsync(DeviceInfo device, string text)
+    {
+        try
+        {
+            Node.SendText(device, text);
+            return true;
+        }
+        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
+        {
+            if (!await ShowUpgradeAsync(ex.Error.Message)) return false;
+            return await StartSendTextAsync(device, text);
+        }
+        catch (TransferException ex)
+        {
+            await ShowDialogAsync(new ConfirmViewModel("Can't send this text", ex.Error.Message, "OK", ""));
+            return false;
+        }
+    }
+
     public async Task<DeviceInfo?> ConnectByAddressAsync() =>
         await ShowDialogAsync(new AddDeviceViewModel(Node)) as DeviceInfo;
 
@@ -320,6 +342,30 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     // ----- IIncomingTransferHandler (called by the engine on background threads) -----
 
+    public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken) =>
+        Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            if (text.IsTrusted)
+            {
+                // From a trusted device: no prompt — copy it and say so.
+                await _ui.CopyToClipboardAsync(text.Text);
+                var link = IncomingTextViewModel.TryGetLink(text.Text);
+                _platform.ShowNotification($"{(link != null ? "Link" : "Text")} from {text.SenderName} copied",
+                    text.Text.Length > 120 ? text.Text[..117] + "…" : text.Text,
+                    () => Dispatcher.UIThread.Post(_ui.BringToFront));
+                return true;
+            }
+
+            var dialog = new IncomingTextViewModel(text.SenderName, text.Text, _ui, _platform);
+            if (!_ui.IsWindowActive)
+            {
+                Notify(s => s.NotifyOnIncomingRequest, dialog.Title, "Open Beam to read it.", bringToFront: false);
+                _ui.BringToFront();
+            }
+
+            return await ShowDialogAsync(dialog, cancellationToken) is true;
+        });
+
     public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
@@ -381,7 +427,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private void AddTransfer(TransferSession session)
     {
         if (Transfers.Any(t => t.Session == session)) return;
-        var vm = new TransferViewModel(session, _platform, Dismiss);
+        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync);
         Transfers.Insert(0, vm);
         session.StateChanged += s => Dispatcher.UIThread.Post(() => OnSessionStateChanged(vm));
         OnTransfersChanged();
@@ -403,6 +449,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         if (vm.IsFinished) AnnounceFinished(vm);
+        else vm.Announced = false; // "Try again" after a failure: announce the new outcome
         OnTransfersChanged();
         if (!vm.IsFinished) _progressTimer.Start();
     }
@@ -445,6 +492,9 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     private void AnnounceFinished(TransferViewModel vm)
     {
+        // State-change events can arrive more than once for the same final state; announce and count each transfer once.
+        if (vm.Announced) return;
+        vm.Announced = true;
         var session = vm.Session;
         var snapshot = session.GetSnapshot();
         if (snapshot.State == TransferState.Completed)

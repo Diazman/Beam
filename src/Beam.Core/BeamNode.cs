@@ -36,6 +36,7 @@ public sealed class BeamNode : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private Task? _manualPeerTask;
     private bool _started;
+    private int _disposed;
 
     private BeamNode(BeamNodeOptions options)
     {
@@ -114,6 +115,16 @@ public sealed class BeamNode : IAsyncDisposable
             throw new TransferException(TransferErrorKind.SendLimitReached,
                 $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.");
         return Transfers.Send(device, paths, () => Discovery.Find(device.Id) ?? device);
+    }
+
+    /// <summary>Sends a piece of text or a link (counts as a send for the free edition).</summary>
+    public TransferSession SendText(DeviceInfo device, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Nothing to send.", nameof(text));
+        if (!Quota.TryUse())
+            throw new TransferException(TransferErrorKind.SendLimitReached,
+                $"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.");
+        return Transfers.SendText(device, text, () => Discovery.Find(device.Id) ?? device);
     }
 
     /// <summary>
@@ -206,6 +217,7 @@ public sealed class BeamNode : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1) return; // safe to call more than once
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
         Discovery.Dispose();
@@ -339,12 +351,16 @@ public sealed class BeamNode : IAsyncDisposable
             Message = snapshot.Error?.Message,
             Folder = session.DestinationFolder,
             Paths = session.SavedRootPaths.ToList(),
+            Text = session.Text is { } text ? (text.Length > HistoryStore.MaxTextLength ? text[..HistoryStore.MaxTextLength] : text) : null,
         });
     }
 
     private sealed class DelegatingHandler : IIncomingTransferHandler
     {
         public IIncomingTransferHandler? Inner { get; set; }
+
+        public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken) =>
+            Inner?.ReceiveTextAsync(text, session, cancellationToken) ?? Task.FromResult(false);
 
         public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
             Inner?.RequestApprovalAsync(request, session, cancellationToken) ?? Task.FromResult(IncomingDecision.Decline());

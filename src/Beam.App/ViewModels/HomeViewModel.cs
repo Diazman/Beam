@@ -152,6 +152,7 @@ public sealed class HomeViewModel : ObservableObject
         ClearCommand = new RelayCommand(ClearItems, () => Items.Count > 0);
         SendCommand = new AsyncCommand(SendAsync, () => CanSend);
         UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
+        SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
         RefreshCommand = new RelayCommand(Refresh);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
@@ -294,6 +295,9 @@ public sealed class HomeViewModel : ObservableObject
 
     public AsyncCommand UpgradeCommand { get; }
 
+    /// <summary>Opens the "send text" box for the chosen computers (pre-filled with copied text, if any).</summary>
+    public AsyncCommand SendTextCommand { get; }
+
     public RelayCommand RefreshCommand { get; }
 
     public AsyncCommand ConnectByAddressCommand { get; }
@@ -389,6 +393,7 @@ public sealed class HomeViewModel : ObservableObject
 
     private void OnSelectionChanged()
     {
+        SendTextCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(SelectedDevice));
         OnPropertyChanged(nameof(SelectedDevices));
         UpdateSendState();
@@ -547,6 +552,21 @@ public sealed class HomeViewModel : ObservableObject
         }
 
         if (vm != null && !vm.IsSelected) SelectDevice(vm);
+    }
+
+    private async Task SendTextAsync()
+    {
+        if (_selected.Count == 0) return;
+        var targets = _selected.Select(d => d.Device).ToList();
+        var clip = await _ui.GetClipboardTextAsync();
+        var initial = clip is { Length: > 0 and <= 2000 } ? clip : "";
+        if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, initial, _ui)) is not string text) return;
+        if (!_node.Quota.CanSend(targets.Count))
+        {
+            if (!await _main.ShowUpgradeAsync($"You've used today's {FreeLimits.SendsPerDay} free sends. Upgrade for unlimited sends, or send again tomorrow.")) return;
+        }
+
+        foreach (var target in targets) await _main.StartSendTextAsync(target, text);
     }
 
     private async Task SendAsync()

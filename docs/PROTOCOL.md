@@ -58,3 +58,19 @@ Paths always use `/`. Directory entries create (empty) folders; files in nested 
   that has state for that transfer from the **same certificate** and identical entry list replies with offsets
   instead of asking its user again. Otherwise it treats the offer as new.
 - Either side should treat 60 s without progress as a lost connection. TCP keep-alive is enabled.
+
+## Text and links (protocol 2)
+
+A connection whose `Hello.purpose` is `"text"` carries a single piece of text instead of files:
+
+```
+sender → Hello {purpose:"text", protocol:2, …}      receiver → HelloReply
+sender → Text  {transferId, text}                    (frame type 13, UTF-8 JSON, up to 256 K characters)
+receiver → Result {completed:1}                      the text was shown (or copied, for a trusted sender)
+        or Cancel {reason:"declined"}                dismissed or timed out
+```
+
+- The sender checks `HelloReply.protocol ≥ 2` before sending the `Text` frame and tells the user to update Beam on the
+  other device otherwise. Protocol-1 receivers would reject the unknown frame type.
+- Receivers show text from trusted devices without asking (copied to the clipboard with a notification); otherwise they
+  show it and let the user copy it or, for a single `http(s)` link, open it. Other URI schemes are never opened.

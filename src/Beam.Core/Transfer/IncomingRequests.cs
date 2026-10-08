@@ -65,9 +65,25 @@ public sealed class FileConflict
     public required DateTime IncomingModifiedUtc { get; init; }
 }
 
+/// <summary>A piece of text or a link sent by another device.</summary>
+public sealed class IncomingText
+{
+    public required string SenderName { get; init; }
+
+    public required string SenderFingerprint { get; init; }
+
+    public required string Text { get; init; }
+
+    /// <summary>The sender is a trusted device: show the text without asking (e.g. copy it and notify).</summary>
+    public required bool IsTrusted { get; init; }
+}
+
 /// <summary>Implemented by the UI (or by tests) to involve the user in incoming transfers.</summary>
 public interface IIncomingTransferHandler
 {
+    /// <summary>Shows received text. Returns false if the user dismissed it unread (the sender sees "declined").</summary>
+    Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken);
+
     /// <summary>Ask the user to accept or decline. Cancelled if the sender gives up or the request expires.</summary>
     Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken);
 

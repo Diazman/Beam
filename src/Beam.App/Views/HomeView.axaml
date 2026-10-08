@@ -127,6 +127,14 @@
               </Button>
               <Button Classes="subtle" Content="Clear" Command="{Binding ClearCommand}" />
             </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasNoItems}">
+              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="Send a message or a link to the chosen computer">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{StaticResource IconEdit}" Width="12" Height="12" />
+                  <TextBlock Text="Send text or link" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
           </Grid>
 
           <!-- Drop zone -->

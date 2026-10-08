@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Beam.App.Services;
 using Beam.App.ViewModels;
@@ -70,6 +71,18 @@ public partial class MainWindow : Window, IUiServices
     public async Task CopyToClipboardAsync(string text)
     {
         if (Clipboard != null) await Clipboard.SetTextAsync(text);
+    }
+
+    public async Task<string?> GetClipboardTextAsync()
+    {
+        try
+        {
+            return Clipboard == null ? null : await Clipboard.TryGetTextAsync();
+        }
+        catch
+        {
+            return null; // another app holds the clipboard
+        }
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
