@@ -172,11 +172,12 @@ public class PhoneLinkTests
         }
 
         // The two folder files count as done; the single file is still waiting.
+        // (The server updates progress after writing, so the client can finish reading first: wait for it.)
+        await Wait.UntilAsync(() => session.GetSnapshot().CompletedFiles == 2, because: "folder files counted");
         var snapshot = session.GetSnapshot();
-        Assert.Equal(2, snapshot.CompletedFiles);
         Assert.NotEqual(TransferState.Completed, session.State);
         using (await client.GetAsync("api/files/" + files.First(f => f.GetProperty("name").GetString() == "notes.txt").GetProperty("id").GetString())) { }
-        Assert.Equal(TransferState.Completed, session.State);
+        await Wait.UntilAsync(() => session.State == TransferState.Completed, because: "all files downloaded");
         Assert.Equal(snapshot.TotalBytes, session.GetSnapshot().TransferredBytes);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("api/folders/5")).StatusCode);
     }
