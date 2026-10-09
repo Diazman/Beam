@@ -56,3 +56,20 @@ jobs:
           path: |
             artifacts/publish/${{ matrix.runtime }}/Beam.exe
             artifacts/installer/*.exe
+
+  store-package:
+    name: Store package (MSIX)
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build MSIX bundle (validates the manifest and builds the context-menu handler)
+        shell: pwsh
+        run: ./packaging/build-msix.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beam-msix
+          path: artifacts/msix/*.msixbundle
