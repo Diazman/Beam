@@ -6,7 +6,8 @@ namespace Beam.App.Services;
 /// <c>Beam.exe --send "%1"</c> (installer) or the Windows 11 menu handler in native/BeamContextMenu (Store), which
 /// passes very long selections as <c>--send-list &lt;file&gt;</c> (see <see cref="ExpandListFiles"/>).
 /// </summary>
-public sealed record CommandLine(bool StartMinimized, IReadOnlyList<string> SendPaths, bool SoftwareRendering = false)
+/// <param name="SendText">Text or a link to send (Android: shared to Beam from another app).</param>
+public sealed record CommandLine(bool StartMinimized, IReadOnlyList<string> SendPaths, bool SoftwareRendering = false, string? SendText = null)
 {
     /// <summary>
     /// Replaces <c>--send-list &lt;file&gt;</c> (one UTF-8 path per line, written to the temp folder by the Explorer menu

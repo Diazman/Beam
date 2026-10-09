@@ -5,6 +5,7 @@ using Android.Content.PM;
 using Android.Media;
 using Android.Net.Wifi;
 using Android.OS;
+using Avalonia.Threading;
 using Beam.App.Services;
 using Beam.App.ViewModels;
 using Beam.App.Views;
@@ -25,6 +26,7 @@ internal static class AndroidHost
     private static MainViewModel? _viewModel;
     private static MobileView? _view;
     private static WifiManager.MulticastLock? _multicastLock;
+    private static SharedItems? _pendingShare;
 
     private static Context Context => global::Android.App.Application.Context;
 
@@ -66,9 +68,24 @@ internal static class AndroidHost
         _node.Transfers.SessionFinished += AddToMediaLibrary;
         AcquireMulticastLock();
         _viewModel = new MainViewModel(_node, new AndroidPlatformServices(), view, new UnavailableStoreService());
-        _ = _viewModel.InitializeAsync(new CommandLine(false, Array.Empty<string>()));
+        var share = Interlocked.Exchange(ref _pendingShare, null);
+        _ = _viewModel.InitializeAsync(ToCommandLine(share));
         return _viewModel;
     }
+
+    /// <summary>Puts files or text shared from another app on the Send screen (once Beam's screen exists).</summary>
+    public static void Share(SharedItems? share)
+    {
+        if (share == null) return;
+        Log.Info($"Shared to Beam: {share.Files.Count} file(s){(share.Text != null ? ", text" : "")}");
+        if (_viewModel is { } viewModel)
+            Dispatcher.UIThread.Post(() => viewModel.HandleCommandLine(ToCommandLine(share)));
+        else
+            _pendingShare = share;
+    }
+
+    private static CommandLine ToCommandLine(SharedItems? share) =>
+        new(false, share?.Files ?? Array.Empty<string>(), SendText: share?.Text);
 
     public static void SetForeground(bool foreground)
     {

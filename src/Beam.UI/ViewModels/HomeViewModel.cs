@@ -141,6 +141,7 @@ public sealed class HomeViewModel : ObservableObject
     private readonly MainViewModel _main;
     private readonly DispatcherTimer _searchHintTimer;
     private readonly List<DeviceViewModel> _selected = new();
+    private string? _sharedText;
     private bool _selectionIsAutomatic;
     private bool _showSearchHint;
 
@@ -153,6 +154,7 @@ public sealed class HomeViewModel : ObservableObject
         ChooseFilesCommand = new AsyncCommand(ChooseFilesAsync);
         ChooseFolderCommand = new AsyncCommand(ChooseFolderAsync);
         ClearCommand = new RelayCommand(ClearItems, () => Items.Count > 0);
+        ClearSharedTextCommand = new RelayCommand(() => SharedText = null);
         SendCommand = new AsyncCommand(SendAsync, () => CanSend);
         UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
         SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
@@ -248,6 +250,29 @@ public sealed class HomeViewModel : ObservableObject
 
     public bool HasNoItems => Items.Count == 0;
 
+    /// <summary>Text or a link shared to Beam from another app; Send sends it (after any files).</summary>
+    public string? SharedText
+    {
+        get => _sharedText;
+        set
+        {
+            if (!SetProperty(ref _sharedText, string.IsNullOrWhiteSpace(value) ? null : value)) return;
+            OnPropertyChanged(nameof(HasSharedText));
+            OnPropertyChanged(nameof(ShowDropZone));
+            OnPropertyChanged(nameof(SharedTextIsLink));
+            UpdateSendState();
+        }
+    }
+
+    public bool HasSharedText => _sharedText != null;
+
+    public bool SharedTextIsLink => _sharedText is { } text && Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
+
+    /// <summary>The empty state (drop zone, "Send text or link"): nothing chosen to send yet.</summary>
+    public bool ShowDropZone => Items.Count == 0 && _sharedText == null;
+
+    public RelayCommand ClearSharedTextCommand { get; }
+
     public long TotalBytes => Items.Sum(i => i.Size);
 
     public int TotalFiles => Items.Sum(i => i.IsFolder ? i.FileCount : 1);
@@ -271,12 +296,18 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
-    public bool CanSend => _selected.Count > 0 && Items.Count > 0;
+    public bool CanSend => _selected.Count > 0 && (Items.Count > 0 || _sharedText != null);
 
     public string SendSummary
     {
         get
         {
+            if (Items.Count == 0 && _sharedText != null)
+            {
+                if (_selected.Count == 0) return L.T("Choose a computer to send to.");
+                return SharedTextIsLink ? L.T("Send the link to {0}", TargetsText) : L.T("Send the text to {0}", TargetsText);
+            }
+
             if (Items.Count == 0 && _selected.Count == 0) return L.T("Choose a computer and add files to send.");
             if (Items.Count == 0) return L.T("Add files or folders to send to {0}.", TargetsText);
             if (_selected.Count == 0) return L.T("Choose a computer to send to.");
@@ -489,6 +520,7 @@ public sealed class HomeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasItems));
         OnPropertyChanged(nameof(HasNoItems));
+        OnPropertyChanged(nameof(ShowDropZone));
         OnPropertyChanged(nameof(TotalBytes));
         OnPropertyChanged(nameof(TotalFiles));
         OnPropertyChanged(nameof(IsMeasuring));
@@ -607,8 +639,20 @@ public sealed class HomeViewModel : ObservableObject
             if (!await _main.ShowUpgradeAsync(reason)) return;
         }
 
-        var started = false;
-        foreach (var target in targets) started |= await _main.StartSendAsync(target, paths);
-        if (started) ClearItems();
+        var text = _sharedText;
+        if (paths.Count > 0)
+        {
+            var started = false;
+            foreach (var target in targets) started |= await _main.StartSendAsync(target, paths);
+            if (!started) return;
+            ClearItems();
+        }
+
+        if (text != null)
+        {
+            var sent = false;
+            foreach (var target in targets) sent |= await _main.StartSendTextAsync(target, text);
+            if (sent) SharedText = null;
+        }
     }
 }
