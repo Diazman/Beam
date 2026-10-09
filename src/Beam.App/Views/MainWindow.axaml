@@ -62,7 +62,7 @@
               BorderBrush="{DynamicResource DividerBrush}"
               BorderThickness="0,0,1,0">
         <StackPanel Margin="0,18,0,0" Spacing="4" HorizontalAlignment="Center">
-          <Image Source="/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
+          <Image Source="avares://Beam.UI/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
                  ToolTip.Tip="Beam" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />

@@ -102,9 +102,10 @@ testable pull requests. Every change keeps the existing guarantees:
 ## Stage 4 — Android app
 
 ### 4.0 Restructure the solution (before Android code)
-- **Split `Beam.App` into:**
+- **Split `Beam.App` into:** (done: `Beam.UI` holds the shared views, view models, styles and translations; the
+  desktop host kept the name `Beam.App` so the installer, Store packaging and scripts are unchanged)
   - `Beam.UI`: shared views, view models and styles;
-  - `Beam.Desktop`: Windows/Linux host, tray, MSIX bits;
+  - `Beam.App`: Windows/Linux host, tray, MSIX bits;
   - `Beam.Android`: Android host.
 - **Mobile layout:** Avalonia uses a single-view lifetime on phones. Add a `MainView` with bottom navigation
   (Send · Received · Devices · Settings) that reuses the existing view models. The desktop keeps `MainWindow`.

@@ -23,9 +23,3 @@ public interface IPlatformServices
     /// <summary>Shows a system notification. <paramref name="onActivated"/> runs (on any thread) when it is clicked.</summary>
     void ShowNotification(string title, string message, Action? onActivated = null);
 }
-
-public static class PlatformServices
-{
-    public static IPlatformServices Create() =>
-        OperatingSystem.IsWindows() ? new WindowsPlatformServices() : new GenericPlatformServices();
-}

@@ -67,7 +67,7 @@ lives in the package's own folder, and the firewall rule is installed by the pac
 
    After the app is published, copy its **Store ID** (Product management > Product identity, e.g.
    `9NXXXXXXXXXX`) into the `StoreProductId` constant in
-   `src/Beam.App/Services/ProService.cs` — so the GitHub builds' "Get Beam from the Microsoft Store" button
+   `src/Beam.UI/Services/ProService.cs` — so the GitHub builds' "Get Beam from the Microsoft Store" button
    opens Beam's Store page directly instead of a Store search.
 
 7. **Privacy policy URL.** The Store requires a public web page. If this repository is public you can use

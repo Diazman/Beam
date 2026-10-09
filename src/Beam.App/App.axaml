@@ -10,13 +10,13 @@
         <ColorPaletteResources x:Key="Dark" Accent="#FF4C8DFF" />
       </FluentTheme.Palettes>
     </FluentTheme>
-    <StyleInclude Source="avares://Beam/Styles/Controls.axaml" />
+    <StyleInclude Source="avares://Beam.UI/Styles/Controls.axaml" />
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceInclude Source="avares://Beam/Styles/Colors.axaml" />
-        <ResourceInclude Source="avares://Beam/Styles/Icons.axaml" />
+        <ResourceInclude Source="avares://Beam.UI/Styles/Colors.axaml" />
+        <ResourceInclude Source="avares://Beam.UI/Styles/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>
