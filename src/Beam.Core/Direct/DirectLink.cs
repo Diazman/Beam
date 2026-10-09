@@ -39,7 +39,23 @@ public static class DirectRolesText
 }
 
 /// <summary>The name and passphrase of a direct network (WPA2), shared only with the device that should join.</summary>
-public sealed record DirectNetwork(string Ssid, string Passphrase);
+public sealed record DirectNetwork(string Ssid, string Passphrase)
+{
+    /// <summary>The text of a "join this Wi-Fi" QR code, which iPhone and Android cameras understand.</summary>
+    public string ToWifiQrText() => $"WIFI:T:WPA;S:{Escape(Ssid)};P:{Escape(Passphrase)};;";
+
+    private static string Escape(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            if (c is '\\' or ';' or ',' or ':' or '"') builder.Append('\\');
+            builder.Append(c);
+        }
+
+        return builder.ToString();
+    }
+}
 
 /// <summary>
 /// The platform's direct Wi-Fi link (Wi-Fi Direct on Windows and Android). Beam.Core decides when to use it;

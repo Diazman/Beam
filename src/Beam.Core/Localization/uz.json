@@ -446,5 +446,15 @@
   "This phone couldn't start a direct connection. Turn on Wi-Fi and Location, then try again.": "Bu telefon toʻgʻridan-toʻgʻri ulanishni boshlay olmadi. Wi-Fi va joylashuvni yoqib, qayta urinib koʻring.",
   "{0} can't connect directly. Both devices need the latest Beam, and phones need Android 10 or newer.": "{0} toʻgʻridan-toʻgʻri ulana olmaydi. Ikkala qurilmada Beam'ning soʻnggi versiyasi, telefonlarda esa Android 10 yoki undan yangisi boʻlishi kerak.",
   "{0} couldn't join the direct connection.": "{0} toʻgʻridan-toʻgʻri ulanishga qoʻshila olmadi.",
-  "{0} couldn't start a direct connection.": "{0} toʻgʻridan-toʻgʻri ulanishni boshlay olmadi."
+  "{0} couldn't start a direct connection.": "{0} toʻgʻridan-toʻgʻri ulanishni boshlay olmadi.",
+  "First, join this computer's Wi-Fi": "Avval bu kompyuterning Wi-Fi'siga ulaning",
+  "Getting the address on this computer's Wi-Fi ready…": "Bu kompyuter Wi-Fi'sidagi manzil tayyorlanmoqda…",
+  "Network:": "Tarmoq:",
+  "No Wi-Fi network? Connect directly": "Wi-Fi tarmogʻi yoʻqmi? Toʻgʻridan-toʻgʻri ulaning",
+  "Or join it in the phone's Wi-Fi settings:": "Yoki telefonning Wi-Fi sozlamalarida ulaning:",
+  "Password:": "Parol:",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Bu kodni telefon kamerasi bilan skanerlang va \"Ulanish\"ni bosing. Soʻng Beam'ni ochish uchun pastdagi kodni skanerlang.",
+  "Starting the direct connection…": "Toʻgʻridan-toʻgʻri ulanish boshlanmoqda…",
+  "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Bu kompyuter telefon uchun oʻz Wi-Fi'sini yaratadi: iPhone va Android bilan istalgan joyda ishlaydi. Telefon unga ulanganda internet boʻlmaydi.",
+  "Use the normal Wi-Fi instead": "Oddiy Wi-Fi'dan foydalanish"
 }

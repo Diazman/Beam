@@ -31,6 +31,34 @@
         </Grid>
       </Border>
 
+      <Border Classes="card" IsVisible="{Binding IsDirectStarting}" Padding="20">
+        <TextBlock Text="{l:T 'Starting the direct connection…'}" />
+      </Border>
+      <Border Classes="card" IsVisible="{Binding IsDirect}" Padding="24">
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Background="White" CornerRadius="12" Padding="14" VerticalAlignment="Top">
+            <Path Data="{Binding WifiQr}" Fill="Black" Stretch="Uniform" Width="168" Height="168" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="8">
+            <TextBlock Classes="h3" Text="{l:T 'First, join this computer\'s Wi-Fi'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="{l:T 'Scan this code with the phone\'s camera and tap Join. Then scan the code below to open Beam.'}" />
+            <TextBlock Classes="caption" Text="{l:T 'Or join it in the phone\'s Wi-Fi settings:'}" Margin="0,4,0,0" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="caption" Text="{l:T 'Network:'}" VerticalAlignment="Center" />
+              <SelectableTextBlock Text="{Binding DirectNetworkName}" FontWeight="SemiBold" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="caption" Text="{l:T 'Password:'}" VerticalAlignment="Center" />
+              <SelectableTextBlock Text="{Binding DirectPassword}" FontWeight="SemiBold" />
+            </StackPanel>
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsWaitingForDirectAddress}"
+                       Text="{l:T 'Getting the address on this computer\'s Wi-Fi ready…'}" />
+            <Button Content="{l:T 'Use the normal Wi-Fi instead'}" Command="{Binding StopDirectCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
       <!-- On -->
       <Border Classes="card" IsVisible="{Binding IsOn}" Padding="24">
         <Grid ColumnDefinitions="Auto,*">
@@ -64,6 +92,17 @@
         </Grid>
       </Border>
 
+      <!-- No shared Wi-Fi (or an iPhone): this computer makes its own Wi-Fi with Wi-Fi Direct -->
+      <Border Classes="card" IsVisible="{Binding OffersDirect}" Padding="20">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="4" VerticalAlignment="Center">
+            <TextBlock Classes="h3" Text="{l:T 'No Wi-Fi network? Connect directly'}" TextWrapping="Wrap" />
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{l:T 'This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it\'s connected to it.'}" />
+          </StackPanel>
+          <Button Grid.Column="1" Content="{l:T 'Connect directly'}" Command="{Binding ConnectDirectlyCommand}" Margin="16,0,0,0" VerticalAlignment="Center" />
+        </Grid>
+      </Border>
       <!-- Share -->
       <StackPanel Spacing="10">
         <TextBlock Classes="h2" Text="{l:T 'Send to your phone'}" />

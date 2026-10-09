@@ -46,6 +46,9 @@ public sealed class DirectManager
         _transfers.DirectHandler = HandleRequestAsync;
     }
 
+    /// <summary>Stands for a phone's web browser (Phone page) using this device's direct network.</summary>
+    private const string BrowserUser = "phone-browser";
+
     /// <summary>The preferred method or the direct link changed (raised on a background thread).</summary>
     public event Action? Changed;
 
@@ -118,6 +121,29 @@ public sealed class DirectManager
         }
 
         return true;
+    }
+
+    /// <summary>This device can start a direct network that phones join without an app (iPhone: by scanning a Wi-Fi code).</summary>
+    public bool CanHost => Roles.HasFlag(DirectRoles.Host);
+
+    /// <summary>
+    /// Starts this device's direct network for the Phone page: the phone joins it with the returned name and
+    /// passphrase (shown as a Wi-Fi QR code) and then opens the page on this device's direct address.
+    /// </summary>
+    public async Task<DirectNetwork> HostForBrowserAsync(CancellationToken cancellationToken)
+    {
+        if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't connect directly."));
+        var network = await _link.HostAsync(cancellationToken).ConfigureAwait(false);
+        _linkedPeers[BrowserUser] = 0;
+        DirectAddresses.Invalidate();
+        Changed?.Invoke();
+        return network;
+    }
+
+    /// <summary>The Phone page no longer needs the direct network (stopped unless a transfer still uses it).</summary>
+    public void StopForBrowser()
+    {
+        if (_linkedPeers.TryRemove(BrowserUser, out _)) StopLinkIfUnused();
     }
 
     /// <summary>The Connection setting changed: forget per-device choices and switch running transfers.</summary>

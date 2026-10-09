@@ -4,6 +4,7 @@ using Beam.App.Infrastructure;
 using Beam.App.Services;
 using Beam.Core;
 using Beam.Core.Diagnostics;
+using Beam.Core.Direct;
 using Beam.Core.Localization;
 using Beam.Core.Phone;
 using Beam.Core.Transfer;
@@ -29,6 +30,10 @@ public sealed class PhoneViewModel : ObservableObject
     private string _link = "";
     private string _problem = "";
     private string _copyStatus = "";
+    private DirectNetwork? _directNetwork;
+    private bool _directStarting;
+    private Geometry? _wifiQr;
+    private readonly DispatcherTimer _directTimer;
 
     public PhoneViewModel(BeamNode node, IUiServices ui, MainViewModel main)
     {
@@ -41,6 +46,10 @@ public sealed class PhoneViewModel : ObservableObject
         ShareFilesCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFilesAsync()));
         ShareFolderCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFoldersAsync()));
         StopSharingCommand = new RelayCommand(() => _node.PhoneLink.StopSharing());
+        ConnectDirectlyCommand = new AsyncCommand(ConnectDirectlyAsync);
+        StopDirectCommand = new RelayCommand(StopDirect);
+        // The computer's direct-network address appears a moment after the network starts.
+        _directTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh());
 
         _node.PhoneLink.Activity += () => Dispatcher.UIThread.Post(() =>
         {
@@ -111,6 +120,34 @@ public sealed class PhoneViewModel : ObservableObject
         private set => SetProperty(ref _copyStatus, value);
     }
 
+    /// <summary>This computer can create its own Wi-Fi for a phone (Wi-Fi Direct): for iPhones, or when there is no shared Wi-Fi.</summary>
+    public bool CanConnectDirectly => _node.Direct.CanHost;
+
+    public bool OffersDirect => IsOn && CanConnectDirectly && !IsDirect && !_directStarting;
+
+    /// <summary>Phones join this computer's own Wi-Fi network instead of a shared one.</summary>
+    public bool IsDirect => _directNetwork != null;
+
+    public bool IsDirectStarting => _directStarting;
+
+    /// <summary>"Join this Wi-Fi" code for the phone's camera.</summary>
+    public Geometry? WifiQr
+    {
+        get => _wifiQr;
+        private set => SetProperty(ref _wifiQr, value);
+    }
+
+    public string DirectNetworkName => _directNetwork?.Ssid ?? "";
+
+    public string DirectPassword => _directNetwork?.Passphrase ?? "";
+
+    /// <summary>The page's address on the direct network isn't known yet.</summary>
+    public bool IsWaitingForDirectAddress => IsDirect && Link.Length == 0;
+
+    public AsyncCommand ConnectDirectlyCommand { get; }
+
+    public RelayCommand StopDirectCommand { get; }
+
     public RelayCommand TurnOnCommand { get; }
 
     public AsyncCommand TurnOffCommand { get; }
@@ -166,8 +203,44 @@ public sealed class PhoneViewModel : ObservableObject
         Refresh();
     }
 
+    private async Task ConnectDirectlyAsync()
+    {
+        if (!IsOn || IsDirect || _directStarting) return;
+        _directStarting = true;
+        Problem = "";
+        Refresh();
+        try
+        {
+            var network = await _node.Direct.HostForBrowserAsync(CancellationToken.None);
+            _directNetwork = network;
+            WifiQr = QrCode.Create(network.ToWifiQrText()).Geometry;
+            _directTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Direct network for the phone failed", ex);
+            Problem = ex is DirectLinkException ? ex.Message : L.T("Couldn't connect directly. Beam continues over the network.");
+        }
+        finally
+        {
+            _directStarting = false;
+            Refresh();
+        }
+    }
+
+    private void StopDirect()
+    {
+        if (_directNetwork == null) return;
+        _directNetwork = null;
+        WifiQr = null;
+        _directTimer.Stop();
+        _node.Direct.StopForBrowser();
+        Refresh();
+    }
+
     private async Task TurnOffAsync()
     {
+        StopDirect();
         _idleTimer.Stop();
         await _node.PhoneLink.StopAsync();
         Refresh();
@@ -185,6 +258,13 @@ public sealed class PhoneViewModel : ObservableObject
         if (IsOn)
         {
             var links = _node.PhoneLink.GetLinks(_node.GetLocalAddresses());
+            if (IsDirect)
+            {
+                // Only the address on this computer's own Wi-Fi: the phone has no other network then.
+                links = links.Where(l => System.Net.IPAddress.TryParse(new Uri(l).Host, out var ip) && _node.Transfers.IsDirectAddress(ip)).ToList();
+                if (links.Count > 0) _directTimer.Stop();
+            }
+
             var link = links.FirstOrDefault() ?? "";
             if (link != Link)
             {
@@ -197,7 +277,7 @@ public sealed class PhoneViewModel : ObservableObject
                 else
                 {
                     Qr = null;
-                    Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
+                    if (!IsDirect) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
                 }
             }
 
@@ -214,6 +294,8 @@ public sealed class PhoneViewModel : ObservableObject
                  {
                      nameof(IsOn), nameof(IsOff), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText),
                      nameof(IsConnected), nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
+                     nameof(CanConnectDirectly), nameof(OffersDirect), nameof(IsDirect), nameof(IsDirectStarting),
+                     nameof(DirectNetworkName), nameof(DirectPassword), nameof(IsWaitingForDirectAddress),
                  })
         {
             OnPropertyChanged(name);

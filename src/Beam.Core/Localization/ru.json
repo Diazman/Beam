@@ -550,5 +550,15 @@
   "This phone couldn't start a direct connection. Turn on Wi-Fi and Location, then try again.": "Телефон не смог создать прямое подключение. Включите Wi-Fi и геолокацию и попробуйте ещё раз.",
   "{0} can't connect directly. Both devices need the latest Beam, and phones need Android 10 or newer.": "{0} не может подключиться напрямую. На обоих устройствах нужна последняя версия Beam, а на телефонах — Android 10 или новее.",
   "{0} couldn't join the direct connection.": "{0} не смог присоединиться к прямому подключению.",
-  "{0} couldn't start a direct connection.": "{0} не смог создать прямое подключение."
+  "{0} couldn't start a direct connection.": "{0} не смог создать прямое подключение.",
+  "First, join this computer's Wi-Fi": "Сначала подключитесь к Wi-Fi этого компьютера",
+  "Getting the address on this computer's Wi-Fi ready…": "Подготовка адреса в Wi-Fi этого компьютера…",
+  "Network:": "Сеть:",
+  "No Wi-Fi network? Connect directly": "Нет сети Wi-Fi? Подключитесь напрямую",
+  "Or join it in the phone's Wi-Fi settings:": "Или подключитесь в настройках Wi-Fi телефона:",
+  "Password:": "Пароль:",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться». Затем отсканируйте код ниже, чтобы открыть Beam.",
+  "Starting the direct connection…": "Запуск прямого подключения…",
+  "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Этот компьютер создаёт собственную сеть Wi-Fi для телефона: работает с iPhone и Android где угодно. Пока телефон подключён к ней, интернета на нём нет.",
+  "Use the normal Wi-Fi instead": "Использовать обычный Wi-Fi"
 }

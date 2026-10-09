@@ -65,4 +65,30 @@ jobs:
           Get-WinEvent -LogName 'Microsoft-Windows-AppModel-Runtime/Admin' -MaxEvents 20 -ErrorAction SilentlyContinue |
             Where-Object { $_.TimeCreated -ge $start -and $_.LevelDisplayName -ne 'Information' } | ForEach-Object { Write-Host "--- AppModel $($_.TimeCreated)"; Write-Host $_.Message }
           if (-not $running) { throw "The Store package of Beam did not stay open." }
-          Write-Host "Store package of Beam started and is running."
+          $window = @($running | Where-Object { $_.MainWindowHandle -ne 0 })
+          Write-Host "Window: '$($window.MainWindowTitle)' (handle $($window.MainWindowHandle))"
+          if ($window.Count -eq 0) { throw "Beam is running but shows no window." }
+
+          # Starting it again (e.g. from the Start menu while it is in the tray) must bring the same window forward.
+          Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!Beam"
+          Start-Sleep 8
+          $after = @(Get-Process Beam -ErrorAction SilentlyContinue)
+          Write-Host "Beam processes after a second start: $($after.Count)"
+          if ($after.Count -ne 1) { throw "A second start left $($after.Count) Beam processes." }
+          Write-Host "Store package of Beam started, shows its window and hands over a second start."
+
+      - name: Screenshot
+        if: always()
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:RUNNER_TEMP\store-launch.png")
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-launch-screenshot
+          path: ${{ runner.temp }}/store-launch.png

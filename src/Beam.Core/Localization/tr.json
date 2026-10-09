@@ -446,5 +446,15 @@
   "This phone couldn't start a direct connection. Turn on Wi-Fi and Location, then try again.": "Bu telefon doğrudan bağlantı başlatamadı. Wi-Fi'yi ve Konum'u açıp tekrar deneyin.",
   "{0} can't connect directly. Both devices need the latest Beam, and phones need Android 10 or newer.": "{0} doğrudan bağlanamıyor. İki cihazda da Beam'in son sürümü olmalı; telefonlarda Android 10 veya daha yenisi gerekir.",
   "{0} couldn't join the direct connection.": "{0} doğrudan bağlantıya katılamadı.",
-  "{0} couldn't start a direct connection.": "{0} doğrudan bağlantı başlatamadı."
+  "{0} couldn't start a direct connection.": "{0} doğrudan bağlantı başlatamadı.",
+  "First, join this computer's Wi-Fi": "Önce bu bilgisayarın Wi-Fi'sine bağlanın",
+  "Getting the address on this computer's Wi-Fi ready…": "Bu bilgisayarın Wi-Fi'sindeki adres hazırlanıyor…",
+  "Network:": "Ağ:",
+  "No Wi-Fi network? Connect directly": "Wi-Fi ağı yok mu? Doğrudan bağlanın",
+  "Or join it in the phone's Wi-Fi settings:": "Ya da telefonun Wi-Fi ayarlarından bağlanın:",
+  "Password:": "Şifre:",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Bu kodu telefonun kamerasıyla tarayın ve Katıl'a dokunun. Sonra Beam'i açmak için aşağıdaki kodu tarayın.",
+  "Starting the direct connection…": "Doğrudan bağlantı başlatılıyor…",
+  "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Bu bilgisayar telefon için kendi Wi-Fi'sini oluşturur: iPhone ve Android ile her yerde çalışır. Telefon bu ağa bağlıyken internete erişemez.",
+  "Use the normal Wi-Fi instead": "Bunun yerine normal Wi-Fi'yi kullan"
 }

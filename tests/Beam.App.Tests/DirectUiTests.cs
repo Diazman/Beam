@@ -80,4 +80,38 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.Contains("This phone can't connect directly. Direct connections need Android 10 or newer.", oldPhone.VisibleTexts());
     }
+
+    [AvaloniaFact]
+    public async Task PhonePageCanMakeTheComputersOwnWiFiForAnIPhone()
+    {
+        var air = new FakeDirectAir();
+        await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
+        await app.InitializeAsync();
+        // Pretend this computer's network address is on its direct network once that is up.
+        app.Node.Transfers.IsDirectAddress = ip => air.Hosted > 0 && !System.Net.IPAddress.IsLoopback(ip);
+        var phone = app.ViewModel.Phone;
+        app.ViewModel.IsPhonePage = true;
+        phone.TurnOnCommand.Execute(null);
+        await UiHarness.PumpAsync(100);
+        Assert.True(phone.OffersDirect);
+        Assert.Contains("No Wi-Fi network? Connect directly", app.VisibleTexts());
+
+        phone.ConnectDirectlyCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.IsDirect, "direct network started");
+        Assert.Equal(1, air.Hosted);
+        Assert.NotNull(phone.WifiQr);
+        Assert.StartsWith("DIRECT-", phone.DirectNetworkName);
+        Assert.False(phone.OffersDirect);
+        await UiHarness.WaitForAsync(() => phone.Link.Length > 0, "page address on the direct network");
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("First, join this computer's Wi-Fi", app.VisibleTexts());
+        app.Screenshot("direct-04-iphone");
+
+        phone.StopDirectCommand.Execute(null);
+        Assert.False(phone.IsDirect);
+        Assert.Equal(1, air.Stopped);
+        Assert.True(phone.OffersDirect);
+        phone.TurnOffCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.IsOff, "turned off");
+    }
 }
