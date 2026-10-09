@@ -53,7 +53,7 @@ internal sealed class OutgoingTransfer
             if (_manifest == null)
             {
                 _session.SetState(TransferState.Preparing);
-                _manifest = await Task.Run(() => ManifestBuilder.Build(_sourcePaths, token), token).ConfigureAwait(false);
+                _manifest = await Task.Run(() => ManifestBuilder.Build(_sourcePaths, token, external: _service.ExternalFiles), token).ConfigureAwait(false);
                 if (_manifest.Entries.Count == 0)
                 {
                     throw new TransferException(TransferErrorKind.NothingToSend,
@@ -271,10 +271,10 @@ internal sealed class OutgoingTransfer
     private async Task<bool> SendFileAsync(PeerConnection connection, int index, long planOffset, ReaderState state, CancellationTokenSource io, CancellationToken token)
     {
         var entry = _manifest!.Entries[index];
-        FileStream stream;
+        Stream stream;
         try
         {
-            stream = new FileStream(entry.SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
+            stream = entry.OpenRead();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -292,10 +292,11 @@ internal sealed class OutgoingTransfer
                 long offset = planOffset;
                 try
                 {
-                    if (stream.Length != entry.Size)
+                    if (stream.CanSeek && stream.Length != entry.Size)
                         throw new IOException("The file was changed after it was selected.");
+                    // Resuming: hash what the receiver already has; this also moves the stream to the resume point.
                     if (offset > 0) offset = await HashPrefixAsync(stream, hash, offset, buffers.A, token).ConfigureAwait(false);
-                    stream.Position = offset;
+                    if (offset == 0 && stream.CanSeek) stream.Position = 0;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -394,11 +395,12 @@ internal sealed class OutgoingTransfer
     {
         try
         {
-            await using var stream = new FileStream(entry.SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
-            if (stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
+            await using var stream = entry.OpenRead();
+            if (stream.CanSeek && stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
             var data = new byte[entry.Size];
             await stream.ReadExactlyAsync(data, token).ConfigureAwait(false);
-            if (stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
+            if (stream.CanSeek ? stream.Length != entry.Size : stream.ReadByte() != -1)
+                throw new IOException("The file was changed after it was selected.");
             return new SmallFile(data, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(), null);
         }
         catch (EndOfStreamException)
@@ -464,9 +466,9 @@ internal sealed class OutgoingTransfer
             .ConfigureAwait(false);
     }
 
-    private static async Task<long> HashPrefixAsync(FileStream stream, IncrementalHash hash, long length, byte[] buffer, CancellationToken token)
+    private static async Task<long> HashPrefixAsync(Stream stream, IncrementalHash hash, long length, byte[] buffer, CancellationToken token)
     {
-        stream.Position = 0;
+        if (stream.CanSeek) stream.Position = 0;
         var remaining = length;
         while (remaining > 0)
         {
@@ -483,7 +485,7 @@ internal sealed class OutgoingTransfer
     /// Fills the buffer after its header space and adds the bytes to the hash; returns 0 at end of file.
     /// Calls never overlap, so the hash sees chunks in order.
     /// </summary>
-    private static async Task<int> ReadAndHashAsync(FileStream stream, IncrementalHash hash, byte[] buffer, long remaining, CancellationToken token)
+    private static async Task<int> ReadAndHashAsync(Stream stream, IncrementalHash hash, byte[] buffer, long remaining, CancellationToken token)
     {
         var want = (int)Math.Min(FrameChannel.DataChunkSize, Math.Max(0, remaining));
         var total = 0;

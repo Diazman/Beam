@@ -10,7 +10,8 @@ public static class ManifestBuilder
     /// Symbolic links / junctions to folders are not followed (they can create loops).
     /// Unreadable items are skipped and reported in <see cref="Manifest.Warnings"/>.
     /// </summary>
-    public static Manifest Build(IEnumerable<string> paths, CancellationToken cancellationToken = default, Action<int>? progress = null)
+    public static Manifest Build(IEnumerable<string> paths, CancellationToken cancellationToken = default, Action<int>? progress = null,
+        IExternalFiles? external = null)
     {
         var entries = new List<ManifestEntry>();
         var rootNames = new List<string>();
@@ -21,6 +22,24 @@ public static class ManifestBuilder
         foreach (var input in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (external != null && external.TryGet(input, out var file))
+            {
+                if (!seenSources.Add(input)) continue;
+                var fileName = FileNaming.MakeUnique(SafePath.SanitizeSegment(file.Name), usedRoots.Contains);
+                usedRoots.Add(fileName);
+                rootNames.Add(fileName);
+                entries.Add(new ManifestEntry
+                {
+                    RelativePath = fileName,
+                    SourcePath = input,
+                    OpenExternal = file.OpenRead,
+                    Size = file.Size,
+                    ModifiedUtc = file.ModifiedUtc,
+                });
+                progress?.Invoke(entries.Count);
+                continue;
+            }
+
             string full;
             try
             {

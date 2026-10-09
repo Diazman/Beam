@@ -7,8 +7,15 @@ public sealed class ManifestEntry
 {
     public required string RelativePath { get; init; }
 
-    /// <summary>Full path on the sending computer; never sent over the network.</summary>
+    /// <summary>Full path (or external address) on the sending device; never sent over the network.</summary>
     public required string SourcePath { get; init; }
+
+    /// <summary>Opens a file that has no path (see <see cref="IExternalFiles"/>); null for normal files.</summary>
+    public Func<Stream>? OpenExternal { get; init; }
+
+    /// <summary>Opens the file for reading: the external stream, or the file at <see cref="SourcePath"/>.</summary>
+    internal Stream OpenRead() => OpenExternal?.Invoke()
+        ?? new FileStream(SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
 
     public bool IsDirectory { get; init; }
 

@@ -1,3 +1,4 @@
+using Beam.Core.Files;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -61,6 +62,9 @@ public sealed class TransferService : IAsyncDisposable
 
     internal Func<IncomingPolicy> Policy { get; }
 
+    /// <summary>Files handed over as streams (Android content:// URIs); null on desktop.</summary>
+    public IExternalFiles? ExternalFiles { get; init; }
+
     /// <summary>Shared pacing of everything this device sends (the free edition's speed limit).</summary>
     internal RateLimiter SendLimiter { get; }
 
@@ -108,12 +112,16 @@ public sealed class TransferService : IAsyncDisposable
     {
         if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
         var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, target.Id, target.Name, target.Fingerprint);
-        session.SetDescription(paths.Select(p => Path.GetFileName(Path.TrimEndingDirectorySeparator(p))).Where(n => n.Length > 0).ToList());
+        session.SetDescription(paths.Select(DisplayName).Where(n => n.Length > 0).ToList());
         Register(session);
         var transfer = new OutgoingTransfer(this, session, paths, refreshTarget ?? (() => target));
         transfer.Start();
         return session;
     }
+
+    private string DisplayName(string path) => ExternalFiles != null && ExternalFiles.TryGet(path, out var file)
+        ? file.Name
+        : Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
 
     /// <summary>Sends a piece of text or a link to a device. The other side shows it (or copies it, if it trusts this device).</summary>
     public TransferSession SendText(DeviceInfo target, string text, Func<DeviceInfo>? refreshTarget = null)

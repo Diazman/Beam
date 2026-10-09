@@ -1,3 +1,4 @@
+using Beam.Core.Files;
 using System.Net;
 using System.Net.Sockets;
 using Beam.Core.Diagnostics;
@@ -24,6 +25,12 @@ public sealed class BeamNodeOptions
     public IIncomingTransferHandler? Handler { get; init; }
 
     public IEditionPolicy Edition { get; init; } = new Edition();
+
+    /// <summary>Opens files handed over as streams (Android content:// URIs). Null on desktop.</summary>
+    public IExternalFiles? ExternalFiles { get; init; }
+
+    /// <summary>What this device is ("desktop", "laptop", "phone"…), shown to others.</summary>
+    public string? DeviceKind { get; init; }
 }
 
 /// <summary>
@@ -54,7 +61,11 @@ public sealed class BeamNode : IAsyncDisposable
 
         Quota = new SendQuota(options.Paths.UsageFile, options.Edition);
         Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName,
-            sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond);
+            deviceKind: options.DeviceKind is { } kind ? () => kind : null,
+            sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond)
+        {
+            ExternalFiles = options.ExternalFiles,
+        };
         Transfers.SessionFinished += RecordHistory;
         PhoneLink = new PhoneLinkServer(Transfers, Quota, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
