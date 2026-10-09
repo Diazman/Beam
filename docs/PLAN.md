@@ -32,13 +32,12 @@ no account, no internet, no ads in the way.*
 
 ### Phase B: freemium (after the Android app has launched and been stable for ~2 months)
 - **Free forever:** sending between two devices at full speed, with no daily limit, plus history, trusted
-  devices, encryption and resume. Core transfers are never limited.
+  devices, encryption, resume and **direct connection (Wi-Fi Direct)**. Core transfers are never limited.
 - **Beam Pro (paid):**
   1. **Automatic photo and video backup** from phone to PC over home Wi-Fi. This is the main reason to pay.
-  2. **Direct connection anywhere:** works with no Wi-Fi network, and falls back to the normal network automatically.
-  3. **Send to several devices at once.**
-  4. **Browse your PC's files from your phone** and pull what you need.
-  5. **No ads** in the phone apps.
+  2. **Send to several devices at once.**
+  3. **Browse your PC's files from your phone** and pull what you need.
+  4. **No ads** in the phone apps.
 - **Prices (start here, adjust later):**
   - $1.99/month, $9.99/year, or $19.99 lifetime.
   - **Regional prices** for Türkiye and Uzbekistan, set in each store.
@@ -62,6 +61,7 @@ no account, no internet, no ads in the way.*
 | F5 | Receive in the background with notifications | Android, Windows (iPhone: app must be open — iOS rule) |
 | F6 | Send text, links and clipboard, not just files | All |
 | F7 | Languages: English, Turkish, Russian, Uzbek (app + store listings) | All |
+| F8 | **Connection method** setting, also switchable during a transfer: **Same network** (default; both devices keep their internet) or **Direct** (devices connect to each other with no router in between: works without any Wi-Fi network and avoids a slow or busy one). Switching mid-transfer drops the current link, the devices find each other on the other path, and the transfer resumes where it stopped (built on resume). If the direct link fails, Beam falls back to the same network automatically. Android ↔ PC: Wi-Fi Direct; iPhone ↔ PC: the PC creates its own Wi-Fi; phone ↔ phone: Wi-Fi Direct (Android) / Wi-Fi Aware where supported. Beta until tested on many devices. | All |
 
 ### Growth features — these make users bring new users
 | # | Feature |
@@ -74,10 +74,12 @@ no account, no internet, no ads in the way.*
 | # | Feature |
 |---|---|
 | P1 | Automatic photo/video backup from phone to PC over home Wi-Fi |
-| P2 | Direct connection without a Wi-Fi network, with automatic fallback to the normal network (Android ↔ PC: Wi-Fi Direct; iPhone ↔ PC: the PC creates its own Wi-Fi; phone ↔ phone: Wi-Fi Aware, Beta) |
 | P3 | Send to several devices at once (already on Windows) |
 | P4 | Browse the PC's files from the phone |
 | P5 | No ads on phones |
+
+(P2, direct connection, was moved to the free features as F8 — decided by Diazman, Oct 2026: a fast transfer
+method shouldn't be paywalled; Pro is about convenience and power-user features.)
 
 ---
 
@@ -143,7 +145,7 @@ Built with the same C# code as Windows (Avalonia + Beam.Core), so it uses the sa
 | Step | Who |
 |---|---|
 | 6.1 Automatic photo/video backup phone → PC (P1) | Claude |
-| 6.2 Direct connection with automatic fallback, Android ↔ PC first (P2), marked Beta until tested on many devices | Claude builds, Diazman + testers test on real hardware |
+| 6.2 Direct connection (F8, free): "Connection: Same network / Direct" setting, switchable mid-transfer with resume and automatic fallback; Android ↔ PC first, marked Beta until tested on many devices | Claude builds, Diazman + testers test on real hardware |
 | 6.3 Browse PC files from the phone (P4) | Claude |
 | 6.4 Subscriptions + lifetime in all stores; regional prices; founding users keep lifetime Pro | Claude (code), Diazman (store setup) |
 | 6.5 Banner ad in the free Android app (P5 removes it); update privacy policy and Play "Data safety" form | Claude + Diazman |

@@ -191,11 +191,22 @@ testable pull requests. Every change keeps the existing guarantees:
   - Core: backup purpose is accepted only from paired devices, and folders are created by date.
   - Manual: 1,000-photo first backup, then incremental, plus interruptions.
 
-### 6.2 Direct connection with automatic fallback (P2) — Beta
+### 6.2 Direct connection (F8, free) — Beta
+- **Setting "Connection"** (Settings, and a switch on the transfer card): **Same network** (default) or **Direct**.
+  Free for everyone; no `Feature` flag.
 - **Connection order:**
-  1. Known LAN addresses / discovery.
-  2. If not reachable within ~3 s, and both devices support it, start a **direct link**, then retry the same
-     TLS connection over the new link.
+  - *Same network:* known LAN addresses / discovery; if not reachable within ~3 s and both devices support it,
+    start a **direct link** as a fallback.
+  - *Direct:* start the direct link first; if it can't be set up within ~10 s, use the same network.
+  - Either way the same TLS connection (and pinned fingerprint) runs over whichever link is up.
+- **Switching during a transfer:** changing the method sends a `SwitchPath` control message, both sides close
+  the current connection without failing the session, bring up the other path (join the Wi-Fi / form the direct
+  group), and the sender reconnects and **resumes** from the receiver's partial files (the existing resume
+  path). The card shows "Switching to direct connection…" / "Reconnecting on Wi-Fi…" meanwhile. If the
+  new path doesn't come up within ~30 s, go back to the previous one.
+- **Internet while direct:** most Android phones and many Windows Wi-Fi adapters can stay on the home Wi-Fi
+  *and* a Wi-Fi Direct group at once (STA + P2P concurrency), so internet often keeps working in Direct
+  mode; where it can't, the UI says so ("Internet is paused while connected directly").
 - **Finding each other without a shared network:** paired devices advertise over **Bluetooth Low Energy**
   (Windows `BluetoothLEAdvertisementPublisher`, Android `BluetoothLeAdvertiser`). The ad carries a short,
   rotating ID derived from the pairing, so strangers learn nothing.
@@ -288,6 +299,6 @@ testable pull requests. Every change keeps the existing guarantees:
 10. 6.1 Photo backup
 11. 6.4 Subscriptions/lifetime · 6.5 Ads · 6.6 Invites
 12. 6.3 Browse PC files
-13. 6.2 Direct connection (Beta)
+13. 6.2 Direct connection (free, Beta)
 14. 7.x iPhone app
 15. 6.7 Switch to freemium (when Diazman decides)
