@@ -136,6 +136,7 @@ public sealed class UiHarness : IAsyncDisposable
     {
         // Tests assert English text whatever the language of the machine running them.
         L.SetLanguage(language);
+        L.IsPhone = phone;
         Store = new FakeStore { Owns = pro };
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
@@ -227,6 +228,24 @@ public sealed class UiHarness : IAsyncDisposable
             if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for " + what);
             await PumpAsync(25);
         }
+    }
+
+    /// <summary>Visible text that sticks out past the left or right edge of the window (clipped on a phone).</summary>
+    public IReadOnlyList<string> TextOutsideWindow()
+    {
+        Dispatcher.UIThread.RunJobs();
+        var problems = new List<string>();
+        foreach (var block in Window.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>())
+        {
+            if (!block.IsEffectivelyVisible || string.IsNullOrEmpty(block.Text) || block.Bounds.Width <= 0) continue;
+            var topLeft = block.TranslatePoint(new Point(0, 0), Window);
+            if (topLeft == null) continue;
+            var right = topLeft.Value.X + block.Bounds.Width;
+            if (topLeft.Value.X < -0.5 || right > Window.Bounds.Width + 0.5)
+                problems.Add($"{block.Text} (x {topLeft.Value.X:0}–{right:0}, window {Window.Bounds.Width:0})");
+        }
+
+        return problems;
     }
 
     /// <summary>Text of every visible TextBlock in the window.</summary>

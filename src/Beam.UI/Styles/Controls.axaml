@@ -266,6 +266,16 @@
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
 
+  <!-- Dialog widths on the desktop; on a phone dialogs use the screen width. -->
+  <Style Selector="UserControl.w420"><Setter Property="Width" Value="420" /></Style>
+  <Style Selector="UserControl.w460"><Setter Property="Width" Value="460" /></Style>
+  <Style Selector="UserControl.w480"><Setter Property="Width" Value="480" /></Style>
+  <Style Selector="UserControl.w500"><Setter Property="Width" Value="500" /></Style>
+  <Style Selector=".compact UserControl.dialogBody"><Setter Property="Width" Value="NaN" /></Style>
+  <Style Selector=".compact UserControl.dialogBody TextBlock"><Setter Property="TextWrapping" Value="Wrap" /></Style>
+  <!-- Phones always save to Downloads/Beam. -->
+  <Style Selector=".compact Button.changeFolder"><Setter Property="IsVisible" Value="False" /></Style>
+
   <!-- Phone layout: bottom navigation bar -->
   <Style Selector="Border.bottomBar">
     <Setter Property="Background" Value="{DynamicResource RailBackgroundBrush}" />

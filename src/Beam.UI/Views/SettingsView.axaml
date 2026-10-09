@@ -29,9 +29,9 @@
             <Separator />
             <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
               <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock Classes="h3" Text="{l:T 'Let nearby computers find this one'}" />
+                <TextBlock Classes="h3" Text="{l:T 'Let nearby computers find this one', Phone='Let nearby computers find this phone'}" />
                 <TextBlock Classes="caption" TextWrapping="Wrap"
-                           Text="{l:T 'When off, this computer doesn\'t appear for others. You can still send files to them.'}" />
+                           Text="{l:T 'When off, this computer doesn\'t appear for others. You can still send files to them.', Phone='When off, this phone doesn\'t appear for others. You can still send files to them.'}" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding Discoverable}" Margin="16,0,0,0" />
             </Grid>
@@ -136,7 +136,7 @@
             <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
               <StackPanel VerticalAlignment="Center" Spacing="2">
                 <TextBlock Classes="h3" Text="{l:T 'Show notifications'}" />
-                <TextBlock Classes="caption" Text="{l:T 'Only shown while the Beam window isn\'t in front.'}" />
+                <TextBlock Classes="caption" Text="{l:T 'Only shown while the Beam window isn\'t in front.', Phone='Only shown while Beam isn\'t open.'}" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1" IsChecked="{Binding NotificationsEnabled}" Margin="16,0,0,0" />
             </Grid>
@@ -155,9 +155,9 @@
         <Border Classes="card">
           <StackPanel Spacing="12">
             <StackPanel Spacing="4">
-              <TextBlock Classes="h3" Text="{l:T 'This computer\'s address'}" />
+              <TextBlock Classes="h3" Text="{l:T 'This computer\'s address', Phone='This phone\'s address'}" />
               <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="{l:T 'If another computer can\'t find this one automatically, type this address there using “Can\'t find a computer?”.'}" />
+                         Text="{l:T 'If another computer can\'t find this one automatically, type this address there using “Can\'t find a computer?”.', Phone='If a computer can\'t find this phone automatically, type this address there using “Can\'t find a computer?”.'}" />
               <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
                 <SelectableTextBlock Text="{Binding LocalAddresses}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="{l:T 'Copy'}" Command="{Binding CopyAddressCommand}" />
@@ -181,8 +181,8 @@
         </Border>
       </StackPanel>
 
-      <!-- Beam Pro -->
-      <StackPanel Spacing="10">
+      <!-- Beam Pro (sold in the Microsoft Store version; phones get their own store later) -->
+      <StackPanel Spacing="10" IsVisible="{Binding IsDesktop}">
         <TextBlock Classes="h2" Text="{l:T 'Your plan'}" />
         <Border Classes="card">
           <Grid ColumnDefinitions="Auto,*">
@@ -211,13 +211,13 @@
           <StackPanel Spacing="10">
             <TextBlock Text="{Binding VersionText}" />
             <TextBlock Classes="caption" TextWrapping="Wrap">
-              <Run Text="{l:T 'Security code of this computer:'}" />
+              <Run Text="{l:T 'Security code of this computer:', Phone='Security code of this phone:'}" />
               <Run Text="{Binding SecurityCode}" FontWeight="SemiBold" />
               <Run Text="{l:T ' — shown to others when you send them files, so they can check it\'s really you.'}" />
             </TextBlock>
             <TextBlock Classes="caption" TextWrapping="Wrap"
-                       Text="{l:T 'Transfers go directly between computers on your network, are encrypted, and every file is checked after it arrives.'}" />
-            <StackPanel Orientation="Horizontal" Spacing="8">
+                       Text="{l:T 'Transfers go directly between computers on your network, are encrypted, and every file is checked after it arrives.', Phone='Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.'}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsDesktop}">
               <Button Content="{l:T 'Open log folder'}" Command="{Binding OpenLogsCommand}"
                       ToolTip.Tip="{l:T 'Technical details that help when troubleshooting'}" />
             </StackPanel>

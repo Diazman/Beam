@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.AddDeviceView"
              x:DataType="dlg:AddDeviceViewModel"
-             Width="460">
+             Classes="dialogBody w460">
   <StackPanel Spacing="16">
     <StackPanel Spacing="10">
       <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
@@ -25,7 +25,7 @@
 
     <Border Classes="details">
       <TextBlock Classes="caption" TextWrapping="Wrap">
-        <Run Text="{l:T 'This computer\'s address:'}" />
+        <Run Text="{l:T 'This computer\'s address:', Phone='This phone\'s address:'}" />
         <Run Text="{Binding LocalAddresses}" FontWeight="SemiBold" />
       </TextBlock>
     </Border>

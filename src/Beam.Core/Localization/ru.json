@@ -496,5 +496,19 @@
   "Use phone language": "Язык телефона",
   "This phone": "Этот телефон",
   "Nothing being sent or received": "Сейчас ничего не передаётся",
-  "Transfers appear here while they run.": "Здесь отображаются текущие передачи."
+  "Transfers appear here while they run.": "Здесь отображаются текущие передачи.",
+  "If a computer can't find this phone automatically, type this address there using “Can't find a computer?”.": "Если компьютер не находит этот телефон автоматически, введите на нём этот адрес через ссылку «Не удаётся найти компьютер?».",
+  "Let nearby computers find this phone": "Разрешить компьютерам поблизости находить этот телефон",
+  "Name this phone": "Назовите этот телефон",
+  "Only shown while Beam isn't open.": "Показываются, только когда Beam не открыт.",
+  "Security code of this phone:": "Код безопасности этого телефона:",
+  "Send files between this phone and nearby computers. Open Beam on both, pick a computer and choose your files.": "Отправляйте файлы между этим телефоном и компьютерами поблизости. Откройте Beam на обоих устройствах, выберите компьютер и файлы.",
+  "Send files directly to a nearby computer. No cables, accounts, or internet needed.": "Отправляйте файлы напрямую на компьютер поблизости. Без кабелей, учётных записей и интернета.",
+  "Still nothing? Make sure the phone and the computer are on the same Wi-Fi, and that Beam was allowed through Windows Firewall on the computer. You can also connect using the computer's address.": "По-прежнему ничего? Убедитесь, что телефон и компьютер подключены к одной сети Wi-Fi и что на компьютере Beam разрешён в брандмауэре Windows. Также можно подключиться по адресу компьютера.",
+  "That address belongs to this phone.": "Это адрес этого телефона.",
+  "This phone's address": "Адрес этого телефона",
+  "This phone's address:": "Адрес этого телефона:",
+  "Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.": "Файлы передаются напрямую между вашими устройствами в сети в зашифрованном виде, а каждый полученный файл проверяется.",
+  "When off, this phone doesn't appear for others. You can still send files to them.": "Если отключено, другие не видят этот телефон. При этом вы по-прежнему можете отправлять им файлы.",
+  "e.g. Diaz's phone": "например, телефон Диаса"
 }

@@ -392,5 +392,19 @@
   "Use phone language": "Telefonun dilini kullan",
   "This phone": "Bu telefon",
   "Nothing being sent or received": "Gönderilen veya alınan bir şey yok",
-  "Transfers appear here while they run.": "Aktarımlar sürerken burada görünür."
+  "Transfers appear here while they run.": "Aktarımlar sürerken burada görünür.",
+  "If a computer can't find this phone automatically, type this address there using “Can't find a computer?”.": "Bir bilgisayar bu telefonu otomatik olarak bulamazsa, o bilgisayarda “Bilgisayarı bulamıyor musunuz?” seçeneğini kullanarak bu adresi yazın.",
+  "Let nearby computers find this phone": "Yakındaki bilgisayarlar bu telefonu bulabilsin",
+  "Name this phone": "Bu telefona bir ad verin",
+  "Only shown while Beam isn't open.": "Yalnızca Beam açık değilken gösterilir.",
+  "Security code of this phone:": "Bu telefonun güvenlik kodu:",
+  "Send files between this phone and nearby computers. Open Beam on both, pick a computer and choose your files.": "Bu telefon ile yakındaki bilgisayarlar arasında dosya gönderin. İkisinde de Beam'i açın, bir bilgisayar seçin ve dosyalarınızı seçin.",
+  "Send files directly to a nearby computer. No cables, accounts, or internet needed.": "Dosyaları doğrudan yakındaki bir bilgisayara gönderin. Kablo, hesap veya internet gerekmez.",
+  "Still nothing? Make sure the phone and the computer are on the same Wi-Fi, and that Beam was allowed through Windows Firewall on the computer. You can also connect using the computer's address.": "Hâlâ görünmüyor mu? Telefonun ve bilgisayarın aynı Wi-Fi ağına bağlı olduğundan ve bilgisayarda Beam'e Windows Güvenlik Duvarı'nda izin verildiğinden emin olun. Bilgisayarın adresini kullanarak da bağlanabilirsiniz.",
+  "That address belongs to this phone.": "Bu adres bu telefona ait.",
+  "This phone's address": "Bu telefonun adresi",
+  "This phone's address:": "Bu telefonun adresi:",
+  "Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.": "Aktarımlar ağınızdaki cihazlarınız arasında doğrudan gerçekleşir ve şifrelenir; her dosya ulaştıktan sonra denetlenir.",
+  "When off, this phone doesn't appear for others. You can still send files to them.": "Kapalıyken bu telefon başkalarına görünmez. Siz yine de onlara dosya gönderebilirsiniz.",
+  "e.g. Diaz's phone": "ör. Diaz'ın telefonu"
 }

@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.IncomingRequestView"
              x:DataType="dlg:IncomingRequestViewModel"
-             Width="460">
+             Classes="dialogBody w460">
   <StackPanel Spacing="16">
     <StackPanel Spacing="12">
       <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
@@ -37,7 +37,7 @@
         <PathIcon Data="{StaticResource IconFolder}" Width="15" Height="15" Foreground="{DynamicResource TextSecondaryBrush}" />
         <TextBlock Grid.Column="1" Text="{Binding Folder}" Margin="8,0" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Folder}" />
-        <Button Grid.Column="2" Classes="link" Content="{l:T 'Change'}" Command="{Binding ChangeFolderCommand}" />
+        <Button Grid.Column="2" Classes="link changeFolder" Content="{l:T 'Change'}" Command="{Binding ChangeFolderCommand}" />
       </Grid>
     </StackPanel>
 

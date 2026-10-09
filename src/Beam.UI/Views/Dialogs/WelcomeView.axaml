@@ -4,18 +4,18 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.WelcomeView"
              x:DataType="dlg:WelcomeViewModel"
-             Width="480">
+             Classes="dialogBody w480">
   <StackPanel Spacing="18">
     <Image Source="/Assets/beam.png" Width="64" Height="64" HorizontalAlignment="Left" />
     <StackPanel Spacing="8">
       <TextBlock Classes="dialogTitle" FontSize="24" Text="{l:T 'Welcome to Beam'}" />
       <TextBlock Classes="secondary" FontSize="15" TextWrapping="Wrap"
-                 Text="{l:T 'Send files directly between nearby computers. Open Beam on both computers, pick one, and drop in your files.'}" />
+                 Text="{l:T 'Send files directly between nearby computers. Open Beam on both computers, pick one, and drop in your files.', Phone='Send files between this phone and nearby computers. Open Beam on both, pick a computer and choose your files.'}" />
     </StackPanel>
 
     <StackPanel Spacing="6">
-      <TextBlock Classes="h3" Text="{l:T 'Name this computer'}" />
-      <TextBox Name="NameBox" Text="{Binding DeviceName}" MaxLength="{Binding MaxNameLength}" Watermark="{l:T 'e.g. Diaz\'s PC'}" />
+      <TextBlock Classes="h3" Text="{l:T 'Name this computer', Phone='Name this phone'}" />
+      <TextBox Name="NameBox" Text="{Binding DeviceName}" MaxLength="{Binding MaxNameLength}" Watermark="{l:T 'e.g. Diaz\'s PC', Phone='e.g. Diaz\'s phone'}" />
       <TextBlock Classes="caption" Text="{l:T 'This is the name other people see. You can change it later in Settings.'}" />
     </StackPanel>
 

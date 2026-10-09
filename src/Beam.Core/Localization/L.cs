@@ -54,6 +54,12 @@ public static class L
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.CurrentUICulture = uiCulture;
     }
 
+    /// <summary>Running on a phone: texts about "this computer" use their phone wording (<see cref="ForDevice"/>).</summary>
+    public static bool IsPhone { get; set; }
+
+    /// <summary>The translation of <paramref name="computer"/>, or of <paramref name="phone"/> on a phone.</summary>
+    public static string ForDevice(string computer, string phone) => T(IsPhone ? phone : computer);
+
     /// <summary>The translation of an English text.</summary>
     public static string T(string english) =>
         _catalog.TryGetValue(english, out var forms) && forms.Length > 0 && forms[0].Length > 0 ? forms[0] : english;

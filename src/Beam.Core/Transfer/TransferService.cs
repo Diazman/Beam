@@ -149,7 +149,7 @@ public sealed class TransferService : IAsyncDisposable
         var hello = connection.RemoteHello;
         if (string.IsNullOrWhiteSpace(hello.DeviceId)) throw new ProtocolException("Device did not identify itself.");
         if (hello.DeviceId == Identity.DeviceId)
-            throw new TransferException(TransferErrorKind.ConnectFailed, L.T("That address belongs to this computer."));
+            throw new TransferException(TransferErrorKind.ConnectFailed, L.ForDevice("That address belongs to this computer.", "That address belongs to this phone."));
         return new DeviceInfo
         {
             Id = hello.DeviceId,

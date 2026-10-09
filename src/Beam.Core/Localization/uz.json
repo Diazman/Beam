@@ -392,5 +392,19 @@
   "Use phone language": "Telefon tili",
   "This phone": "Bu telefon",
   "Nothing being sent or received": "Hech narsa yuborilmayapti yoki qabul qilinmayapti",
-  "Transfers appear here while they run.": "Uzatishlar davom etayotganda shu yerda koʻrinadi."
+  "Transfers appear here while they run.": "Uzatishlar davom etayotganda shu yerda koʻrinadi.",
+  "If a computer can't find this phone automatically, type this address there using “Can't find a computer?”.": "Agar kompyuter bu telefonni avtomatik topa olmasa, u yerda “Kompyuter topilmayaptimi?” orqali shu manzilni kiriting.",
+  "Let nearby computers find this phone": "Yaqindagi kompyuterlar bu telefonni topa olsin",
+  "Name this phone": "Bu telefonga nom bering",
+  "Only shown while Beam isn't open.": "Faqat Beam ochiq boʻlmaganda koʻrsatiladi.",
+  "Security code of this phone:": "Bu telefonning xavfsizlik kodi:",
+  "Send files between this phone and nearby computers. Open Beam on both, pick a computer and choose your files.": "Bu telefon va yaqindagi kompyuterlar oʻrtasida fayl yuboring. Ikkalasida ham Beamni oching, kompyuterni va fayllaringizni tanlang.",
+  "Send files directly to a nearby computer. No cables, accounts, or internet needed.": "Fayllarni yaqindagi kompyuterga toʻgʻridan-toʻgʻri yuboring. Kabel, hisob yoki internet kerak emas.",
+  "Still nothing? Make sure the phone and the computer are on the same Wi-Fi, and that Beam was allowed through Windows Firewall on the computer. You can also connect using the computer's address.": "Hali ham yoʻqmi? Telefon va kompyuter bitta Wi-Fi tarmogʻiga ulanganiga va kompyuterda Windows Firewall Beamga ruxsat berganiga ishonch hosil qiling. Kompyuter manzili orqali ham ulanishingiz mumkin.",
+  "That address belongs to this phone.": "Bu manzil shu telefonga tegishli.",
+  "This phone's address": "Bu telefonning manzili",
+  "This phone's address:": "Bu telefonning manzili:",
+  "Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.": "Uzatishlar tarmogʻingizdagi qurilmalaringiz oʻrtasida toʻgʻridan-toʻgʻri amalga oshadi, shifrlanadi va har bir fayl yetib kelgach tekshiriladi.",
+  "When off, this phone doesn't appear for others. You can still send files to them.": "Oʻchirilganda bu telefon boshqalarga koʻrinmaydi. Siz esa ularga baribir fayl yuborishingiz mumkin.",
+  "e.g. Diaz's phone": "masalan, Diazning telefoni"
 }

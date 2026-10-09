@@ -52,4 +52,45 @@ public class PhoneLayoutTests
         Assert.Contains("Diaz's Laptop", string.Join(" ", app.VisibleTexts()));
         app.Screenshot("phone-5-transfers");
     }
+
+    [AvaloniaFact]
+    public async Task PhoneWordingAndNothingSticksOutInUzbek()
+    {
+        try
+        {
+            await using var app = new UiHarness("Diyor's Note20 Ultra", firstRunDone: false, width: 412, height: 892, language: "uz", phone: true);
+            _ = app.InitializeAsync();
+            await UiHarness.WaitForAsync(() => app.ViewModel.HasDialog, "welcome");
+            await UiHarness.PumpAsync(100);
+            Assert.Contains(Core.Localization.L.T("Name this phone"), app.VisibleTexts());
+            Assert.Empty(app.TextOutsideWindow());
+            app.Screenshot("phone-uz-welcome");
+            ((Beam.App.ViewModels.Dialogs.WelcomeViewModel)app.ViewModel.Dialog!).StartCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => !app.ViewModel.HasDialog, "welcome closed");
+
+            app.AddFakeDevice("DILSHODJON");
+            await UiHarness.WaitForAsync(() => app.ViewModel.Home.Devices.Count == 1, "device");
+            await UiHarness.PumpAsync(100);
+            Assert.Empty(app.TextOutsideWindow());
+            app.Screenshot("phone-uz-send");
+
+            app.ViewModel.IsSettingsPage = true;
+            await UiHarness.PumpAsync(100);
+            var texts = app.VisibleTexts();
+            Assert.Contains(Core.Localization.L.T("Let nearby computers find this phone"), texts);
+            Assert.DoesNotContain(Core.Localization.L.T("Your plan"), texts); // Microsoft Store purchase: desktop only
+            Assert.Empty(app.TextOutsideWindow());
+            app.Screenshot("phone-uz-settings");
+
+            app.ViewModel.Home.ConnectByAddressCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => app.ViewModel.HasDialog, "add device");
+            await UiHarness.PumpAsync(100);
+            Assert.Empty(app.TextOutsideWindow());
+            app.Screenshot("phone-uz-add-device");
+        }
+        finally
+        {
+            Core.Localization.L.IsPhone = false;
+        }
+    }
 }

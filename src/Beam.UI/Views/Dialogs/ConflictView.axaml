@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.ConflictView"
              x:DataType="dlg:ConflictViewModel"
-             Width="460">
+             Classes="dialogBody w460">
   <StackPanel Spacing="16">
     <StackPanel Spacing="10">
       <Border Classes="iconBadge warning" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
