@@ -81,6 +81,11 @@ foreach ($arch in $Architectures) {
     if (-not $SkipPublish) {
         Step "Publishing win-$arch"
         if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
+        # Start from clean intermediate files: the release builds the single-file installer exe first in the same
+        # folders, and reusing its outputs produced Store packages that crashed on start (1.2.0-1.2.2).
+        foreach ($dir in @("src/Beam.App/obj/Release/net8.0-windows10.0.19041.0/win-$arch", "src/Beam.App/bin/Release/net8.0-windows10.0.19041.0/win-$arch")) {
+            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+        }
         dotnet publish src/Beam.App -f net8.0-windows10.0.19041.0 -p:PublishProfile=msix-$arch
         if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
     }
