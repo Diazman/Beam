@@ -7,6 +7,11 @@ on:
   pull_request:
     paths: ["packaging/msix/**", "packaging/build-msix.ps1", "src/Beam.App/**", "native/**", ".github/workflows/store-smoke.yml"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Test the Store package of this GitHub release (e.g. v1.2.1) instead of building the current code"
+        required: false
+        default: ""
 
 concurrency:
   group: store-smoke-${{ github.ref }}
@@ -33,8 +38,30 @@ jobs:
           Import-Certificate -FilePath "$env:RUNNER_TEMP\test.cer" -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
 
       - name: Build the x64 Store package
+        if: inputs.release == ''
         shell: pwsh
         run: ./packaging/build-msix.ps1 -Architectures x64 -CertificatePath "$env:RUNNER_TEMP\test.pfx" -CertificatePassword beam-test
+
+      - name: Take the x64 package from a release's Store bundle (signed with the test certificate)
+        if: inputs.release != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tools = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory | Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+            Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
+          New-Item -ItemType Directory -Force artifacts/msix, "$env:RUNNER_TEMP\bundle" | Out-Null
+          gh release download "${{ inputs.release }}" --repo "${{ github.repository }}" --pattern "*.msixbundle" --dir "$env:RUNNER_TEMP"
+          $bundle = (Get-ChildItem "$env:RUNNER_TEMP" -Filter *.msixbundle | Select-Object -First 1).FullName
+          & "$tools\makeappx.exe" unbundle /p $bundle /d "$env:RUNNER_TEMP\bundle" /o
+          $msix = (Get-ChildItem "$env:RUNNER_TEMP\bundle" -Filter "*_x64.msix" | Select-Object -First 1).FullName
+          & "$tools\signtool.exe" sign /fd SHA256 /f "$env:RUNNER_TEMP\test.pfx" /p beam-test $msix
+          Copy-Item $msix artifacts/msix/
+          # The unpackaged comparison below runs the same files.
+          New-Item -ItemType Directory -Force artifacts/msix-layout/win-x64 | Out-Null
+          Copy-Item $msix "$env:RUNNER_TEMP\layout.zip"
+          Expand-Archive "$env:RUNNER_TEMP\layout.zip" -DestinationPath artifacts/msix-layout/win-x64 -Force
+          Write-Host "Testing $(Split-Path $msix -Leaf) from ${{ inputs.release }}"
 
       - name: Unpackaged start of the same files (to tell packaging problems from build problems)
         shell: pwsh
