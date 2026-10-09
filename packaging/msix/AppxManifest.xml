@@ -9,8 +9,11 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap desktop desktop2 rescap">
+  IgnorableNamespaces="uap desktop desktop2 desktop4 desktop5 com rescap">
 
   <Identity
     Name="{{IdentityName}}"
@@ -57,6 +60,25 @@
             <uap:DataFormat>StorageItems</uap:DataFormat>
           </uap:ShareTarget>
         </uap:Extension>
+        <!-- "Send with Beam" in the right-click menu of files and folders: at the top level on Windows 11, in the
+             classic menu on Windows 10 (1903+). Handler: BeamContextMenu.dll, built from native/BeamContextMenu. -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="BeamSend" Clsid="6A7C1D2E-8B3F-4E59-9C41-B3A0D5E7F214" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="BeamSend" Clsid="6A7C1D2E-8B3F-4E59-9C41-B3A0D5E7F214" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Beam context menu">
+              <com:Class Id="6A7C1D2E-8B3F-4E59-9C41-B3A0D5E7F214" Path="BeamContextMenu.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
         <!-- "Start Beam when I sign in" (Settings). Off until the user turns it on. -->
         <desktop:Extension Category="windows.startupTask" Executable="Beam.exe" EntryPoint="Windows.FullTrustApplication">
           <desktop:StartupTask TaskId="BeamStartup" Enabled="false" DisplayName="{{DisplayName}}" />

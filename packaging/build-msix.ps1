@@ -85,6 +85,16 @@ foreach ($arch in $Architectures) {
         if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
     }
 
+    Step "Building the Windows 11 context-menu handler ($arch)"
+    # native/BeamContextMenu: "Send with Beam" at the top of the Windows 11 right-click menu (needs MSVC + CMake).
+    $nativeBuild = Join-Path $root "artifacts/native/$arch"
+    $cmakeArch = if ($arch -eq "arm64") { "ARM64" } else { "x64" }
+    cmake -S native/BeamContextMenu -B $nativeBuild -A $cmakeArch
+    if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
+    cmake --build $nativeBuild --config Release
+    if ($LASTEXITCODE -ne 0) { throw "Context-menu handler build failed" }
+    Copy-Item (Join-Path $nativeBuild "Release/BeamContextMenu.dll") $layout -Force
+
     Step "Preparing package layout ($arch)"
     Copy-Item packaging/msix/Assets -Destination $layout -Recurse -Force
     $manifest = (Get-Content packaging/msix/AppxManifest.xml -Raw).

@@ -27,7 +27,9 @@ structure intact. No cables, accounts, cloud, IP addresses, or network shares.
 - **Secure**: mutually-authenticated TLS between devices, certificate pinning, approval required by default,
   received paths can never escape the chosen folder. No admin rights, no cloud, no telemetry.
 - **Windows integration**: tray icon (keeps receiving when the window is closed), toast notifications,
-  start with Windows, single instance, `Beam.exe --send <paths>` for future Explorer integration, light/dark theme.
+  start with Windows, single instance, light/dark theme, **Send with Beam** in the right-click menu (Store version:
+  in the main Windows 11 menu via `native/BeamContextMenu`; installer version: under *Show more options*) and in the
+  Windows Share dialog.
 - **Phones without an app**: the Phone page shows a QR code; any iPhone or Android phone that scans it gets a page to
   send files to the PC (with approval) and download files the PC shares. LAN only, secret link, auto-off after 30 minutes.
 - **Speaks your language**: English, Turkish, Russian and Uzbek (follows Windows, or pick one in Settings); the
@@ -103,6 +105,7 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | `src/Beam.App` | Windows desktop app (Avalonia, MVVM): views, view models, tray, notifications, Windows integration. |
 | `tests/Beam.Core.Tests` | Engine tests: real two-device transfers over loopback TLS, failure injection, resume, security. |
 | `tests/Beam.App.Tests` | Headless UI tests that drive real transfers through the UI and render screenshots. |
+| `native/BeamContextMenu` | Small C++ handler for "Send with Beam" in the Windows 11 right-click menu (Store package). |
 | `installer/Beam.iss` | Inno Setup installer script. |
 | `packaging/` | Microsoft Store: MSIX manifest, logos, packaging script, listing text and screenshots. |
 | `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md). |

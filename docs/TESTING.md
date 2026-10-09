@@ -96,6 +96,9 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
     → **Send with Beam**. ✅ Beam opens (or comes forward) with all of them in the send list. Uninstall removes the entry.
 32. Store version: right-click a file → **Share** → **Beam**. ✅ Beam opens with the file in the send list; the Share
     dialog closes.
+32b. Store version on Windows 11: right-click a file, a folder, and 500 selected files. ✅ **Send with Beam** (with the
+    Beam icon, in the Windows language) is in the main menu, not only under *Show more options*; Beam opens (or comes
+    forward) with all of them. On Windows 10 it is in the normal right-click menu.
 33. Store version: after the 3rd completed transfer, the Store's rating dialog appears once (and never again).
 34. Store version during the launch period: Settings → **Claim Beam Pro free** → Store dialog shows "Free"; afterwards
     Settings shows *Beam Pro*. Restart: still Pro.

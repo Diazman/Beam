@@ -18,6 +18,8 @@ internal static class Program
         // Started from Windows' Share dialog (Store version): treat the shared items like "--send <paths>".
         var shared = OperatingSystem.IsWindows() ? Platform.PackageInfo.TakeSharedItems() : Array.Empty<string>();
         if (shared.Count > 0) args = new[] { "--send" }.Concat(shared).ToArray();
+        // The Windows 11 "Send with Beam" menu passes long selections as a list file (native/BeamContextMenu).
+        args = CommandLine.ExpandListFiles(args);
 
         var key = SingleInstance.KeyFor(paths.Root);
         using var instance = SingleInstance.TryAcquire(key);
