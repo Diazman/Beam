@@ -78,10 +78,14 @@ Root: HKA; Subkey: "Software\Classes\Directory\shell\BeamSend\command"; ValueTyp
 
 [Run]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=private,domain"; Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Allowing Beam through Windows Firewall..."
+; Direct connections (Wi-Fi Direct): Windows treats that network as public, so allow Beam there too, but only
+; from the addresses Windows hands out on it (192.168.137.x).
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName} (direct connection)"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=public remoteip=192.168.137.0/24"; Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Allowing Beam through Windows Firewall..."
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName}"" program=""{app}\{#AppExe}"""; Flags: runhidden; Check: IsAdminInstallMode; RunOnceId: "RemoveFirewallRule"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName} (direct connection)"" program=""{app}\{#AppExe}"""; Flags: runhidden; Check: IsAdminInstallMode; RunOnceId: "RemoveDirectFirewallRule"
 
 ; Settings, history and the device identity in %LOCALAPPDATA%\Beam are kept on uninstall so a
 ; reinstall keeps the same name and trusted devices. Received files are never touched.

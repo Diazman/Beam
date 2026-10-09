@@ -5,6 +5,12 @@
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <!-- Direct connections (Wi-Fi Direct): Android 13+ asks for "Nearby devices" (never used for location);
+       older versions require the location permission for Wi-Fi Direct. -->
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
+  <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
   <!-- "Files received" and incoming-request notifications (Android 13+ asks the user). -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Saving received files to Downloads/Beam: only needed up to Android 10; newer versions allow it without a permission. -->

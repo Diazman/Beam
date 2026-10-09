@@ -60,7 +60,13 @@ public partial class App : Application
 
             try
             {
-                _node = BeamNode.Create(new BeamNodeOptions { Paths = DataPaths });
+                SettingsStore? settings = null;
+                _node = BeamNode.Create(new BeamNodeOptions
+                {
+                    Paths = DataPaths,
+                    DirectLink = OperatingSystem.IsWindows() ? WindowsDirectLink.TryCreate(() => settings?.Current.DeviceName ?? Environment.MachineName) : null,
+                });
+                settings = _node.Settings;
             }
             catch (Exception ex)
             {
