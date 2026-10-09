@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core.Settings;
 using Beam.Core.Tests;
@@ -76,6 +77,64 @@ public class TextUiTests
         Assert.Equal("WiFi password: correct-horse", app.Ui.Clipboard);
         Assert.False(app.ViewModel.HasDialog);
         Assert.Contains(app.Platform.Calls, c => c.StartsWith("notify:Text from Office PC copied"));
+    }
+
+    [AvaloniaFact]
+    public async Task SharedTextAndFilesFromAnotherAppAreSentWithOneTap()
+    {
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        await using var receiver = new UiHarness("Laptop");
+        await phone.InitializeAsync();
+        await receiver.InitializeAsync();
+        phone.Node.Discovery.ReportReachable(new Beam.Core.Discovery.DeviceInfo
+        {
+            Id = receiver.Node.Identity.DeviceId,
+            Name = "Laptop",
+            Fingerprint = receiver.Node.Identity.Fingerprint,
+            Endpoints = new[] { new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, receiver.Node.Transfers.Port) },
+        });
+        receiver.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = phone.Node.Identity.Fingerprint, DeviceId = phone.Node.Identity.DeviceId, Name = "Diaz's Galaxy" }));
+        var home = phone.ViewModel.Home;
+        await UiHarness.WaitForAsync(() => home.SelectedDevice != null, "auto-selected device");
+
+        // Android hands a shared link to Beam like a command line: it waits on the Send screen.
+        phone.ViewModel.IsHistoryPage = true;
+        phone.ViewModel.HandleCommandLine(new CommandLine(false, Array.Empty<string>(), SendText: "  https://example.com/recipe  "));
+        await UiHarness.PumpAsync(100);
+        Assert.True(phone.ViewModel.IsHomePage);
+        Assert.Equal("https://example.com/recipe", home.SharedText);
+        Assert.True(home.SharedTextIsLink);
+        Assert.False(home.ShowDropZone);
+        Assert.True(home.CanSend);
+        Assert.Equal("Send the link to Laptop", home.SendSummary);
+        Assert.Contains("Link to send", phone.VisibleTexts());
+        Assert.Empty(phone.TextOutsideWindow());
+        phone.Screenshot("share-01-link");
+
+        home.SendCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => receiver.Ui.Clipboard == "https://example.com/recipe", "link received");
+        await UiHarness.WaitForAsync(() => home.SharedText == null, "shared text cleared");
+        Assert.True(home.ShowDropZone);
+
+        // Shared files and text together: the files go first, then the text.
+        var photo = phone.CreateFile("IMG_2041.jpg", 200_000);
+        phone.ViewModel.HandleCommandLine(new CommandLine(false, new[] { photo }, SendText: "Dinner photos"));
+        await UiHarness.PumpAsync(100);
+        Assert.Single(home.Items);
+        Assert.False(home.SharedTextIsLink);
+        Assert.Contains("Text to send", phone.VisibleTexts());
+        phone.Screenshot("share-02-file-and-text");
+        home.SendCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => receiver.Ui.Clipboard == "Dinner photos", "text received");
+        await UiHarness.WaitForAsync(() => receiver.Node.History.Entries.Count(e => e.Direction == TransferDirection.Receive) == 3, "both received");
+        Assert.Empty(home.Items);
+        Assert.Null(home.SharedText);
+
+        // Removing the shared text brings back the empty Send screen.
+        phone.ViewModel.HandleCommandLine(new CommandLine(false, Array.Empty<string>(), SendText: "never mind"));
+        home.ClearSharedTextCommand.Execute(null);
+        Assert.True(home.ShowDropZone);
+        Assert.False(home.CanSend);
     }
 
     [Fact]

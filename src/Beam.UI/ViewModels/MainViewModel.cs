@@ -224,9 +224,10 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     public void HandleCommandLine(CommandLine commandLine)
     {
-        if (commandLine.SendPaths.Count == 0) return;
+        if (commandLine.SendPaths.Count == 0 && string.IsNullOrWhiteSpace(commandLine.SendText)) return;
         Navigate(Page.Home);
         Home.AddPaths(commandLine.SendPaths);
+        if (!string.IsNullOrWhiteSpace(commandLine.SendText)) Home.SharedText = commandLine.SendText.Trim();
     }
 
     public void Navigate(Page page)
