@@ -132,7 +132,7 @@ public sealed class UiHarness : IAsyncDisposable
 
     /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
     public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false,
-        string language = L.English, bool phone = false)
+        string language = L.English, bool phone = false, Beam.Core.Direct.IDirectLink? directLink = null)
     {
         // Tests assert English text whatever the language of the machine running them.
         L.SetLanguage(language);
@@ -146,6 +146,7 @@ public sealed class UiHarness : IAsyncDisposable
             TransferPort = 0,
             Edition = new Beam.Core.Licensing.Edition(pro, launchPeriod),
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
+            DirectLink = directLink,
         });
         Node.Settings.Update(s =>
         {
@@ -193,6 +194,17 @@ public sealed class UiHarness : IAsyncDisposable
         TestFiles.Write(path, size, seed);
         return path;
     }
+
+    /// <summary>How other devices reach this one (bypassing discovery).</summary>
+    public DeviceInfo AsDevice() => new()
+    {
+        Id = Node.Identity.DeviceId,
+        Name = Node.Settings.Current.DeviceName,
+        Fingerprint = Node.Identity.Fingerprint,
+        Kind = Platform.IsPhone ? DeviceKinds.Phone : DeviceKinds.Laptop,
+        DirectRoles = Node.Direct.Roles,
+        Endpoints = new[] { new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, Node.Transfers.Port) },
+    };
 
     public void AddFakeDevice(string name, string kind = DeviceKinds.Desktop, string platform = "windows")
     {

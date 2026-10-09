@@ -280,7 +280,7 @@ internal sealed class IncomingTransfer
     /// <summary>Records which path the sender came in on; switching the connection method drops this connection and the sender resumes.</summary>
     private void StartTransferring(TransferSession session)
     {
-        session.SetPath(_service.PathOf(_connection.RemoteEndPoint));
+        session.SetPath(_service.PathOf(_connection.LocalEndPoint)); // the address this device was reached on
         session.SetInterruptAction(_connection.Abort);
         session.SetState(TransferState.Transferring);
     }

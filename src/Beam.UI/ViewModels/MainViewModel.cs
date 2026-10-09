@@ -67,6 +67,25 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
         node.Edition.Changed += () => Dispatcher.UIThread.Post(OnEditionChanged);
         node.Quota.Changed += () => Dispatcher.UIThread.Post(Home.OnEditionChanged);
+        node.Direct.Problem += message => Dispatcher.UIThread.Post(() => ShowDirectProblem(message));
+    }
+
+    private bool _showingDirectProblem;
+
+    /// <summary>A direct connection couldn't be set up; transfers carry on over Wi-Fi.</summary>
+    private async void ShowDirectProblem(string message)
+    {
+        if (_showingDirectProblem) return;
+        _showingDirectProblem = true;
+        try
+        {
+            await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't connect directly"),
+                message + "\n\n" + L.T("Beam uses the Wi-Fi network instead."), L.T("OK"), ""));
+        }
+        finally
+        {
+            _showingDirectProblem = false;
+        }
     }
 
     public BeamNode Node { get; }
@@ -452,7 +471,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private void AddTransfer(TransferSession session)
     {
         if (Transfers.Any(t => t.Session == session)) return;
-        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync);
+        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync, Node.Direct, Node.Discovery.Find);
         Transfers.Insert(0, vm);
         session.StateChanged += s => Dispatcher.UIThread.Post(() => OnSessionStateChanged(vm));
         // A short transfer can finish before this subscription; catch up so it is still announced and counted.

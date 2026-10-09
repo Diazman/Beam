@@ -4,13 +4,13 @@ name: Release
 #   • Beam-<version>-x64-setup.exe / -arm64-setup.exe   (installer, recommended)
 #   • Beam-<version>-x64-portable.exe / -arm64-...       (single exe, no install)
 #   • Beam_<version>.0.msixbundle                        (upload this to Microsoft Partner Center)
-# Trigger: pushing a new <Version> in Directory.Build.props to main (or a claude/ branch) publishes
+# Trigger: pushing a new <Version> in Directory.Build.props to main publishes
 # release v<Version> automatically; versions that already have a release are skipped.
 # Pushing a tag like v1.0.0, or "Run workflow" in the Actions tab, also works.
 
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 

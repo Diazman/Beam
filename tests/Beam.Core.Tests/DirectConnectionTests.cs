@@ -13,15 +13,15 @@ namespace Beam.Core.Tests;
 /// </summary>
 public class DirectConnectionTests
 {
-    private static readonly IPAddress DirectAddress = IPAddress.Parse("127.0.0.2");
+    private static readonly IPAddress DirectAddress = FakeDirectAir.DirectAddress;
 
     [Fact]
     public async Task SwitchingDuringATransferMovesItToTheDirectLinkAndBack()
     {
-        var air = new FakeAir();
+        var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", pro: false, directLink: air.Link(DirectRoles.Host | DirectRoles.Join)); // 5 MB/s: the transfer takes a while
-        air.Connect(phone, pc);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 4);
 
         var session = phone.Node.Send(pc.AsDevice(), new[] { file });
@@ -56,10 +56,10 @@ public class DirectConnectionTests
     [Fact]
     public async Task ChoosingDirectBeforeSendingConnectsDirectlyFromTheStart()
     {
-        var air = new FakeAir();
+        var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
-        air.Connect(phone, pc);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         var paths = new List<TransferPath>();
 
@@ -75,7 +75,7 @@ public class DirectConnectionTests
     [Fact]
     public async Task WhenTheOtherDeviceCantConnectDirectlyTheNetworkIsUsed()
     {
-        var air = new FakeAir();
+        var air = new FakeDirectAir();
         await using var pc = new TestNode("Old laptop"); // no direct link (older Beam, or no Wi-Fi Direct)
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
@@ -97,10 +97,10 @@ public class DirectConnectionTests
     [Fact]
     public async Task HostFailureIsReportedAndTheTransferStaysOnTheNetwork()
     {
-        var air = new FakeAir { HostError = "This computer's Wi-Fi can't create a direct connection." };
+        var air = new FakeDirectAir { HostError = "This computer's Wi-Fi can't create a direct connection." };
         await using var pc = new TestNode("Desktop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
-        air.Connect(phone, pc);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var problems = new List<string>();
         phone.Node.Direct.Problem += problems.Add;
 
@@ -112,10 +112,10 @@ public class DirectConnectionTests
     [Fact]
     public async Task AddressesOfThePreferredPathComeFirst()
     {
-        var air = new FakeAir();
+        var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
-        air.Connect(phone, pc);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var both = pc.AsDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, 1), new IPEndPoint(IPAddress.Loopback, 1) } };
 
         Assert.Equal(IPAddress.Loopback, phone.Node.Direct.Order(both).Endpoints[0].Address);
@@ -132,72 +132,5 @@ public class DirectConnectionTests
         Assert.True(DirectAddresses.IsDirectAdapter("p2p-wlan0-3", ""));
         Assert.True(DirectAddresses.IsDirectAdapter("Local Area Connection* 12", "Microsoft Wi-Fi Direct Virtual Adapter #2"));
         Assert.False(DirectAddresses.IsDirectAdapter("Wi-Fi", "Intel(R) Wi-Fi 6 AX201 160MHz"));
-    }
-
-    /// <summary>Stand-in for the radio: hosting hands out a network, joining it makes the host reachable on 127.0.0.2.</summary>
-    private sealed class FakeAir
-    {
-        private DirectNetwork? _network;
-        private Action? _onJoined;
-        private int _hosted, _joined, _stopped;
-
-        public string? HostError { get; init; }
-
-        public int Hosted => Volatile.Read(ref _hosted);
-
-        public int Joined => Volatile.Read(ref _joined);
-
-        public int Stopped => Volatile.Read(ref _stopped);
-
-        public IDirectLink Link(DirectRoles roles) => new FakeLink(this, roles);
-
-        /// <summary>Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address.</summary>
-        public void Connect(TestNode joiner, TestNode host)
-        {
-            joiner.Node.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-            host.Node.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-            joiner.Node.Discovery.ReportReachable(host.AsDevice());
-            host.Node.Discovery.ReportReachable(joiner.AsDevice());
-            _onJoined = () =>
-            {
-                joiner.Node.Discovery.ReportReachable(host.AsDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Node.Transfers.Port) } });
-                host.Node.Discovery.ReportReachable(joiner.AsDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Node.Transfers.Port) } });
-            };
-        }
-
-        private sealed class FakeLink : IDirectLink
-        {
-            private readonly FakeAir _air;
-
-            public FakeLink(FakeAir air, DirectRoles roles)
-            {
-                _air = air;
-                Roles = roles;
-            }
-
-            public DirectRoles Roles { get; }
-
-            public Task<DirectNetwork> HostAsync(CancellationToken cancellationToken)
-            {
-                if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
-                Interlocked.Increment(ref _air._hosted);
-                return Task.FromResult(_air._network ??= new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
-            }
-
-            public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
-            {
-                await Task.Delay(100, cancellationToken);
-                if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
-                Interlocked.Increment(ref _air._joined);
-                _air._onJoined?.Invoke();
-                return DirectAddress;
-            }
-
-            public void Stop()
-            {
-                Interlocked.Increment(ref _air._stopped);
-                _air._network = null;
-            }
-        }
     }
 }

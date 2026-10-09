@@ -35,6 +35,15 @@
         <TextBlock Grid.Column="1" Classes="caption" Text="{Binding SpeedText}" />
       </Grid>
       <TextBlock Classes="caption" Text="{Binding EtaText}" IsVisible="{Binding HasEta}" />
+      <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasPathText}">
+        <Panel VerticalAlignment="Center">
+          <PathIcon Data="{StaticResource IconLink}" Width="12" Height="12" IsVisible="{Binding IsDirectPath}"
+                    Foreground="{DynamicResource AccentBrush}" />
+          <PathIcon Data="{StaticResource IconWifi}" Width="12" Height="12" IsVisible="{Binding !IsDirectPath}"
+                    Foreground="{DynamicResource TextSecondaryBrush}" />
+        </Panel>
+        <TextBlock Classes="caption" Text="{Binding PathText}" VerticalAlignment="Center" />
+      </StackPanel>
       <TextBlock Classes="tertiary" Text="{Binding CurrentFileText}" IsVisible="{Binding HasCurrentFile}"
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentFileText}" />
 
@@ -43,6 +52,10 @@
         <Button Margin="0,4,8,0" Command="{Binding ShowInFolderCommand}" IsVisible="{Binding CanOpen}" Content="{l:T 'Show in folder'}" />
         <Button Margin="0,4,8,0" Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}" Content="{l:T 'Copy text'}" />
         <Button Classes="accent" Margin="0,4,8,0" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" Content="{l:T 'Try again'}" />
+        <Button Margin="0,4,8,0" Command="{Binding SwitchToDirectCommand}" IsVisible="{Binding CanSwitchToDirect}" Content="{l:T 'Connect directly'}"
+                ToolTip.Tip="{l:T 'Continue over a direct Wi-Fi link between the two devices: faster on a slow or busy network.'}" />
+        <Button Margin="0,4,8,0" Command="{Binding SwitchToNetworkCommand}" IsVisible="{Binding CanSwitchToNetwork}" Content="{l:T 'Switch to Wi-Fi'}"
+                ToolTip.Tip="{l:T 'Continue over the Wi-Fi network, e.g. when a device needs its internet connection.'}" />
         <Button Margin="0,4,8,0" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" Content="{Binding CancelText}" />
         <Button Classes="link" Margin="0,4,0,0" Command="{Binding ToggleDetailsCommand}" IsVisible="{Binding HasDetails}"
                 Content="{Binding DetailsToggleText}" />

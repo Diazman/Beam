@@ -1,10 +1,20 @@
 name: Build
 
+# The repository is private, so Actions minutes are limited (Windows runners count double).
+# Pull requests run the tests and the Android build once; installers and the Store package are
+# built on main (and when run by hand). Documentation-only changes don't build at all.
 on:
   push:
-    branches: [main, master, "claude/**"]
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md", "packaging/store/**"]
   pull_request:
+    paths-ignore: ["docs/**", "**/*.md", "packaging/store/**"]
   workflow_dispatch:
+
+# A newer push to the same branch or pull request cancels the run that is still going.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -36,6 +46,7 @@ jobs:
   package:
     name: Package (${{ matrix.runtime }})
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     strategy:
       matrix:
@@ -60,6 +71,7 @@ jobs:
   store-package:
     name: Store package (MSIX)
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

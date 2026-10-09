@@ -24,6 +24,7 @@ internal sealed class PeerConnection : IAsyncDisposable
         RemoteFingerprint = remoteFingerprint;
         RemoteHello = remoteHello;
         RemoteEndPoint = socket.RemoteEndPoint as IPEndPoint ?? new IPEndPoint(IPAddress.None, 0);
+        LocalEndPoint = socket.LocalEndPoint as IPEndPoint ?? new IPEndPoint(IPAddress.None, 0);
     }
 
     public FrameChannel Channel { get; }
@@ -33,6 +34,9 @@ internal sealed class PeerConnection : IAsyncDisposable
     public HelloMessage RemoteHello { get; }
 
     public IPEndPoint RemoteEndPoint { get; }
+
+    /// <summary>This device's address the connection uses (tells which network or link it came in on).</summary>
+    public IPEndPoint LocalEndPoint { get; }
 
     /// <summary>Tears the connection down immediately; pending reads and writes fail.</summary>
     public void Abort()
