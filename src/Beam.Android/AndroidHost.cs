@@ -27,6 +27,9 @@ internal static class AndroidHost
     private static MobileView? _view;
     private static WifiManager.MulticastLock? _multicastLock;
     private static SharedItems? _pendingShare;
+    private static WeakReference<Activity>? _activity;
+    private static TaskCompletionSource<bool>? _permission;
+    private static int _permissionRequest = 100;
 
     private static Context Context => global::Android.App.Application.Context;
 
@@ -47,6 +50,7 @@ internal static class AndroidHost
             Paths = Paths,
             ExternalFiles = new ContentFiles(Context.ContentResolver!),
             DeviceKind = DeviceKinds.Phone,
+            DirectLink = new AndroidDirectLink(Context, () => _node?.Settings.Current.DeviceName ?? "Phone"),
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>
@@ -92,9 +96,33 @@ internal static class AndroidHost
         if (_view != null) _view.IsInForeground = foreground;
     }
 
+    /// <summary>
+    /// Asks the user for one permission (e.g. Nearby devices for direct connections) and waits for the answer.
+    /// False when it was refused or there is no screen to ask on.
+    /// </summary>
+    public static Task<bool> RequestPermissionAsync(string permission)
+    {
+        Activity? activity = null;
+        if (_activity?.TryGetTarget(out activity) != true || activity == null) return Task.FromResult(false);
+        if (activity.CheckSelfPermission(permission) == Permission.Granted) return Task.FromResult(true);
+        var waiting = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref _permission, waiting)?.TrySetResult(false);
+        var code = Interlocked.Increment(ref _permissionRequest);
+        activity.RunOnUiThread(() => activity.RequestPermissions(new[] { permission }, code));
+        return waiting.Task;
+    }
+
+    /// <summary>Called by the activity with the user's answer to <see cref="RequestPermissionAsync"/>.</summary>
+    public static void OnPermissionResult(int requestCode, Permission[] results)
+    {
+        if (requestCode <= 100) return; // the start-up request
+        Interlocked.Exchange(ref _permission, null)?.TrySetResult(results.Length > 0 && results.All(r => r == Permission.Granted));
+    }
+
     /// <summary>Notifications (Android 13+) and, up to Android 10, saving to Downloads need the user's OK.</summary>
     public static void RequestPermissions(Activity activity)
     {
+        _activity = new WeakReference<Activity>(activity);
         var wanted = new List<string>();
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) wanted.Add(Manifest.Permission.PostNotifications);
         if (Build.VERSION.SdkInt <= BuildVersionCodes.Q) wanted.Add(Manifest.Permission.WriteExternalStorage);

@@ -222,7 +222,7 @@ internal sealed class IncomingTransfer
         }, serviceToken).ConfigureAwait(false);
 
         session.SetTotals(plan.Files.Count, required, 0, 0, plan.SkippedCount);
-        session.SetState(TransferState.Transferring);
+        StartTransferring(session);
         Log.Info($"Receiving {session.Title} from {PeerName}: {plan.Files.Count} files, {required} bytes into {destination}");
         await ReceiveAsync(session, record, pendingRead, serviceToken).ConfigureAwait(false);
     }
@@ -272,9 +272,17 @@ internal sealed class IncomingTransfer
         await RespondAsync(new OfferResponseMessage { Accepted = true, Plan = plan }, serviceToken).ConfigureAwait(false);
         session.SetTotals(record.Files.Count, record.Files.Sum(f => f.Size), record.Files.Count(f => f.Done), transferred, record.SkippedCount);
         session.SetDiscardAction(null);
-        session.SetState(TransferState.Transferring);
+        StartTransferring(session);
         Log.Info($"Resuming {record.TransferId} from {PeerName}: {transferred} bytes already here");
         await ReceiveAsync(session, record, null, serviceToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Records which path the sender came in on; switching the connection method drops this connection and the sender resumes.</summary>
+    private void StartTransferring(TransferSession session)
+    {
+        session.SetPath(_service.PathOf(_connection.LocalEndPoint)); // the address this device was reached on
+        session.SetInterruptAction(_connection.Abort);
+        session.SetState(TransferState.Transferring);
     }
 
     private async Task ReceiveAsync(TransferSession session, ResumeRecord record, Task<Frame>? pendingRead, CancellationToken serviceToken)

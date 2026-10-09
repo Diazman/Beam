@@ -26,6 +26,9 @@ internal sealed class OutgoingTransfer
     private bool _accepted;
     private int _running;
 
+    /// <summary>Until when (TickCount64) reconnect failures don't count: the user is switching the connection method.</summary>
+    private long _switchingUntil;
+
     public OutgoingTransfer(TransferService service, TransferSession session, IReadOnlyList<string> sourcePaths, Func<DeviceInfo> target)
     {
         _service = service;
@@ -84,12 +87,16 @@ internal sealed class OutgoingTransfer
                 }
                 catch (Exception ex) when (!token.IsCancellationRequested && ErrorTranslator.IsTransientNetworkFailure(ex))
                 {
-                    failures++;
+                    // While switching between Wi-Fi and a direct link the devices need a moment to find each
+                    // other on the new path: keep trying for a while instead of giving up after a few attempts.
+                    var switching = Environment.TickCount64 < Volatile.Read(ref _switchingUntil);
+                    if (!switching) failures++;
                     var maxAttempts = _accepted ? 6 : 2;
-                    Log.Warn($"Transfer {_session.Id} to {PeerName}: attempt {failures} failed ({ex.GetType().Name}: {ex.Message})");
+                    Log.Warn($"Transfer {_session.Id} to {PeerName}: attempt failed{(switching ? " while switching connection" : $" ({failures})")} ({ex.GetType().Name}: {ex.Message})");
                     if (failures >= maxAttempts) throw;
                     _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
-                    await Task.Delay(Backoff(failures), token).ConfigureAwait(false);
+                    if (!switching) _session.SetPath(TransferPath.Unknown);
+                    await Task.Delay(switching ? TimeSpan.FromSeconds(1.5) : Backoff(failures), token).ConfigureAwait(false);
                 }
             }
         }
@@ -132,6 +139,7 @@ internal sealed class OutgoingTransfer
 
     private async Task RunAttemptAsync(CancellationToken token)
     {
+        if (_service.BeforeConnect is { } prepare) await prepare(_target(), token).ConfigureAwait(false);
         var target = _target();
         if (!_accepted) _session.SetState(TransferState.Connecting);
 
@@ -165,9 +173,26 @@ internal sealed class OutgoingTransfer
 
         _accepted = true;
         var plan = ApplyPlan(response.Plan);
+        _session.SetPath(_service.PathOf(connection.RemoteEndPoint));
+        Volatile.Write(ref _switchingUntil, 0);
+        _session.SetInterruptAction(() =>
+        {
+            Volatile.Write(ref _switchingUntil, Environment.TickCount64 + (long)SwitchWindow.TotalMilliseconds);
+            connection.Abort();
+        });
         _session.SetState(TransferState.Transferring);
-        await SendFilesAsync(connection, plan, token).ConfigureAwait(false);
+        try
+        {
+            await SendFilesAsync(connection, plan, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _session.SetInterruptAction(null);
+        }
     }
+
+    /// <summary>How long a transfer keeps trying to reconnect after the user switched the connection method.</summary>
+    internal static readonly TimeSpan SwitchWindow = TimeSpan.FromSeconds(90);
 
     private List<PlanItem> ApplyPlan(List<PlanItem> plan)
     {

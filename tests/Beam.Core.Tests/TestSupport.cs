@@ -87,7 +87,8 @@ public sealed class TestNode : IAsyncDisposable
     private readonly TempDir _dir = new();
 
     /// <param name="pro">Most tests run as Pro so the free edition's speed and daily limits don't apply.</param>
-    public TestNode(string name, bool startDiscovery = false, bool pro = true, bool launchPeriod = false, Files.IExternalFiles? externalFiles = null)
+    public TestNode(string name, bool startDiscovery = false, bool pro = true, bool launchPeriod = false, Files.IExternalFiles? externalFiles = null,
+        Direct.IDirectLink? directLink = null)
     {
         Edition = new Licensing.Edition(pro, launchPeriod);
         Handler = new TestHandler();
@@ -100,6 +101,7 @@ public sealed class TestNode : IAsyncDisposable
             Handler = Handler,
             Edition = Edition,
             ExternalFiles = externalFiles,
+            DirectLink = directLink,
             Discovery = new DiscoveryOptions
             {
                 Port = 0,
@@ -134,6 +136,7 @@ public sealed class TestNode : IAsyncDisposable
         Id = Node.Identity.DeviceId,
         Name = Node.Settings.Current.DeviceName,
         Fingerprint = Node.Identity.Fingerprint,
+        DirectRoles = Node.Direct.Roles,
         Endpoints = new[] { new IPEndPoint(IPAddress.Loopback, viaPort ?? Node.Transfers.Port) },
     };
 

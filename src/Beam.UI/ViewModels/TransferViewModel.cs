@@ -3,7 +3,10 @@ using Avalonia.Media;
 using Beam.App.Infrastructure;
 using Beam.App.Platform;
 using Beam.App.Services;
+using Beam.Core.Direct;
+using Beam.Core.Discovery;
 using Beam.Core.Localization;
+using Beam.Core.Settings;
 using Beam.Core.Transfer;
 using Beam.Core.Util;
 
@@ -23,10 +26,19 @@ public sealed class TransferViewModel : ObservableObject
     private string _etaText = "";
     private string _currentFileText = "";
     private double _progress;
+    private readonly DirectManager? _direct;
+    private readonly Func<string, DeviceInfo?>? _findDevice;
+    private bool _switching;
+    private ConnectionMethod? _switchingTo;
 
-    public TransferViewModel(TransferSession session, IPlatformServices platform, Action<TransferViewModel> dismiss, Func<string, Task>? copy = null)
+    public TransferViewModel(TransferSession session, IPlatformServices platform, Action<TransferViewModel> dismiss, Func<string, Task>? copy = null,
+        DirectManager? direct = null, Func<string, DeviceInfo?>? findDevice = null)
     {
         Session = session;
+        _direct = direct;
+        _findDevice = findDevice;
+        SwitchToDirectCommand = new AsyncCommand(() => SwitchAsync(ConnectionMethod.Direct));
+        SwitchToNetworkCommand = new AsyncCommand(() => SwitchAsync(ConnectionMethod.SameNetwork));
         CopyTextCommand = new AsyncCommand(async () =>
         {
             if (Session.Text != null && copy != null) await copy(Session.Text);
@@ -159,6 +171,71 @@ public sealed class TransferViewModel : ObservableObject
 
     public bool CanCopyText => Session.IsText && State == TransferState.Completed;
 
+    /// <summary>"Direct connection" / "Over Wi-Fi" / "Switching…" while the transfer is running.</summary>
+    public string PathText
+    {
+        get
+        {
+            if (Session.IsText || IsFinished) return "";
+            if (_switching || Session.IsSwitchingPath)
+                return (_switchingTo ?? Method) == ConnectionMethod.Direct ? L.T("Switching to a direct connection…") : L.T("Switching to Wi-Fi…");
+            return Session.Path switch
+            {
+                TransferPath.Direct => L.T("Direct connection"),
+                TransferPath.Network when State == TransferState.Transferring => L.T("Over Wi-Fi"),
+                _ => "",
+            };
+        }
+    }
+
+    public bool HasPathText => PathText.Length > 0;
+
+    public bool IsDirectPath => Session.Path == TransferPath.Direct && !Session.IsSwitchingPath;
+
+    /// <summary>Running over Wi-Fi and both devices can connect directly.</summary>
+    public bool CanSwitchToDirect => CanSwitch && Method != ConnectionMethod.Direct
+                                     && _findDevice?.Invoke(Session.PeerId) is { } peer && _direct!.CanConnectDirectly(peer);
+
+    /// <summary>Running (or set up) over a direct link: going back to the Wi-Fi network, e.g. to get internet.</summary>
+    public bool CanSwitchToNetwork => CanSwitch && (Method == ConnectionMethod.Direct || Session.Path == TransferPath.Direct);
+
+    public AsyncCommand SwitchToDirectCommand { get; }
+
+    public AsyncCommand SwitchToNetworkCommand { get; }
+
+    private ConnectionMethod Method => _direct?.MethodFor(Session.PeerId) ?? ConnectionMethod.SameNetwork;
+
+    private bool CanSwitch => _direct is { IsSupported: true } && !_switching && !Session.IsText
+                              && Session.PeerId != Beam.Core.Phone.PhoneLinkServer.PhonePeerId
+                              && State is TransferState.Transferring or TransferState.Reconnecting or TransferState.Interrupted;
+
+    private async Task SwitchAsync(ConnectionMethod method)
+    {
+        if (_direct == null) return;
+        _switching = true;
+        _switchingTo = method;
+        RefreshPath();
+        try
+        {
+            await _direct.SwitchAsync(Session.PeerId, method);
+        }
+        finally
+        {
+            _switching = false;
+            _switchingTo = null;
+            RefreshPath();
+        }
+    }
+
+    private void RefreshPath()
+    {
+        OnPropertyChanged(nameof(PathText));
+        OnPropertyChanged(nameof(HasPathText));
+        OnPropertyChanged(nameof(IsDirectPath));
+        OnPropertyChanged(nameof(CanSwitchToDirect));
+        OnPropertyChanged(nameof(CanSwitchToNetwork));
+    }
+
     /// <summary>Pulls the latest numbers from the engine. Called on the UI thread.</summary>
     public void Refresh()
     {
@@ -183,6 +260,7 @@ public sealed class TransferViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowStats));
         OnPropertyChanged(nameof(HasCurrentFile));
         OnPropertyChanged(nameof(HasEta));
+        RefreshPath();
 
         if (!stateChanged) return;
         DetailsText = BuildDetails(snapshot);
@@ -217,6 +295,8 @@ public sealed class TransferViewModel : ObservableObject
                 return L.T("Waiting for {0} to accept…", peer);
             case TransferState.AwaitingDecision:
                 return L.T("Waiting for your answer…");
+            case TransferState.Reconnecting or TransferState.Interrupted when _switching || Session.IsSwitchingPath:
+                return L.T("Reconnecting to {0}…", peer);
             case TransferState.Reconnecting:
                 return L.T("Connection lost. Reconnecting…");
             case TransferState.Interrupted:

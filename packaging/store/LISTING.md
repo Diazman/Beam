@@ -124,4 +124,4 @@ Create it in Partner Center > your app > **Add-ons > Create a new add-on**:
 | Title | Beam Pro |
 | Description | Send to several computers at once, at full speed, as often as you like. Includes sending to phones and tablets when Beam for Android and iPhone arrives. |
 | Price | **Free during the launch period** (founding users claim it and keep it). When switching to freemium (docs/PLAN.md step 6.7), change it to a paid tier (e.g. USD 4.99); the Store converts it to local prices, including Turkish lira. People who claimed it free keep it. |
-| Store listing image | `packaging/msix/Assets/StoreLogo.scale-400.png` |
+| Store listing image (300×300 PNG) | `packaging/store/logos/BeamPro-AddOn-300.png` — the same image for every language |

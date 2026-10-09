@@ -29,6 +29,12 @@ public class MainActivity : AvaloniaMainActivity<App>
         if (savedInstanceState == null) AndroidHost.Share(SharedItems.From(Intent));
     }
 
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        AndroidHost.OnPermissionResult(requestCode, grantResults);
+    }
+
     /// <summary>Shared again while Beam is already open (the activity is single-task).</summary>
     protected override void OnNewIntent(Intent? intent)
     {

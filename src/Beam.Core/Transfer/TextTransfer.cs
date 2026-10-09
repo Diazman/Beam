@@ -17,10 +17,11 @@ internal static class TextTransfer
     public static async Task SendAsync(TransferService service, TransferSession session, string text, Func<DeviceInfo> target)
     {
         var token = session.CancellationToken;
-        var device = target();
         try
         {
             session.SetState(TransferState.Connecting);
+            if (service.BeforeConnect is { } prepare) await prepare(target(), token).ConfigureAwait(false);
+            var device = target();
             await using var connection = await SecureTransport.ConnectAsync(
                 service.Identity,
                 service.CreateHello(ConnectionPurpose.Text),

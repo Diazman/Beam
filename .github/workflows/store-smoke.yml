@@ -1,0 +1,121 @@
+name: Store package smoke test
+
+# Installs the Microsoft Store package (signed with a throwaway test certificate) on a Windows runner,
+# starts Beam the way the Start menu does, and checks it is still running. On failure it prints Beam's
+# log and the Windows event log entries that explain why it closed.
+on:
+  pull_request:
+    paths: ["packaging/msix/**", "packaging/build-msix.ps1", "src/Beam.App/**", "native/**", ".github/workflows/store-smoke.yml"]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Test the Store package of this GitHub release (e.g. v1.2.1) instead of building the current code"
+        required: false
+        default: ""
+
+concurrency:
+  group: store-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test certificate for the package publisher
+        shell: pwsh
+        run: |
+          $publisher = (Get-Content packaging/msix/identity.json -Raw | ConvertFrom-Json).publisher
+          $cert = New-SelfSignedCertificate -Type Custom -Subject $publisher -KeyUsage DigitalSignature -FriendlyName "Beam test" `
+            -CertStoreLocation Cert:\CurrentUser\My -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $password = ConvertTo-SecureString -String "beam-test" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$env:RUNNER_TEMP\test.pfx" -Password $password | Out-Null
+          Export-Certificate -Cert $cert -FilePath "$env:RUNNER_TEMP\test.cer" | Out-Null
+          Import-Certificate -FilePath "$env:RUNNER_TEMP\test.cer" -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+
+      - name: Build the x64 Store package
+        if: inputs.release == ''
+        shell: pwsh
+        run: ./packaging/build-msix.ps1 -Architectures x64 -CertificatePath "$env:RUNNER_TEMP\test.pfx" -CertificatePassword beam-test
+
+      - name: Take the x64 package from a release's Store bundle (signed with the test certificate)
+        if: inputs.release != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tools = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory | Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+            Sort-Object Name -Descending | Select-Object -First 1).FullName + "\x64"
+          New-Item -ItemType Directory -Force artifacts/msix, "$env:RUNNER_TEMP\bundle" | Out-Null
+          gh release download "${{ inputs.release }}" --repo "${{ github.repository }}" --pattern "*.msixbundle" --dir "$env:RUNNER_TEMP"
+          $bundle = (Get-ChildItem "$env:RUNNER_TEMP" -Filter *.msixbundle | Select-Object -First 1).FullName
+          & "$tools\makeappx.exe" unbundle /p $bundle /d "$env:RUNNER_TEMP\bundle" /o
+          $msix = (Get-ChildItem "$env:RUNNER_TEMP\bundle" -Filter "*_x64.msix" | Select-Object -First 1).FullName
+          & "$tools\signtool.exe" sign /fd SHA256 /f "$env:RUNNER_TEMP\test.pfx" /p beam-test $msix
+          Copy-Item $msix artifacts/msix/
+          # The unpackaged comparison below runs the same files.
+          New-Item -ItemType Directory -Force artifacts/msix-layout/win-x64 | Out-Null
+          Copy-Item $msix "$env:RUNNER_TEMP\layout.zip"
+          Expand-Archive "$env:RUNNER_TEMP\layout.zip" -DestinationPath artifacts/msix-layout/win-x64 -Force
+          Write-Host "Testing $(Split-Path $msix -Leaf) from ${{ inputs.release }}"
+
+      - name: Unpackaged start of the same files (to tell packaging problems from build problems)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $env:BEAM_DATA_DIR = "$env:RUNNER_TEMP\beam-unpackaged"
+          $p = Start-Process artifacts/msix-layout/win-x64/Beam.exe -PassThru
+          Start-Sleep 20
+          if ($p.HasExited) { Write-Host "::error::Unpackaged Beam.exe exited with code $($p.ExitCode)" } else { Write-Host "Unpackaged Beam.exe is running"; Stop-Process $p -Force }
+          Get-ChildItem "$env:BEAM_DATA_DIR" -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+
+      - name: Install and start the Store package
+        shell: pwsh
+        run: |
+          $start = Get-Date
+          Add-AppxPackage (Get-ChildItem artifacts/msix -Filter "Beam_*_x64.msix" | Select-Object -First 1).FullName
+          $pkg = Get-AppxPackage -Name (Get-Content packaging/msix/identity.json -Raw | ConvertFrom-Json).identityName
+          Write-Host "Installed $($pkg.PackageFullName)"
+          Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!Beam"
+          Start-Sleep 25
+          $running = Get-Process Beam -ErrorAction SilentlyContinue
+          $data = "$env:LOCALAPPDATA\Packages\$($pkg.PackageFamilyName)"
+          Write-Host "Beam processes: $(@($running).Count)"
+          Get-ChildItem $data -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
+          Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $start } -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error', 'Windows Error Reporting', 'Application Hang') } |
+            ForEach-Object { Write-Host "--- $($_.ProviderName) $($_.TimeCreated)"; Write-Host $_.Message }
+          Get-WinEvent -LogName 'Microsoft-Windows-AppModel-Runtime/Admin' -MaxEvents 20 -ErrorAction SilentlyContinue |
+            Where-Object { $_.TimeCreated -ge $start -and $_.LevelDisplayName -ne 'Information' } | ForEach-Object { Write-Host "--- AppModel $($_.TimeCreated)"; Write-Host $_.Message }
+          if (-not $running) { throw "The Store package of Beam did not stay open." }
+          $window = @($running | Where-Object { $_.MainWindowHandle -ne 0 })
+          Write-Host "Window: '$($window.MainWindowTitle)' (handle $($window.MainWindowHandle))"
+          if ($window.Count -eq 0) { throw "Beam is running but shows no window." }
+
+          # Starting it again (e.g. from the Start menu while it is in the tray) must bring the same window forward.
+          Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!Beam"
+          Start-Sleep 8
+          $after = @(Get-Process Beam -ErrorAction SilentlyContinue)
+          Write-Host "Beam processes after a second start: $($after.Count)"
+          if ($after.Count -ne 1) { throw "A second start left $($after.Count) Beam processes." }
+          Write-Host "Store package of Beam started, shows its window and hands over a second start."
+
+      - name: Screenshot
+        if: always()
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:RUNNER_TEMP\store-launch.png")
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-launch-screenshot
+          path: ${{ runner.temp }}/store-launch.png

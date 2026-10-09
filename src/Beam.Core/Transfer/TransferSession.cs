@@ -27,6 +27,18 @@ public enum TransferState
     Declined,
 }
 
+/// <summary>How the two devices are connected for a transfer.</summary>
+public enum TransferPath
+{
+    Unknown,
+
+    /// <summary>Through the Wi-Fi network (router).</summary>
+    Network,
+
+    /// <summary>A direct Wi-Fi link between the devices.</summary>
+    Direct,
+}
+
 public sealed record FileFailure(string RelativePath, string Reason);
 
 /// <summary>Immutable view of a session for display.</summary>
@@ -61,6 +73,9 @@ public sealed class TransferSession
     private TransferError? _error;
     private Action? _resume;
     private Action? _discard;
+    private Action? _interrupt;
+    private TransferPath _path;
+    private bool _switchingPath;
 
     internal TransferSession(string id, TransferDirection direction, string peerId, string peerName, string peerFingerprint)
     {
@@ -101,6 +116,27 @@ public sealed class TransferSession
 
     /// <summary>Receiver: full local paths of the top-level items that were saved.</summary>
     public IReadOnlyList<string> SavedRootPaths { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>The connection the transfer is running over right now (Unknown while not connected).</summary>
+    public TransferPath Path
+    {
+        get
+        {
+            lock (_gate) return _path;
+        }
+    }
+
+    /// <summary>The user switched the connection method; the transfer is reconnecting on the other path.</summary>
+    public bool IsSwitchingPath
+    {
+        get
+        {
+            lock (_gate) return _switchingPath;
+        }
+    }
+
+    /// <summary>Raised (on a background thread) when <see cref="Path"/> or <see cref="IsSwitchingPath"/> changes.</summary>
+    public event Action<TransferSession>? PathChanged;
 
     /// <summary>Raised (on a background thread) whenever <see cref="State"/> changes.</summary>
     public event Action<TransferSession>? StateChanged;
@@ -207,6 +243,50 @@ public sealed class TransferSession
         lock (_gate) _discard = discard;
     }
 
+    /// <summary>What drops the live connection (set while connected and transferring).</summary>
+    internal void SetInterruptAction(Action? interrupt)
+    {
+        lock (_gate) _interrupt = interrupt;
+    }
+
+    /// <summary>
+    /// Drops the live connection without ending the transfer: the sender reconnects (over the connection
+    /// method now preferred) and continues where it stopped. False when there is no live transfer connection.
+    /// </summary>
+    internal bool InterruptConnection(bool switchingPath)
+    {
+        Action? interrupt;
+        lock (_gate)
+        {
+            if (IsFinalState(_state) || _interrupt == null) return false;
+            interrupt = _interrupt;
+            _interrupt = null;
+        }
+
+        if (switchingPath) SetPath(TransferPath.Unknown, switching: true);
+        interrupt();
+        return true;
+    }
+
+    internal void SetPath(TransferPath path, bool switching = false)
+    {
+        lock (_gate)
+        {
+            if (_path == path && _switchingPath == switching) return;
+            _path = path;
+            _switchingPath = switching;
+        }
+
+        try
+        {
+            PathChanged?.Invoke(this);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error("PathChanged handler threw", ex);
+        }
+    }
+
     internal void SetDescription(IReadOnlyList<string> rootNames)
     {
         RootNames = rootNames;
@@ -260,6 +340,8 @@ public sealed class TransferSession
             {
                 FinishedAt = DateTimeOffset.Now;
                 _currentFile = null;
+                _interrupt = null;
+                _switchingPath = false;
             }
         }
 

@@ -154,6 +154,25 @@
         <TextBlock Classes="h2" Text="{l:T 'Connection'}" />
         <Border Classes="card">
           <StackPanel Spacing="12">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h3" Text="{l:T 'How devices connect'}" />
+              <RadioButton GroupName="connection" IsChecked="{Binding UseSameNetwork}">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{l:T 'Same Wi-Fi network (recommended)'}" TextWrapping="Wrap" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Both devices keep their internet connection.'}" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton GroupName="connection" IsChecked="{Binding UseDirect}" IsEnabled="{Binding DirectSupported}">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{l:T 'Direct connection (Beta)'}" TextWrapping="Wrap" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap"
+                             Text="{l:T 'The devices connect to each other without the router: faster on a slow or busy network, and works with no Wi-Fi network at all. You can switch during a transfer, too.'}" />
+                </StackPanel>
+              </RadioButton>
+              <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding DirectUnsupported}"
+                         Text="{l:T 'This computer can\'t connect directly.', Phone='This phone can\'t connect directly. Direct connections need Android 10 or newer.'}" />
+            </StackPanel>
+            <Separator />
             <StackPanel Spacing="4">
               <TextBlock Classes="h3" Text="{l:T 'This computer\'s address', Phone='This phone\'s address'}" />
               <TextBlock Classes="caption" TextWrapping="Wrap"

@@ -27,7 +27,7 @@ public sealed class DiscoveryOptions
 }
 
 /// <summary>What this device tells others about itself.</summary>
-public sealed record LocalAnnouncement(string Id, string Name, int TcpPort, string Fingerprint, string Kind);
+public sealed record LocalAnnouncement(string Id, string Name, int TcpPort, string Fingerprint, string Kind, Direct.DirectRoles DirectRoles = Direct.DirectRoles.None);
 
 /// <summary>
 /// Finds other Beam instances on the local network using small UDP datagrams:
@@ -131,6 +131,14 @@ public sealed class DiscoveryService : IDisposable
 
     /// <summary>Re-announce right away, e.g. after the device name changed.</summary>
     public void AnnounceNow() => Wake();
+
+    /// <summary>Re-reads the network adapters (a direct link came up or went away) and asks everyone on them.</summary>
+    public void RescanNetworks()
+    {
+        if (_socket == null) return;
+        RefreshInterfaces();
+        SendToAll(CreatePacket(DiscoveryPacket.TypeQuery));
+    }
 
     /// <summary>Ask everyone nearby to announce themselves now.</summary>
     public void Refresh()
@@ -297,6 +305,7 @@ public sealed class DiscoveryService : IDisposable
         Platform = packet.Platform,
         Kind = packet.Kind,
         AppVersion = packet.AppVersion,
+        DirectRoles = Direct.DirectRolesText.Parse(packet.Direct),
         Endpoints = new[] { new IPEndPoint(remote.Address, packet.Port) },
     };
 
@@ -325,7 +334,7 @@ public sealed class DiscoveryService : IDisposable
                     Endpoints = endpoints.Take(4).ToList(),
                     IsManual = existing.Device.IsManual || incoming.IsManual,
                 };
-                if (merged.Name != existing.Device.Name || merged.Fingerprint != existing.Device.Fingerprint
+                if (merged.Name != existing.Device.Name || merged.Fingerprint != existing.Device.Fingerprint || merged.DirectRoles != existing.Device.DirectRoles
                     || !merged.Endpoints.SequenceEqual(existing.Device.Endpoints))
                     changed = merged;
                 return new Entry(merged, now);
@@ -358,6 +367,7 @@ public sealed class DiscoveryService : IDisposable
             Platform = AppInfo.Platform,
             Kind = self.Kind,
             AppVersion = AppInfo.Version,
+            Direct = Direct.DirectRolesText.Format(self.DirectRoles),
         };
         if (type == DiscoveryPacket.TypeQuery && !_discoverable)
         {
