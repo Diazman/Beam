@@ -15,44 +15,6 @@
         Background="{DynamicResource WindowBackgroundBrush}"
         DragDrop.AllowDrop="True">
 
-  <Window.DataTemplates>
-    <DataTemplate DataType="vm:HomeViewModel">
-      <views:HomeView />
-    </DataTemplate>
-    <DataTemplate DataType="vm:PhoneViewModel">
-      <views:PhoneView />
-    </DataTemplate>
-    <DataTemplate DataType="vm:HistoryViewModel">
-      <views:HistoryView />
-    </DataTemplate>
-    <DataTemplate DataType="vm:SettingsViewModel">
-      <views:SettingsView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:IncomingRequestViewModel">
-      <dviews:IncomingRequestView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:ConflictViewModel">
-      <dviews:ConflictView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:ConfirmViewModel">
-      <dviews:ConfirmView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:AddDeviceViewModel">
-      <dviews:AddDeviceView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:WelcomeViewModel">
-      <dviews:WelcomeView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:SendTextViewModel">
-      <dviews:SendTextView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:IncomingTextViewModel">
-      <dviews:IncomingTextView />
-    </DataTemplate>
-    <DataTemplate DataType="dlg:UpgradeViewModel">
-      <dviews:UpgradeView />
-    </DataTemplate>
-  </Window.DataTemplates>
 
   <Panel>
     <Grid ColumnDefinitions="Auto,*,Auto">
@@ -62,7 +24,7 @@
               BorderBrush="{DynamicResource DividerBrush}"
               BorderThickness="0,0,1,0">
         <StackPanel Margin="0,18,0,0" Spacing="4" HorizontalAlignment="Center">
-          <Image Source="/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
+          <Image Source="avares://Beam.UI/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
                  ToolTip.Tip="Beam" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />

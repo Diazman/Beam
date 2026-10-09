@@ -78,11 +78,11 @@ public sealed class PendingItemViewModel : ObservableObject
     private int _fileCount;
     private bool _isMeasuring;
 
-    public PendingItemViewModel(string path, bool isFolder, Action<PendingItemViewModel> remove)
+    public PendingItemViewModel(string path, bool isFolder, Action<PendingItemViewModel> remove, string? name = null)
     {
         Path = path;
         IsFolder = isFolder;
-        Name = System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(path));
+        Name = name ?? System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(path));
         if (string.IsNullOrEmpty(Name)) Name = path;
         RemoveCommand = new RelayCommand(() => remove(this));
     }
@@ -184,6 +184,9 @@ public sealed class HomeViewModel : ObservableObject
     public ObservableCollection<DeviceViewModel> Devices { get; } = new();
 
     public ObservableCollection<PendingItemViewModel> Items { get; } = new();
+
+    /// <summary>Folders, drag and drop: desktop only.</summary>
+    public bool IsDesktop => !_main.IsPhone;
 
     public string LocalDeviceName => _node.Settings.Current.DeviceName;
 
@@ -322,6 +325,14 @@ public sealed class HomeViewModel : ObservableObject
         foreach (var raw in paths)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
+            if (_node.Transfers.ExternalFiles?.TryGet(raw, out var external) == true)
+            {
+                // A file the platform handed over as a stream (Android content:// URI).
+                if (Items.Any(i => i.Path == raw)) continue;
+                Items.Add(new PendingItemViewModel(raw, isFolder: false, RemoveItem, external.Name) { Size = external.Size, FileCount = 1 });
+                continue;
+            }
+
             string path;
             try
             {

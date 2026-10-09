@@ -387,5 +387,10 @@
   "{1} wants to send you {0} files": "{1} sizga {0} ta fayl yubormoqchi",
   "{1} · {0} files in total · {2}": "{1} · jami {0} ta fayl · {2}",
   "On": "Yoqilgan",
-  "Off": "Oʻchirilgan"
+  "Off": "Oʻchirilgan",
+  "Use phone setting": "Telefon sozlamasi",
+  "Use phone language": "Telefon tili",
+  "This phone": "Bu telefon",
+  "Nothing being sent or received": "Hech narsa yuborilmayapti yoki qabul qilinmayapti",
+  "Transfers appear here while they run.": "Uzatishlar davom etayotganda shu yerda koʻrinadi."
 }

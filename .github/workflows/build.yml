@@ -73,3 +73,29 @@ jobs:
         with:
           name: beam-msix
           path: artifacts/msix/*.msixbundle
+
+  android:
+    name: Android app (APK)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Android apps target the current .NET (net10.0-android); the shared libraries stay on .NET 8.
+          dotnet-version: 10.0.x
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install the .NET Android workload
+        run: dotnet workload install android
+      - name: Build APK
+        run: |
+          dotnet publish src/Beam.Android -c Release -f net10.0-android \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -o artifacts/android
+          ls -la artifacts/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beam-android
+          path: artifacts/android/*-Signed.apk

@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.App.Views.TransfersView"
+             x:DataType="vm:TransfersPage">
+  <!-- Phones: the transfers list as its own tab. -->
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="18,22,12,12">
+      <TextBlock Classes="h1" Text="{l:T 'Transfers'}" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}"
+              Command="{Binding Main.ClearFinishedCommand}"
+              IsVisible="{Binding Main.HasFinishedTransfers}" />
+    </Grid>
+    <Panel>
+      <StackPanel Spacing="6" Margin="24,40" HorizontalAlignment="Center" VerticalAlignment="Top"
+                  IsVisible="{Binding !Main.HasTransfers}">
+        <TextBlock Classes="h3" Text="{l:T 'Nothing being sent or received'}" HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center"
+                   Text="{l:T 'Transfers appear here while they run.'}" />
+      </StackPanel>
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Main.Transfers}" Margin="12,0,12,12">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="10" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:TransferViewModel">
+              <views:TransferCard />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Panel>
+  </DockPanel>
+</UserControl>

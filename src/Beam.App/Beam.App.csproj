@@ -30,11 +30,12 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
-    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Beam.Core\Beam.Core.csproj" />
+    <!-- Views, view models, styles and translations shared with the phone apps. -->
+    <ProjectReference Include="..\Beam.UI\Beam.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -63,7 +63,9 @@ public sealed class FakePlatform : IPlatformServices
 {
     public List<string> Calls { get; } = new();
 
-    public bool SupportsStartWithSystem => true;
+    public bool IsPhone { get; set; }
+
+    public bool SupportsStartWithSystem => !IsPhone;
 
     public bool StartWithSystem { get; set; }
 
@@ -130,7 +132,7 @@ public sealed class UiHarness : IAsyncDisposable
 
     /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
     public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false,
-        string language = L.English)
+        string language = L.English, bool phone = false)
     {
         // Tests assert English text whatever the language of the machine running them.
         L.SetLanguage(language);
@@ -151,10 +153,17 @@ public sealed class UiHarness : IAsyncDisposable
             s.FirstRunCompleted = firstRunDone;
         });
         Ui = new FakeUi();
-        Platform = new FakePlatform();
+        Platform = new FakePlatform { IsPhone = phone };
         Window = new MainWindow { Width = width, Height = height };
         ViewModel = new MainViewModel(Node, Platform, Ui, Store);
         Window.DataContext = ViewModel;
+        if (phone)
+        {
+            // The phone layout (MobileView) inside a phone-sized window.
+            Window.MinWidth = Window.MinHeight = 0;
+            Window.Content = new MobileView();
+        }
+
         Window.Show();
     }
 

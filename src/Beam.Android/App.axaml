@@ -1,8 +1,8 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Beam.App.App"
-             Name="Beam"
              xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.Droid.App"
+             Name="Beam"
              RequestedThemeVariant="Default">
   <Application.DataTemplates>
     <views:ViewLocator />

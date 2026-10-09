@@ -5,7 +5,7 @@
              x:Class="Beam.App.Views.PhoneView"
              x:DataType="vm:PhoneViewModel">
   <ScrollViewer>
-    <StackPanel Margin="36,30,36,36" Spacing="24" MaxWidth="860" HorizontalAlignment="Left">
+    <StackPanel Classes="page" Spacing="24" MaxWidth="860" HorizontalAlignment="Left">
       <StackPanel Spacing="4">
         <TextBlock Classes="h1" Text="{l:T 'Phone'}" />
         <TextBlock Classes="secondary" TextWrapping="Wrap"

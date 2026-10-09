@@ -387,5 +387,10 @@
   "{1} wants to send you {0} files": "{1} size {0} dosya göndermek istiyor",
   "{1} · {0} files in total · {2}": "{1} · toplam {0} dosya · {2}",
   "On": "Açık",
-  "Off": "Kapalı"
+  "Off": "Kapalı",
+  "Use phone setting": "Telefon ayarını kullan",
+  "Use phone language": "Telefonun dilini kullan",
+  "This phone": "Bu telefon",
+  "Nothing being sent or received": "Gönderilen veya alınan bir şey yok",
+  "Transfers appear here while they run.": "Aktarımlar sürerken burada görünür."
 }

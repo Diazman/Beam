@@ -3,6 +3,9 @@ namespace Beam.App.Platform;
 /// <summary>Operating-system integration. Everything OS-specific in the app goes through here.</summary>
 public interface IPlatformServices
 {
+    /// <summary>A phone or tablet: no tray, no "start with Windows", received files always go to Downloads/Beam.</summary>
+    bool IsPhone => false;
+
     /// <summary>Opens a folder in the file manager.</summary>
     void OpenFolder(string path);
 
@@ -22,10 +25,4 @@ public interface IPlatformServices
 
     /// <summary>Shows a system notification. <paramref name="onActivated"/> runs (on any thread) when it is clicked.</summary>
     void ShowNotification(string title, string message, Action? onActivated = null);
-}
-
-public static class PlatformServices
-{
-    public static IPlatformServices Create() =>
-        OperatingSystem.IsWindows() ? new WindowsPlatformServices() : new GenericPlatformServices();
 }

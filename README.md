@@ -102,7 +102,8 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | Path | What |
 |---|---|
 | `src/Beam.Core` | Cross-platform engine: discovery, protocol, transfers, resume, security, settings, history. No UI. |
-| `src/Beam.App` | Windows desktop app (Avalonia, MVVM): views, view models, tray, notifications, Windows integration. |
+| `src/Beam.UI` | Shared user interface (Avalonia, MVVM): views, view models, dialogs, styles, translations. Used by every app. |
+| `src/Beam.App` | Desktop app host (Windows/Linux): main window, tray, notifications, Microsoft Store and Windows integration. |
 | `tests/Beam.Core.Tests` | Engine tests: real two-device transfers over loopback TLS, failure injection, resume, security. |
 | `tests/Beam.App.Tests` | Headless UI tests that drive real transfers through the UI and render screenshots. |
 | `native/BeamContextMenu` | Small C++ handler for "Send with Beam" in the Windows 11 right-click menu (Store package). |

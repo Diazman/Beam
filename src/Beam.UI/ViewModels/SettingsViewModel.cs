@@ -89,13 +89,13 @@ public sealed class SettingsViewModel : ObservableObject
 
         ThemeOptions = new[]
         {
-            new ThemeOption(ThemePreference.System, L.T("Use Windows setting")),
+            new ThemeOption(ThemePreference.System, platform.IsPhone ? L.T("Use phone setting") : L.T("Use Windows setting")),
             new ThemeOption(ThemePreference.Light, L.T("Light")),
             new ThemeOption(ThemePreference.Dark, L.T("Dark")),
         };
 
         // Each language is listed in its own name so people can find theirs whatever language Beam is in.
-        LanguageOptions = new[] { new LanguageOption("", L.T("Use Windows language")) }
+        LanguageOptions = new[] { new LanguageOption("", platform.IsPhone ? L.T("Use phone language") : L.T("Use Windows language")) }
             .Concat(L.Languages.Select(l => new LanguageOption(l.Code, l.NativeName)))
             .ToArray();
 
@@ -125,6 +125,11 @@ public sealed class SettingsViewModel : ObservableObject
     public bool UsesDefaultFolder => string.IsNullOrEmpty(_node.Settings.Current.ReceiveFolder);
 
     public bool SupportsStartup => _platform.SupportsStartWithSystem;
+
+    /// <summary>Desktop-only settings (tray, receive folder) are hidden on phones.</summary>
+    public bool IsDesktop => !_platform.IsPhone;
+
+    public string ThisDeviceTitle => _platform.IsPhone ? L.T("This phone") : L.T("This computer");
 
     public bool StartWithWindows
     {
