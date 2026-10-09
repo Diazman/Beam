@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.MobileView"
+             x:DataType="vm:MainViewModel"
+             Classes="compact"
+             Background="{DynamicResource WindowBackgroundBrush}">
+  <!-- The phone layout: one page at a time with a bottom navigation bar. The desktop uses MainWindow. -->
+  <Panel>
+    <Grid RowDefinitions="*,Auto">
+      <ContentControl Content="{Binding CurrentPage}" />
+
+      <Border Grid.Row="1" Classes="bottomBar">
+        <UniformGrid Rows="1">
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Send'}"
+                       Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Transfers'}"
+                       Tag="{StaticResource IconUpload}" IsChecked="{Binding IsTransfersPage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'History'}"
+                       Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Settings'}"
+                       Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
+        </UniformGrid>
+      </Border>
+    </Grid>
+
+    <!-- Dialogs: full width on a phone. -->
+    <Border IsVisible="{Binding HasDialog}" Background="{DynamicResource OverlayBrush}">
+      <ScrollViewer VerticalAlignment="Center">
+        <Border Classes="dialog" Margin="12">
+          <ContentControl Content="{Binding Dialog}" />
+        </Border>
+      </ScrollViewer>
+    </Border>
+  </Panel>
+</UserControl>

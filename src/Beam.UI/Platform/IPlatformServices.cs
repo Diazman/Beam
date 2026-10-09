@@ -3,6 +3,9 @@ namespace Beam.App.Platform;
 /// <summary>Operating-system integration. Everything OS-specific in the app goes through here.</summary>
 public interface IPlatformServices
 {
+    /// <summary>A phone or tablet: no tray, no "start with Windows", received files always go to Downloads/Beam.</summary>
+    bool IsPhone => false;
+
     /// <summary>Opens a folder in the file manager.</summary>
     void OpenFolder(string path);
 

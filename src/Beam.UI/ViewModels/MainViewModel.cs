@@ -20,6 +20,9 @@ public enum Page
     Phone,
     History,
     Settings,
+
+    /// <summary>Phones only: the list of transfers (the desktop shows it beside the current page).</summary>
+    Transfers,
 }
 
 /// <summary>
@@ -72,6 +75,9 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     public bool IsPro => Node.Edition.IsPro;
 
+    /// <summary>Running on a phone or tablet (see <see cref="IPlatformServices.IsPhone"/>).</summary>
+    public bool IsPhone => _platform.IsPhone;
+
     public HomeViewModel Home { get; }
 
     public PhoneViewModel Phone { get; }
@@ -85,6 +91,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         Page.Phone => Phone,
         Page.History => History,
         Page.Settings => Settings,
+        Page.Transfers => new TransfersPage(this),
         _ => Home,
     };
 
@@ -123,6 +130,15 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         set
         {
             if (value) Navigate(Page.Settings);
+        }
+    }
+
+    public bool IsTransfersPage
+    {
+        get => _page == Page.Transfers;
+        set
+        {
+            if (value) Navigate(Page.Transfers);
         }
     }
 
@@ -224,6 +240,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         OnPropertyChanged(nameof(IsPhonePage));
         OnPropertyChanged(nameof(IsHistoryPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(IsTransfersPage));
     }
 
     /// <summary>Starts sending to one device. Returns false (after telling the user why) if it couldn't start.</summary>
@@ -549,3 +566,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }));
     }
 }
+
+/// <summary>The phone layout's Transfers tab (shows <see cref="MainViewModel.Transfers"/>).</summary>
+public sealed record TransfersPage(MainViewModel Main);

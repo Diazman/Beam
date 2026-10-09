@@ -185,6 +185,9 @@ public sealed class HomeViewModel : ObservableObject
 
     public ObservableCollection<PendingItemViewModel> Items { get; } = new();
 
+    /// <summary>Folders, drag and drop: desktop only.</summary>
+    public bool IsDesktop => !_main.IsPhone;
+
     public string LocalDeviceName => _node.Settings.Current.DeviceName;
 
     public bool IsDiscoverable => _node.Settings.Current.Discoverable;

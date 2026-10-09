@@ -6,7 +6,7 @@
              x:DataType="vm:HomeViewModel">
   <Grid RowDefinitions="*,Auto">
     <ScrollViewer Grid.Row="0">
-      <StackPanel Margin="36,30,36,24" Spacing="28">
+      <StackPanel Classes="page" Spacing="28">
 
         <!-- Header -->
         <Grid ColumnDefinitions="*,Auto">
@@ -15,7 +15,7 @@
             <TextBlock Classes="secondary" TextWrapping="Wrap"
                        Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.'}" />
           </StackPanel>
-          <Button Grid.Column="1" Classes="chip" VerticalAlignment="Top" Margin="16,2,0,0"
+          <Button Grid.Column="1" Classes="chip nameChip" VerticalAlignment="Top" Margin="16,2,0,0"
                   Command="{Binding EditNameCommand}"
                   ToolTip.Tip="{Binding VisibilityText}">
             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -120,7 +120,7 @@
                   <TextBlock Text="{l:T 'Add files'}" />
                 </StackPanel>
               </Button>
-              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}">
+              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}" IsVisible="{Binding IsDesktop}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
                   <TextBlock Text="{l:T 'Add folder'}" />
@@ -146,8 +146,8 @@
               <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Center">
                 <PathIcon Data="{StaticResource IconUpload}" Width="22" Height="22" />
               </Border>
-              <TextBlock Classes="h3" Text="{l:T 'Drag files or folders here'}" HorizontalAlignment="Center" />
-              <TextBlock Classes="caption" Text="{l:T 'or'}" HorizontalAlignment="Center" />
+              <TextBlock Classes="h3" Text="{l:T 'Drag files or folders here'}" HorizontalAlignment="Center" IsVisible="{Binding IsDesktop}" />
+              <TextBlock Classes="caption" Text="{l:T 'or'}" HorizontalAlignment="Center" IsVisible="{Binding IsDesktop}" />
               <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                 <Button Command="{Binding ChooseFilesCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
@@ -155,7 +155,7 @@
                     <TextBlock Text="{l:T 'Choose files'}" />
                   </StackPanel>
                 </Button>
-                <Button Command="{Binding ChooseFolderCommand}">
+                <Button Command="{Binding ChooseFolderCommand}" IsVisible="{Binding IsDesktop}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
                     <TextBlock Text="{l:T 'Choose a folder'}" />

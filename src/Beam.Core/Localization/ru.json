@@ -491,5 +491,10 @@
     "{1} · всего {0} файлов · {2}"
   ],
   "On": "Вкл.",
-  "Off": "Выкл."
+  "Off": "Выкл.",
+  "Use phone setting": "Как на телефоне",
+  "Use phone language": "Язык телефона",
+  "This phone": "Этот телефон",
+  "Nothing being sent or received": "Сейчас ничего не передаётся",
+  "Transfers appear here while they run.": "Здесь отображаются текущие передачи."
 }
