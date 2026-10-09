@@ -78,6 +78,8 @@ jobs:
     name: Android app (APK)
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # publishes the "Android test build" release on main
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -99,3 +101,20 @@ jobs:
         with:
           name: beam-android
           path: artifacts/android/*-Signed.apk
+      # Testers download the newest APK from the Releases page ("Android test build"), not from Actions artifacts.
+      - name: Publish Android test build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          cp artifacts/android/*-Signed.apk artifacts/android/Beam-android-test.apk
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          tag_name: android-test
+          name: Android test build
+          prerelease: true
+          make_latest: false
+          body: |
+            Newest Beam for Android test build (commit ${{ env.SHORT_SHA }}). Updated automatically on every change.
+            Install: download **Beam-android-test.apk** on the phone, open it and allow installing from this source.
+          files: artifacts/android/Beam-android-test.apk
