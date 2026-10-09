@@ -2,6 +2,7 @@ using Beam.Core.Files;
 using System.Net;
 using System.Net.Sockets;
 using Beam.Core.Diagnostics;
+using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.History;
 using Beam.Core.Identity;
@@ -31,6 +32,9 @@ public sealed class BeamNodeOptions
 
     /// <summary>What this device is ("desktop", "laptop", "phone"…), shown to others.</summary>
     public string? DeviceKind { get; init; }
+
+    /// <summary>The platform's direct Wi-Fi link (Wi-Fi Direct); null where there is none.</summary>
+    public IDirectLink? DirectLink { get; init; }
 }
 
 /// <summary>
@@ -43,6 +47,7 @@ public sealed class BeamNode : IAsyncDisposable
     private readonly DelegatingHandler _handler;
     private readonly CancellationTokenSource _cts = new();
     private Task? _manualPeerTask;
+    private ConnectionMethod _connection;
     private bool _started;
     private int _disposed;
 
@@ -69,8 +74,11 @@ public sealed class BeamNode : IAsyncDisposable
         Transfers.SessionFinished += RecordHistory;
         PhoneLink = new PhoneLinkServer(Transfers, Quota, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
-            () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint, DeviceKinds.Desktop));
+            () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint,
+                options.DeviceKind ?? DeviceKinds.Desktop, Direct!.Roles));
         Discovery.Discoverable = Settings.Current.Discoverable;
+        Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink);
+        _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }
 
@@ -85,6 +93,9 @@ public sealed class BeamNode : IAsyncDisposable
     public TransferService Transfers { get; }
 
     public DiscoveryService Discovery { get; }
+
+    /// <summary>Same network or direct Wi-Fi link, per device and switchable during transfers.</summary>
+    public DirectManager Direct { get; }
 
     public IEditionPolicy Edition => _options.Edition;
 
@@ -126,7 +137,7 @@ public sealed class BeamNode : IAsyncDisposable
         if (!Quota.TryUse())
             throw new TransferException(TransferErrorKind.SendLimitReached,
                 L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
-        return Transfers.Send(device, paths, () => Discovery.Find(device.Id) ?? device);
+        return Transfers.Send(device, paths, () => Direct.Order(Discovery.Find(device.Id) ?? device));
     }
 
     /// <summary>Sends a piece of text or a link (counts as a send for the free edition).</summary>
@@ -136,7 +147,7 @@ public sealed class BeamNode : IAsyncDisposable
         if (!Quota.TryUse())
             throw new TransferException(TransferErrorKind.SendLimitReached,
                 L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
-        return Transfers.SendText(device, text, () => Discovery.Find(device.Id) ?? device);
+        return Transfers.SendText(device, text, () => Direct.Order(Discovery.Find(device.Id) ?? device));
     }
 
     /// <summary>
@@ -291,6 +302,11 @@ public sealed class BeamNode : IAsyncDisposable
     {
         Discovery.Discoverable = settings.Discoverable;
         Discovery.AnnounceNow();
+        if (settings.Connection != _connection)
+        {
+            _connection = settings.Connection;
+            Direct.OnSettingChanged(settings.Connection);
+        }
     }
 
     private async Task ManualPeerLoopAsync()

@@ -29,6 +29,9 @@ public sealed record DeviceInfo
     /// <summary>Addresses the device can be reached at, most recently seen first.</summary>
     public IReadOnlyList<IPEndPoint> Endpoints { get; init; } = Array.Empty<IPEndPoint>();
 
+    /// <summary>Whether the device can host and/or join a direct Wi-Fi link.</summary>
+    public Direct.DirectRoles DirectRoles { get; init; }
+
     /// <summary>True when the user added the device by address instead of it being discovered.</summary>
     public bool IsManual { get; init; }
 

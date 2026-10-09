@@ -24,6 +24,11 @@ public enum FrameType : byte
 
     /// <summary>Protocol 2: a piece of text or a link (connection purpose <see cref="ConnectionPurpose.Text"/>).</summary>
     Text = 13,
+
+    /// <summary>Setting up a direct Wi-Fi link (connection purpose <see cref="ConnectionPurpose.Direct"/>).</summary>
+    DirectRequest = 14,
+
+    DirectResponse = 15,
 }
 
 public static class ConnectionPurpose
@@ -33,6 +38,48 @@ public static class ConnectionPurpose
 
     /// <summary>Protocol 2: the connection carries one <see cref="TextMessage"/>, answered with Result or Cancel.</summary>
     public const string Text = "text";
+
+    /// <summary>One <see cref="DirectRequestMessage"/>, answered with a <see cref="DirectResponseMessage"/>. Only sent to devices that announce direct support.</summary>
+    public const string Direct = "direct";
+}
+
+public static class DirectActions
+{
+    /// <summary>"Start your direct network and tell me how to join it."</summary>
+    public const string Host = "host";
+
+    /// <summary>"Join my direct network" (carries its name and passphrase).</summary>
+    public const string Join = "join";
+
+    /// <summary>"Send to me over this connection method from now on" (<see cref="DirectRequestMessage.Method"/>).</summary>
+    public const string Prefer = "prefer";
+
+    /// <summary>"I no longer need the direct link."</summary>
+    public const string Stop = "stop";
+}
+
+public sealed class DirectRequestMessage
+{
+    public string Action { get; set; } = "";
+
+    public string? Ssid { get; set; }
+
+    public string? Passphrase { get; set; }
+
+    /// <summary>For <see cref="DirectActions.Prefer"/>: "direct" or "network".</summary>
+    public string? Method { get; set; }
+}
+
+public sealed class DirectResponseMessage
+{
+    public bool Ok { get; set; }
+
+    public string? Ssid { get; set; }
+
+    public string? Passphrase { get; set; }
+
+    /// <summary>Why it didn't work (shown to the user on the other device).</summary>
+    public string? Message { get; set; }
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>
@@ -201,6 +248,8 @@ public sealed class CancelMessage
 [JsonSerializable(typeof(ResultMessage))]
 [JsonSerializable(typeof(CancelMessage))]
 [JsonSerializable(typeof(TextMessage))]
+[JsonSerializable(typeof(DirectRequestMessage))]
+[JsonSerializable(typeof(DirectResponseMessage))]
 internal sealed partial class ProtocolJson : JsonSerializerContext
 {
 }

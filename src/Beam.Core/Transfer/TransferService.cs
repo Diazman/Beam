@@ -65,6 +65,24 @@ public sealed class TransferService : IAsyncDisposable
     /// <summary>Files handed over as streams (Android content:// URIs); null on desktop.</summary>
     public IExternalFiles? ExternalFiles { get; init; }
 
+    /// <summary>Runs before each connection attempt to a device (sets up a direct link when that's the chosen method).</summary>
+    public Func<DeviceInfo, CancellationToken, Task>? BeforeConnect { get; set; }
+
+    /// <summary>Handles <see cref="ConnectionPurpose.Direct"/> connections (null: such connections are closed).</summary>
+    internal Func<PeerConnection, CancellationToken, Task>? DirectHandler { get; set; }
+
+    /// <summary>Whether an address is reached over a direct Wi-Fi link (replaced in tests).</summary>
+    public Func<IPAddress, bool> IsDirectAddress { get; set; } = Direct.DirectAddresses.IsDirect;
+
+    internal TransferPath PathOf(IPEndPoint remote) => IsDirectAddress(remote.Address) ? TransferPath.Direct : TransferPath.Network;
+
+    /// <summary>
+    /// Drops the live connections of unfinished transfers with a device, so they reconnect over the connection
+    /// method now preferred and continue where they stopped. Returns how many were interrupted.
+    /// </summary>
+    public int InterruptConnections(string peerId) =>
+        _sessions.Values.Where(s => s.PeerId == peerId && !s.IsFinished).Count(s => s.InterruptConnection(switchingPath: true));
+
     /// <summary>Shared pacing of everything this device sends (the free edition's speed limit).</summary>
     internal RateLimiter SendLimiter { get; }
 
@@ -320,6 +338,12 @@ public sealed class TransferService : IAsyncDisposable
             }
 
             if (hello.Purpose == ConnectionPurpose.Probe || string.IsNullOrWhiteSpace(hello.DeviceId)) return;
+            if (hello.Purpose == ConnectionPurpose.Direct)
+            {
+                if (DirectHandler != null) await DirectHandler(connection, token).ConfigureAwait(false);
+                return;
+            }
+
             if (hello.Purpose == ConnectionPurpose.Text)
             {
                 await TextTransfer.ReceiveAsync(this, connection, token).ConfigureAwait(false);

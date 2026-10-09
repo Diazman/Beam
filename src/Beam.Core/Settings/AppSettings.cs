@@ -10,6 +10,16 @@ public enum ThemePreference
     Dark,
 }
 
+/// <summary>How devices reach each other.</summary>
+public enum ConnectionMethod
+{
+    /// <summary>Through the Wi-Fi network both devices are on (they keep their internet).</summary>
+    SameNetwork,
+
+    /// <summary>A direct Wi-Fi link between the two devices (Wi-Fi Direct): no router in between, works without any network.</summary>
+    Direct,
+}
+
 /// <summary>A device the user chose to always accept files from.</summary>
 public sealed class TrustedDevice
 {
@@ -58,6 +68,9 @@ public sealed class AppSettings
     public bool NotifyOnDeviceFound { get; set; }
 
     public ThemePreference Theme { get; set; } = ThemePreference.System;
+
+    /// <summary>Same network (default) or a direct link; can also be switched during a transfer.</summary>
+    public ConnectionMethod Connection { get; set; } = ConnectionMethod.SameNetwork;
 
     /// <summary>Interface language code ("en", "tr", "ru", "uz"); empty follows Windows.</summary>
     public string Language { get; set; } = "";
