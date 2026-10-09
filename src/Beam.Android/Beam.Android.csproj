@@ -2,11 +2,11 @@
 
   <!--
     Beam for Android: the shared Beam.UI screens (phone layout, MobileView) on a single-view Avalonia host.
-    Build: dotnet build src/Beam.Android -c Release   (needs: dotnet workload install android)
+    Build: dotnet build src/Beam.Android -c Release   (needs .NET 10 and: dotnet workload install android)
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-android</TargetFramework>
+    <TargetFramework>net10.0-android</TargetFramework>
     <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
     <RootNamespace>Beam.Droid</RootNamespace>
     <AssemblyName>Beam.Android</AssemblyName>
@@ -21,7 +21,6 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <AndroidLinkMode>SdkOnly</AndroidLinkMode>
     <RunAOTCompilation>false</RunAOTCompilation>
   </PropertyGroup>
 
