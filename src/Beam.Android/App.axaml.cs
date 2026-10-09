@@ -14,7 +14,8 @@ public partial class App : Avalonia.Application
 {
     public override void Initialize()
     {
-        // Before any style or view loads: text is translated when it is created.
+        // Before any style or view loads: text is translated (and uses its phone wording) when it is created.
+        L.IsPhone = true;
         try
         {
             L.SetLanguage(new SettingsStore(AndroidHost.Paths.SettingsFile).Current.Language);

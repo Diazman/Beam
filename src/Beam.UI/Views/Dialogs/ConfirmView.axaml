@@ -3,7 +3,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.ConfirmView"
              x:DataType="dlg:ConfirmViewModel"
-             Width="420">
+             Classes="dialogBody w420">
   <StackPanel Spacing="14">
     <TextBlock Classes="dialogTitle" Text="{Binding Title}" />
     <TextBlock Classes="secondary" Text="{Binding Message}" TextWrapping="Wrap" />

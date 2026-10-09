@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.UpgradeView"
              x:DataType="dlg:UpgradeViewModel"
-             Width="500">
+             Classes="dialogBody w500">
   <StackPanel Spacing="16">
     <StackPanel Orientation="Horizontal" Spacing="12">
       <Image Source="/Assets/beam.png" Width="40" Height="40" VerticalAlignment="Center" />

@@ -15,7 +15,8 @@ LANGS = ["tr", "ru", "uz"]
 STR = r'"((?:[^"\\]|\\.)*)"'
 T_CS = re.compile(r'\bL\.T\(\s*' + STR)
 PLURAL_CS = re.compile(r'\bL\.Plural\([^;]*?,\s*' + STR + r'\s*,\s*' + STR)
-T_XAML = re.compile(r"\{l:T\s+'((?:[^'\\]|\\.)*)'\s*\}")
+T_XAML = re.compile(r"\{l:T\s+'((?:[^'\\]|\\.)*)'(?:\s*,\s*Phone='((?:[^'\\]|\\.)*)')?\s*\}")
+FOR_DEVICE_CS = re.compile(r'\bL\.ForDevice\(\s*' + STR + r'\s*,\s*' + STR)
 
 
 def unescape_cs(s):
@@ -32,11 +33,14 @@ def keys():
             if name.endswith(".cs"):
                 text = open(path, encoding="utf-8").read()
                 plain.update(unescape_cs(m) for m in T_CS.findall(text))
+                for computer, phone in FOR_DEVICE_CS.findall(text):
+                    plain.update((unescape_cs(computer), unescape_cs(phone)))
                 for one, other in PLURAL_CS.findall(text):
                     plurals[unescape_cs(other)] = unescape_cs(one)
             elif name.endswith(".axaml"):
                 text = open(path, encoding="utf-8").read()
-                plain.update(m.replace("\\'", "'") for m in T_XAML.findall(text))
+                for text_key, phone_key in T_XAML.findall(text):
+                    plain.update(k.replace("\\'", "'") for k in (text_key, phone_key) if k)
     return plain, plurals
 
 

@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.SendTextView"
              x:DataType="dlg:SendTextViewModel"
-             Width="480">
+             Classes="dialogBody w480">
   <StackPanel Spacing="14">
     <TextBlock Classes="dialogTitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
     <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{l:T 'Type or paste a message, a link, a code or an address. It arrives in seconds.'}" />

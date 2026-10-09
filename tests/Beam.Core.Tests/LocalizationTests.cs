@@ -12,7 +12,8 @@ public class LocalizationTests
     private const string Str = "\"((?:[^\"\\\\]|\\\\.)*)\"";
     private static readonly Regex TCs = new(@"\bL\.T\(\s*" + Str);
     private static readonly Regex PluralCs = new(@"\bL\.Plural\([^;]*?,\s*" + Str + @"\s*,\s*" + Str);
-    private static readonly Regex TXaml = new(@"\{l:T\s+'((?:[^'\\]|\\.)*)'\s*\}");
+    private static readonly Regex TXaml = new(@"\{l:T\s+'((?:[^'\\]|\\.)*)'(?:\s*,\s*Phone='((?:[^'\\]|\\.)*)')?\s*\}");
+    private static readonly Regex ForDeviceCs = new(@"\bL\.ForDevice\(\s*" + Str + @"\s*,\s*" + Str);
     private static readonly Regex Placeholder = new(@"\{(\d+)(?:[:,][^}]*)?\}");
 
     public static IEnumerable<object[]> Translations() => L.Languages.Where(l => l.Code != L.English).Select(l => new object[] { l.Code });
@@ -98,11 +99,20 @@ public class LocalizationTests
             {
                 var text = File.ReadAllText(file);
                 foreach (Match m in TCs.Matches(text)) plain.Add(Unescape(m.Groups[1].Value));
+                foreach (Match m in ForDeviceCs.Matches(text))
+                {
+                    plain.Add(Unescape(m.Groups[1].Value));
+                    plain.Add(Unescape(m.Groups[2].Value));
+                }
                 foreach (Match m in PluralCs.Matches(text)) plurals[Unescape(m.Groups[2].Value)] = Unescape(m.Groups[1].Value);
             }
             else if (file.EndsWith(".axaml", StringComparison.Ordinal))
             {
-                foreach (Match m in TXaml.Matches(File.ReadAllText(file))) plain.Add(m.Groups[1].Value.Replace("\\'", "'"));
+                foreach (Match m in TXaml.Matches(File.ReadAllText(file)))
+                {
+                    plain.Add(m.Groups[1].Value.Replace("\\'", "'"));
+                    if (m.Groups[2].Success) plain.Add(m.Groups[2].Value.Replace("\\'", "'"));
+                }
             }
         }
 

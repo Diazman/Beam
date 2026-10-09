@@ -13,7 +13,7 @@
           <StackPanel Spacing="4">
             <TextBlock Classes="h1" Text="{l:T 'Send files'}" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.'}" />
+                       Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.', Phone='Send files directly to a nearby computer. No cables, accounts, or internet needed.'}" />
           </StackPanel>
           <Button Grid.Column="1" Classes="chip nameChip" VerticalAlignment="Top" Margin="16,2,0,0"
                   Command="{Binding EditNameCommand}"
@@ -33,9 +33,7 @@
         <!-- Step 1: nearby computers -->
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto,Auto">
-            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-              <TextBlock Classes="h2" Text="{l:T 'Nearby computers'}" />
-            </StackPanel>
+            <TextBlock Classes="h2" Text="{l:T 'Nearby computers'}" VerticalAlignment="Center" TextWrapping="Wrap" />
             <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a computer?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding RefreshCommand}"
@@ -101,7 +99,7 @@
                            Text="{l:T 'Open Beam on the other computer. It will appear here automatically.'}" />
                 <StackPanel IsVisible="{Binding ShowSearchHint}" Spacing="8" Margin="0,10,0,0">
                   <TextBlock Classes="caption" TextWrapping="Wrap"
-                             Text="{l:T 'Still nothing? Make sure both computers are connected to the same Wi-Fi or network, and that Beam was allowed through Windows Firewall. You can also connect using the other computer\'s address.'}" />
+                             Text="{l:T 'Still nothing? Make sure both computers are connected to the same Wi-Fi or network, and that Beam was allowed through Windows Firewall. You can also connect using the other computer\'s address.', Phone='Still nothing? Make sure the phone and the computer are on the same Wi-Fi, and that Beam was allowed through Windows Firewall on the computer. You can also connect using the computer\'s address.'}" />
                   <Button Content="{l:T 'Connect by address'}" Command="{Binding ConnectByAddressCommand}" />
                 </StackPanel>
               </StackPanel>
@@ -112,7 +110,7 @@
         <!-- Step 2: files -->
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="{l:T 'Files to send'}" VerticalAlignment="Center" />
+            <TextBlock Classes="h2" Text="{l:T 'Files to send'}" VerticalAlignment="Center" TextWrapping="Wrap" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasItems}">
               <Button Classes="subtle" Command="{Binding ChooseFilesCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">

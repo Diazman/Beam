@@ -4,7 +4,7 @@
              xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
              x:Class="Beam.App.Views.Dialogs.IncomingTextView"
              x:DataType="dlg:IncomingTextViewModel"
-             Width="480">
+             Classes="dialogBody w480">
   <StackPanel Spacing="14">
     <TextBlock Classes="dialogTitle" Text="{Binding Title}" TextWrapping="Wrap" />
     <Border Background="{DynamicResource SubtleBrush}" CornerRadius="8" Padding="12" MaxHeight="260">
