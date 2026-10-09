@@ -35,6 +35,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, PhoneUpload> _uploads = new();
     private readonly object _shareGate = new();
     private List<SharedEntry> _shared = new();
+    private List<string> _sharedFolders = new();
     private TransferSession? _shareSession;
     private CancellationTokenSource? _cts;
     private TcpListener? _listener;
@@ -136,20 +137,24 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     public TransferSession Share(IReadOnlyList<string> paths)
     {
         var entries = new List<SharedEntry>();
+        var folders = new List<string>();
         foreach (var path in paths)
         {
             if (File.Exists(path))
             {
-                entries.Add(new SharedEntry(Path.GetFileName(path), path, new FileInfo(path).Length));
+                var info = new FileInfo(path);
+                entries.Add(new SharedEntry(Path.GetFileName(path), path, info.Length, null, info.LastWriteTimeUtc));
             }
             else if (Directory.Exists(path))
             {
                 var root = Path.TrimEndingDirectorySeparator(path);
+                var folder = folders.Count;
+                folders.Add(Path.GetFileName(root) is { Length: > 0 } folderName ? folderName : "Folder");
                 var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
                 foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", options))
                 {
                     var relative = Path.GetRelativePath(Path.GetDirectoryName(root) ?? root, file.FullName).Replace('\\', '/');
-                    entries.Add(new SharedEntry(relative, file.FullName, file.Length));
+                    entries.Add(new SharedEntry(relative, file.FullName, file.Length, folder, file.LastWriteTimeUtc));
                 }
             }
         }
@@ -168,6 +173,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         lock (_shareGate)
         {
             _shared = entries;
+            _sharedFolders = folders;
             _shareSession = session;
         }
 
@@ -189,6 +195,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             session = _shareSession;
             _shareSession = null;
             _shared = new List<SharedEntry>();
+            _sharedFolders = new List<string>();
         }
 
         if (session != null && !session.IsFinished)
@@ -297,6 +304,12 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 return;
         }
 
+        if (request.Method == "GET" && segments.Length == 4 && segments[1] == "api" && segments[2] == "folders")
+        {
+            await HandleFolderDownloadAsync(stream, segments[3], serviceToken).ConfigureAwait(false);
+            return;
+        }
+
         if (request.Method == "GET" && segments.Length == 4 && segments[1] == "api" && segments[2] == "files")
         {
             await HandleDownloadAsync(stream, segments[3], serviceToken).ConfigureAwait(false);
@@ -335,7 +348,19 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     private PhoneFileList ListShared()
     {
         lock (_shareGate)
-            return new PhoneFileList { Files = _shared.Select((s, i) => new PhoneFileInfo { Id = i.ToString(), Name = s.Name, Size = s.Size }).ToList() };
+        {
+            return new PhoneFileList
+            {
+                Files = _shared.Select((s, i) => new PhoneFileInfo { Id = i.ToString(), Name = s.Name, Size = s.Size, Folder = s.Folder?.ToString() }).ToList(),
+                Folders = _sharedFolders.Select((name, i) => new PhoneFolderInfo
+                {
+                    Id = i.ToString(),
+                    Name = name,
+                    FileCount = _shared.Count(s => s.Folder == i),
+                    Size = _shared.Where(s => s.Folder == i).Sum(s => s.Size),
+                }).ToList(),
+            };
+        }
     }
 
     // ----- phone → computer -----
@@ -488,6 +513,74 @@ public sealed class PhoneLinkServer : IAsyncDisposable
 
     // ----- computer → phone -----
 
+    /// <summary>A shared folder as one .zip (browsers can't download folders), files stored as they are.</summary>
+    private async Task HandleFolderDownloadAsync(NetworkStream stream, string id, CancellationToken token)
+    {
+        List<SharedEntry> entries;
+        string? name = null;
+        TransferSession? session;
+        lock (_shareGate)
+        {
+            session = _shareSession;
+            var ok = int.TryParse(id, out var folder) && folder >= 0 && folder < _sharedFolders.Count;
+            if (ok) name = _sharedFolders[folder];
+            entries = ok ? _shared.Where(s => s.Folder == folder).ToList() : new List<SharedEntry>();
+        }
+
+        if (name == null || entries.Count == 0 || session == null || session.State == TransferState.Cancelled)
+        {
+            await MiniHttp.WriteTextAsync(stream, 404, "This folder is no longer shared.", token).ConfigureAwait(false);
+            return;
+        }
+
+        var items = entries.Select(e => new StoredZip.Item(e.Name, e.Path, e.Size, e.ModifiedUtc)).ToList();
+        var byItem = items.Zip(entries).ToDictionary(p => p.First, p => p.Second);
+        var zipName = name + ".zip";
+        var disposition = $"Content-Disposition: attachment; filename=\"{AsciiName(zipName)}\"; filename*=UTF-8''{Uri.EscapeDataString(zipName)}\r\n";
+        await MiniHttp.WriteHeadAsync(stream, 200, "application/zip", StoredZip.Length(items), token, disposition).ConfigureAwait(false);
+        if (!session.IsFinished) session.SetState(TransferState.Transferring);
+
+        // Progress counts each file once, even if the phone downloads it again (or on its own).
+        var counted = new Dictionary<SharedEntry, long>();
+        try
+        {
+            await StoredZip.WriteAsync(stream, items,
+                bytes => _transfers.SendLimiter.WaitAsync(bytes, token),
+                (item, bytes) =>
+                {
+                    var entry = byItem[item];
+                    if (entry.Downloaded) return;
+                    if (!session.IsFinished) session.SetCurrentFile(entry.Name);
+                    counted[entry] = counted.GetValueOrDefault(entry) + bytes;
+                    session.AddTransferred(bytes);
+                },
+                item =>
+                {
+                    var entry = byItem[item];
+                    if (counted.Remove(entry) && entry.MarkDownloaded()) CompleteFile(session);
+                },
+                token).ConfigureAwait(false);
+        }
+        catch
+        {
+            foreach (var bytes in counted.Values) session.AddTransferred(-bytes);
+            throw;
+        }
+
+        Activity?.Invoke();
+    }
+
+    private static void CompleteFile(TransferSession session)
+    {
+        session.FileCompleted();
+        var snapshot = session.GetSnapshot();
+        if (snapshot.CompletedFiles >= snapshot.TotalFiles)
+        {
+            session.SetCurrentFile(null);
+            session.SetState(TransferState.Completed);
+        }
+    }
+
     private async Task HandleDownloadAsync(NetworkStream stream, string id, CancellationToken token)
     {
         SharedEntry? entry = null;
@@ -547,16 +640,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 throw;
             }
 
-            if (counted && sent == length && entry.MarkDownloaded())
-            {
-                session.FileCompleted();
-                var snapshot = session.GetSnapshot();
-                if (snapshot.CompletedFiles >= snapshot.TotalFiles)
-                {
-                    session.SetCurrentFile(null);
-                    session.SetState(TransferState.Completed);
-                }
-            }
+            if (counted && sent == length && entry.MarkDownloaded()) CompleteFile(session);
 
             Activity?.Invoke();
         }
@@ -606,12 +690,19 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     {
         private int _downloaded;
 
-        public SharedEntry(string name, string path, long size)
+        public SharedEntry(string name, string path, long size, int? folder, DateTime modifiedUtc)
         {
             Name = name;
             Path = path;
             Size = size;
+            Folder = folder;
+            ModifiedUtc = modifiedUtc;
         }
+
+        /// <summary>Index of the shared folder this file came from, or null for a file shared on its own.</summary>
+        public int? Folder { get; }
+
+        public DateTime ModifiedUtc { get; }
 
         public string Name { get; }
 

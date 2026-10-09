@@ -10,6 +10,8 @@
   <ItemGroup>
     <!-- DPAPI protection for the device's private key on Windows. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- CRC-32 for the folder ZIPs the phone page downloads (Phone/StoredZip.cs). -->
+    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
