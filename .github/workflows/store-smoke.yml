@@ -37,6 +37,13 @@ jobs:
           Export-Certificate -Cert $cert -FilePath "$env:RUNNER_TEMP\test.cer" | Out-Null
           Import-Certificate -FilePath "$env:RUNNER_TEMP\test.cer" -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
 
+      # The release workflow builds the single-file installer exe first, in the same build folders;
+      # do the same so the test covers what actually gets uploaded to the Store.
+      - name: Build the single-file app first (like the release)
+        if: inputs.release == ''
+        shell: pwsh
+        run: ./build.ps1 -Runtime win-x64 -SkipTests
+
       - name: Build the x64 Store package
         if: inputs.release == ''
         shell: pwsh
