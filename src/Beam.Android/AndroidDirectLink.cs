@@ -148,8 +148,8 @@ internal sealed class AndroidDirectLink : IDirectLink
         Log.Warn($"Wi-Fi Direct: couldn't {what} (reason {reason})");
         throw new DirectLinkException(reason switch
         {
-            WifiP2pManager.P2pUnsupported => L.T("This phone can't connect directly. Direct connections need Android 10 or newer."),
-            WifiP2pManager.Busy => L.T("The phone's Wi-Fi is busy. Try again in a moment."),
+            WifiP2pFailureReason.P2pUnsupported => L.T("This phone can't connect directly. Direct connections need Android 10 or newer."),
+            WifiP2pFailureReason.Busy => L.T("The phone's Wi-Fi is busy. Try again in a moment."),
             _ => OperatingSystem.IsAndroidVersionAtLeast(33)
                 ? L.T("This phone couldn't start a direct connection. Turn Wi-Fi on and try again.")
                 : L.T("This phone couldn't start a direct connection. Turn on Wi-Fi and Location, then try again."),
@@ -200,14 +200,14 @@ internal sealed class AndroidDirectLink : IDirectLink
 
     private sealed class ActionListener : Java.Lang.Object, WifiP2pManager.IActionListener
     {
-        private readonly TaskCompletionSource<int?> _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<WifiP2pFailureReason?> _done = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <summary>Null on success, else the failure reason (WifiP2pManager.Error, P2pUnsupported, Busy…).</summary>
-        public Task<int?> Task => _done.Task;
+        /// <summary>Null on success, else why it failed (Error, P2pUnsupported, Busy…).</summary>
+        public Task<WifiP2pFailureReason?> Task => _done.Task;
 
         public void OnSuccess() => _done.TrySetResult(null);
 
-        public void OnFailure(int reason) => _done.TrySetResult(reason);
+        public void OnFailure(WifiP2pFailureReason reason) => _done.TrySetResult(reason);
     }
 
     private sealed class InfoListener : Java.Lang.Object, WifiP2pManager.IConnectionInfoListener, WifiP2pManager.IGroupInfoListener
