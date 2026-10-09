@@ -28,6 +28,12 @@
   .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .size { color:var(--muted); font-size: 13px; white-space:nowrap; }
   li a { color: var(--accent); font-weight:600; text-decoration:none; white-space:nowrap; }
+  li.folder { flex-wrap:wrap; }
+  li.folder > .name { font-weight:600; flex-basis:100%; white-space:normal; }
+  li.folder > .size { flex:1; }
+  .toggle { border:0; background:none; color:var(--muted); font:inherit; font-size:13px; padding:0; cursor:pointer; flex-basis:100%; text-align:left; }
+  .inner { flex-basis:100%; margin:0 0 0 14px; }
+  .inner li { padding:6px 0; font-size:14px; }
   .bar { height:6px; background: var(--line); border-radius: 3px; overflow:hidden; margin-top: 12px; display:none; }
   .bar > div { height:100%; width:0; background: var(--accent); transition: width .2s; }
   .status { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 1.4em; }
@@ -82,6 +88,10 @@
       "the computer": "bilgisayar",
       "Choose files to send to {0}": "{0} adlı bilgisayara gönderilecek dosyaları seçin",
       "Download": "İndir",
+      "Download (.zip)": "İndir (.zip)",
+      "Show files": "Dosyaları göster",
+      "Hide files": "Dosyaları gizle",
+      "{0} files": "{0} dosya",
       "Upload failed": "Yükleme başarısız oldu",
       "Lost connection to {0}.": "{0} ile bağlantı kesildi.",
       "Waiting for {1} to accept {0} files…": "{1} adlı bilgisayarın {0} dosyayı kabul etmesi bekleniyor…",
@@ -104,6 +114,10 @@
       "the computer": "компьютер",
       "Choose files to send to {0}": "Выберите файлы для отправки на {0}",
       "Download": "Скачать",
+      "Download (.zip)": "Скачать (.zip)",
+      "Show files": "Показать файлы",
+      "Hide files": "Скрыть файлы",
+      "{0} files": ["{0} файл", "{0} файла", "{0} файлов"],
       "Upload failed": "Не удалось отправить",
       "Lost connection to {0}.": "Потеряно соединение с {0}.",
       "Waiting for {1} to accept {0} files…": ["Ждём, пока {1} примет {0} файл…", "Ждём, пока {1} примет {0} файла…", "Ждём, пока {1} примет {0} файлов…"],
@@ -126,6 +140,10 @@
       "the computer": "kompyuter",
       "Choose files to send to {0}": "{0} kompyuteriga yuboriladigan fayllarni tanlang",
       "Download": "Yuklab olish",
+      "Download (.zip)": "Yuklab olish (.zip)",
+      "Show files": "Fayllarni koʻrsatish",
+      "Hide files": "Fayllarni yashirish",
+      "{0} files": "{0} ta fayl",
       "Upload failed": "Yuborib boʻlmadi",
       "Lost connection to {0}.": "{0} bilan aloqa uzildi.",
       "Waiting for {1} to accept {0} files…": "{1} {0} ta faylni qabul qilishi kutilmoqda…",
@@ -186,15 +204,37 @@
       lastList = key;
       var ul = $("files");
       ul.innerHTML = "";
-      list.files.forEach(function (f) {
+      function fileRow(f, label) {
         var li = document.createElement("li");
-        var name = document.createElement("span"); name.className = "name"; name.textContent = f.name;
+        var name = document.createElement("span"); name.className = "name"; name.textContent = label;
         var sz = document.createElement("span"); sz.className = "size"; sz.textContent = size(f.size);
         var a = document.createElement("a"); a.href = "api/files/" + encodeURIComponent(f.id); a.textContent = t("Download");
         a.setAttribute("download", f.name.split("/").pop());
         li.appendChild(name); li.appendChild(sz); li.appendChild(a);
+        return li;
+      }
+      // A folder downloads as one .zip (browsers can't save folders); its files can still be opened one by one.
+      (list.folders || []).forEach(function (d) {
+        var li = document.createElement("li"); li.className = "folder";
+        var name = document.createElement("span"); name.className = "name"; name.textContent = "\uD83D\uDCC1 " + d.name;
+        var sz = document.createElement("span"); sz.className = "size";
+        sz.textContent = tn(d.fileCount, "{0} file", "{0} files") + " \u00B7 " + size(d.size);
+        var a = document.createElement("a"); a.href = "api/folders/" + encodeURIComponent(d.id); a.textContent = t("Download (.zip)");
+        a.setAttribute("download", d.name + ".zip");
+        var toggle = document.createElement("button"); toggle.className = "toggle"; toggle.textContent = t("Show files");
+        var inner = document.createElement("ul"); inner.className = "inner"; inner.style.display = "none";
+        list.files.filter(function (f) { return f.folder === d.id; }).forEach(function (f) {
+          inner.appendChild(fileRow(f, f.name.split("/").slice(1).join("/")));
+        });
+        toggle.addEventListener("click", function () {
+          var open = inner.style.display === "none";
+          inner.style.display = open ? "block" : "none";
+          toggle.textContent = open ? t("Hide files") : t("Show files");
+        });
+        li.appendChild(name); li.appendChild(sz); li.appendChild(a); li.appendChild(toggle); li.appendChild(inner);
         ul.appendChild(li);
       });
+      list.files.filter(function (f) { return !f.folder; }).forEach(function (f) { ul.appendChild(fileRow(f, f.name)); });
       $("noFiles").style.display = list.files.length ? "none" : "block";
     }).catch(function () {});
   }

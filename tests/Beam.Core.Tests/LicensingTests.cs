@@ -41,6 +41,15 @@ public class LicensingTests
     }
 
     [Fact]
+    public async Task LaunchPeriodSendsAtFullSpeedWithoutClaimingPro()
+    {
+        await using var node = new TestNode("Free during launch", pro: false, launchPeriod: true);
+        Assert.Equal(0, node.Node.Transfers.SendLimiter.BytesPerSecond);
+        Assert.True(Edition.LaunchPeriodActive); // the shipping apps are in the launch period: no limits at all
+        Assert.True(new Edition().IsEnabled(Feature.FullSpeed));
+    }
+
+    [Fact]
     public void DailyQuotaCountsResetsAndPersists()
     {
         using var dir = new TempDir();

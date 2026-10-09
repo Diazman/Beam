@@ -138,6 +138,50 @@ public class PhoneLinkTests
     }
 
     [Fact]
+    public async Task PhoneDownloadsASharedFolderAsOneZip()
+    {
+        await using var pc = new TestNode("Office PC");
+        pc.Node.PhoneLink.Start(0);
+        using var client = Client(pc);
+        var a = pc.CreateFile("Holiday/a.jpg", 1_500_000, 2);
+        var b = pc.CreateFile("Holiday/Day 2/Фото.jpg", 2000, 3);
+        var single = pc.CreateFile("notes.txt", 100, 4);
+
+        var session = pc.Node.PhoneLink.Share(new[] { pc.SourcePath("Holiday"), single });
+        var list = await JsonAsync(await client.GetAsync("api/files"));
+        var folder = Assert.Single(list.GetProperty("folders").EnumerateArray().ToList());
+        Assert.Equal("Holiday", folder.GetProperty("name").GetString());
+        Assert.Equal(2, folder.GetProperty("fileCount").GetInt32());
+        Assert.Equal(1_502_000, folder.GetProperty("size").GetInt64());
+        var files = list.GetProperty("files").EnumerateArray().ToList();
+        Assert.Equal(2, files.Count(f => f.GetProperty("folder").GetString() == folder.GetProperty("id").GetString()));
+        Assert.Contains(files, f => f.GetProperty("name").GetString() == "notes.txt" && f.GetProperty("folder").ValueKind == JsonValueKind.Null);
+
+        using var response = await client.GetAsync("api/folders/" + folder.GetProperty("id").GetString());
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("Holiday.zip", response.Content.Headers.ContentDisposition?.FileNameStar);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.Equal(response.Content.Headers.ContentLength, bytes.Length);
+        using (var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes)))
+        {
+            Assert.Equal(new[] { "Holiday/Day 2/Фото.jpg", "Holiday/a.jpg" }, zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal));
+            using var read = new MemoryStream();
+            using (var s = zip.GetEntry("Holiday/a.jpg")!.Open()) s.CopyTo(read);
+            Assert.Equal(File.ReadAllBytes(a), read.ToArray());
+        }
+
+        // The two folder files count as done; the single file is still waiting.
+        var snapshot = session.GetSnapshot();
+        Assert.Equal(2, snapshot.CompletedFiles);
+        Assert.NotEqual(TransferState.Completed, session.State);
+        using (await client.GetAsync("api/files/" + files.First(f => f.GetProperty("name").GetString() == "notes.txt").GetProperty("id").GetString())) { }
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(snapshot.TotalBytes, session.GetSnapshot().TransferredBytes);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("api/folders/5")).StatusCode);
+    }
+
+    [Fact]
     public async Task StoppingInvalidatesTheLink()
     {
         await using var pc = new TestNode("Office PC");
