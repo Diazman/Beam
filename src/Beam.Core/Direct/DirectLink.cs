@@ -41,6 +41,16 @@ public static class DirectRolesText
 /// <summary>The name and passphrase of a direct network (WPA2), shared only with the device that should join.</summary>
 public sealed record DirectNetwork(string Ssid, string Passphrase)
 {
+    /// <summary>
+    /// Hosted by a computer (Windows' Wi-Fi Direct network): phones join it as an ordinary Wi-Fi network right away,
+    /// since joining it the Wi-Fi Direct way fails on many phones. Not part of the network's identity.
+    /// </summary>
+    public bool HostIsComputer { get; init; }
+
+    public bool Equals(DirectNetwork? other) => other is not null && Ssid == other.Ssid && Passphrase == other.Passphrase;
+
+    public override int GetHashCode() => HashCode.Combine(Ssid, Passphrase);
+
     private const string Alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
     /// <summary>

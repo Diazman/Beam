@@ -137,8 +137,9 @@ public sealed class TransferService : IAsyncDisposable
         return session;
     }
 
-    private string DisplayName(string path) => ExternalFiles != null && ExternalFiles.TryGet(path, out var file)
-        ? file.Name
+    private string DisplayName(string path) =>
+        ExternalFiles != null && ExternalFiles.TryGetFolderName(path, out var folder) ? folder
+        : ExternalFiles != null && ExternalFiles.TryGet(path, out var file) ? file.Name
         : Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
 
     /// <summary>Sends a piece of text or a link to a device. The other side shows it (or copies it, if it trusts this device).</summary>

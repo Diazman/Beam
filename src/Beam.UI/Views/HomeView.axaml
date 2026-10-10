@@ -124,7 +124,7 @@
                   <TextBlock Text="{l:T 'Add files'}" />
                 </StackPanel>
               </Button>
-              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}" IsVisible="{Binding IsDesktop}">
+              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
                   <TextBlock Text="{l:T 'Add folder'}" />
@@ -159,7 +159,7 @@
                     <TextBlock Text="{l:T 'Choose files'}" />
                   </StackPanel>
                 </Button>
-                <Button Command="{Binding ChooseFolderCommand}" IsVisible="{Binding IsDesktop}">
+                <Button Command="{Binding ChooseFolderCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
                     <TextBlock Text="{l:T 'Choose a folder'}" />

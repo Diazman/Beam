@@ -46,6 +46,30 @@ public class ExternalFilesTests
         Assert.Equal(new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), manifest.Entries[0].ModifiedUtc);
     }
 
+    [Fact]
+    public async Task AFolderPickedOnThePhoneIsSentWithItsSubfolders()
+    {
+        var files = new FakeContentProvider();
+        files.Folders["content://docs/tree/primary%3ADCIM%2FTrip"] = ("Trip", new[]
+        {
+            ("a.jpg", TestBytes(5000, 3)),
+            ("Day 2", (byte[]?)null),
+            ("Day 2/b.mp4", TestBytes(2 * 1024 * 1024, 4)),
+            ("Empty", null),
+        });
+        await using var sender = new TestNode("Phone", externalFiles: files);
+        await using var receiver = new TestNode("PC");
+
+        var session = sender.Node.Send(receiver.AsDevice(), new[] { "content://docs/tree/primary%3ADCIM%2FTrip" });
+        Assert.Equal("Trip", session.Title);
+        await Wait.ForFinishAsync(session);
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestBytes(5000, 3), File.ReadAllBytes(Path.Combine(receiver.ReceiveFolder, "Trip", "a.jpg")));
+        Assert.Equal(TestBytes(2 * 1024 * 1024, 4), File.ReadAllBytes(Path.Combine(receiver.ReceiveFolder, "Trip", "Day 2", "b.mp4")));
+        Assert.True(Directory.Exists(Path.Combine(receiver.ReceiveFolder, "Trip", "Empty")));
+    }
+
     private static byte[] TestBytes(int length, int seed)
     {
         var data = new byte[length];
@@ -58,6 +82,19 @@ public class ExternalFilesTests
         private readonly Dictionary<string, (string Name, byte[] Data)> _files = new();
 
         public List<NonSeekableStream> Opened { get; } = new();
+
+        public Dictionary<string, (string Name, (string Path, byte[]? Data)[] Items)> Folders { get; } = new();
+
+        public bool TryGetFolderName(string address, [NotNullWhen(true)] out string? name)
+        {
+            name = Folders.TryGetValue(address, out var folder) ? folder.Name : null;
+            return name != null;
+        }
+
+        public IReadOnlyList<ExternalFolderItem> ListFolder(string address, CancellationToken cancellationToken) =>
+            Folders[address].Items.Select(i => new ExternalFolderItem(i.Path,
+                i.Data is { } data ? new ExternalFile(i.Path.Split('/')[^1], data.Length, DateTime.UtcNow, () => new NonSeekableStream(data)) : null,
+                DateTime.UtcNow)).ToList();
 
         public (string Name, byte[] Data) this[string address]
         {

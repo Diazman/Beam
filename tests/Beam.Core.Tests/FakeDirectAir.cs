@@ -24,6 +24,9 @@ public sealed class FakeDirectAir
     public IDirectLink Link(DirectRoles roles) => new FakeLink(this, roles);
 
     /// <summary>Whether the host's direct network shows up in Wi-Fi scans (phones notice paired PCs this way).</summary>
+    /// <summary>The network details the last join was given (including how to join it).</summary>
+    public DirectNetwork? LastJoin { get; private set; }
+
     public bool InRange { get; set; } = true;
 
     /// <summary>
@@ -77,6 +80,7 @@ public sealed class FakeDirectAir
         {
             await Task.Delay(100, cancellationToken);
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
+            _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);
             _air._onJoined?.Invoke();
             return DirectAddress;

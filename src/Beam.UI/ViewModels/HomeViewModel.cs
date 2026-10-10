@@ -365,11 +365,27 @@ public sealed class HomeViewModel : ObservableObject
         foreach (var raw in paths)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
+            if (_node.Transfers.ExternalFiles is { } externals && externals.TryGetFolderName(raw, out var folderName))
+            {
+                // A folder the platform hands over by address (Android): listed in the background.
+                if (Items.Any(i => i.Path == raw)) continue;
+                var folder = new PendingItemViewModel(raw, isFolder: true, RemoveItem, folderName) { IsMeasuring = true };
+                Items.Add(folder);
+                _ = MeasureExternalFolderAsync(folder, externals);
+                continue;
+            }
+
             if (_node.Transfers.ExternalFiles?.TryGet(raw, out var external) == true)
             {
                 // A file the platform handed over as a stream (Android content:// URI).
                 if (Items.Any(i => i.Path == raw)) continue;
                 Items.Add(new PendingItemViewModel(raw, isFolder: false, RemoveItem, external.Name) { Size = external.Size, FileCount = 1 });
+                continue;
+            }
+
+            if (raw.StartsWith("content://", StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Warn($"Can't open {raw}: the phone didn't allow reading it");
                 continue;
             }
 
@@ -545,6 +561,28 @@ public sealed class HomeViewModel : ObservableObject
         SendCommand.RaiseCanExecuteChanged();
     }
 
+    private async Task MeasureExternalFolderAsync(PendingItemViewModel item, Beam.Core.Files.IExternalFiles externals)
+    {
+        var token = item.Measuring.Token;
+        try
+        {
+            var files = await Task.Run(() => externals.ListFolder(item.Path, token).Where(i => i.File != null).ToList(), token);
+            item.Size = files.Sum(f => f.File!.Size);
+            item.FileCount = files.Count;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not list {item.Path}: {ex.Message}");
+        }
+
+        item.IsMeasuring = false;
+        OnItemsChanged();
+    }
+
     private async Task MeasureFolderAsync(PendingItemViewModel item)
     {
         var token = item.Measuring.Token;
@@ -631,6 +669,8 @@ public sealed class HomeViewModel : ObservableObject
 
         var device = _node.Pair(code);
         Log.Info($"Paired with {device.Name} by scanning its code");
+        // Not on the same Wi-Fi? Join the computer's own network now: one scan pairs and connects.
+        _ = _node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None);
         await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Paired with {0}", device.Name),
             code.Network != null
                 ? L.T("{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.", device.Name)
