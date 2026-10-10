@@ -2,8 +2,11 @@ using Android.App;
 using Android.Content;
 using Android.Media;
 using Android.OS;
+using Android.Provider;
+using Beam.Core.Localization;
 using Beam.App.Platform;
 using Beam.Core.Diagnostics;
+using AndroidEnvironment = Android.OS.Environment;
 using AndroidUri = Android.Net.Uri;
 
 namespace Beam.Droid;
@@ -78,6 +81,89 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         catch (Exception ex)
         {
             Log.Warn("Could not show a notification", ex);
+        }
+    }
+
+    public string? DefaultReceiveFolder => AndroidHost.ReceiveFolder;
+
+    /// <summary>
+    /// The folder picker returns a content:// address ("…/tree/primary:Download/Projects"). Beam saves with normal
+    /// file access, which Android allows in the shared Download and Documents folders (and their subfolders).
+    /// </summary>
+    public ReceiveFolderChoice CheckReceiveFolder(string picked)
+    {
+        var path = picked.StartsWith('/') ? picked : PathFromTreeUri(picked);
+        var problem = L.T("Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.");
+        if (path == null) return new ReceiveFolderChoice(null, problem);
+        path = path.TrimEnd('/');
+        var storageRoot = AndroidEnvironment.ExternalStorageDirectory?.AbsolutePath?.TrimEnd('/');
+        if (path == storageRoot) return new ReceiveFolderChoice(null, problem);
+
+        try
+        {
+            // Android decides what Beam may write where; try it instead of guessing.
+            Directory.CreateDirectory(path);
+            var probe = Path.Combine(path, ".beam-write-check");
+            File.WriteAllText(probe, "ok");
+            File.Delete(probe);
+            return new ReceiveFolderChoice(path);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Can't save into {path}", ex);
+            return new ReceiveFolderChoice(null, problem);
+        }
+    }
+
+    private static string? PathFromTreeUri(string address)
+    {
+        try
+        {
+            var uri = AndroidUri.Parse(address)!;
+            var id = DocumentsContract.GetTreeDocumentId(uri);
+            if (string.IsNullOrEmpty(id)) return null;
+            if (id.StartsWith("raw:", StringComparison.Ordinal)) return id[4..];
+            if (uri.Authority == "com.android.providers.downloads.documents" && id == "downloads")
+                return AndroidEnvironment.GetExternalStoragePublicDirectory(AndroidEnvironment.DirectoryDownloads)!.AbsolutePath;
+            if (uri.Authority != "com.android.externalstorage.documents") return null;
+            var colon = id.IndexOf(':');
+            if (colon < 0) return null;
+            var volume = id[..colon];
+            var relative = id[(colon + 1)..];
+            var root = volume == "primary" ? AndroidEnvironment.ExternalStorageDirectory!.AbsolutePath : "/storage/" + volume;
+            return relative.Length == 0 ? root : Path.Combine(root, relative);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Unknown folder address {address}", ex);
+            return null;
+        }
+    }
+
+    /// <summary>Shares the end of today's log as text (Telegram, email…), so it can be sent for troubleshooting.</summary>
+    public void ShareLog(string logDirectory)
+    {
+        try
+        {
+            var file = new DirectoryInfo(logDirectory).GetFiles("beam-*.log").OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
+            if (file == null) return;
+            string text;
+            using (var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                const int MaxBytes = 60_000; // big enough for the interesting part, small enough for any share target
+                if (stream.Length > MaxBytes) stream.Seek(-MaxBytes, SeekOrigin.End);
+                text = new StreamReader(stream).ReadToEnd();
+            }
+
+            var send = new Intent(Intent.ActionSend);
+            send.SetType("text/plain");
+            send.PutExtra(Intent.ExtraSubject, $"Beam log ({Build.Manufacturer} {Build.Model}, Android {Build.VERSION.Release}, Beam {Core.AppInfo.Version})");
+            send.PutExtra(Intent.ExtraText, $"Beam {Core.AppInfo.Version} · {Build.Manufacturer} {Build.Model} · Android {Build.VERSION.Release}\n\n{text}");
+            Start(Intent.CreateChooser(send, (string?)null)!);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not share the log", ex);
         }
     }
 

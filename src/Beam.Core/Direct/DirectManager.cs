@@ -112,7 +112,11 @@ public sealed class DirectManager
 
         if (peer != null) await TellAsync(peer, new DirectRequestMessage { Action = DirectActions.Prefer, Method = Encode(method) }).ConfigureAwait(false);
         var interrupted = _transfers.InterruptConnections(peerId);
-        if (interrupted > 0) Log.Info($"Switching {interrupted} transfer(s) with {peer?.Name ?? peerId} to {method}");
+        if (interrupted > 0)
+        {
+            Log.Info($"Switching {interrupted} transfer(s) with {peer?.Name ?? peerId} to {method}");
+            if (method == ConnectionMethod.Direct) _ = CheckReconnectedDirectlyAsync(peerId, peer?.Name ?? peerId);
+        }
 
         if (method == ConnectionMethod.SameNetwork && _linkedPeers.TryRemove(peerId, out _))
         {
@@ -144,6 +148,27 @@ public sealed class DirectManager
     public void StopForBrowser()
     {
         if (_linkedPeers.TryRemove(BrowserUser, out _)) StopLinkIfUnused();
+    }
+
+    /// <summary>
+    /// The direct link came up, but if the transfer resumed over Wi-Fi the other device couldn't be reached on it
+    /// (usually a firewall that blocks the direct network): say so instead of silently staying on Wi-Fi.
+    /// </summary>
+    private async Task CheckReconnectedDirectlyAsync(string peerId, string peerName)
+    {
+        var deadline = Environment.TickCount64 + 60_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Task.Delay(500).ConfigureAwait(false);
+            var sessions = _transfers.Sessions.Where(s => s.PeerId == peerId && !s.IsFinished).ToList();
+            if (sessions.Count == 0 || MethodFor(peerId) != ConnectionMethod.Direct) return;
+            var reconnected = sessions.Where(s => !s.IsSwitchingPath && s.Path != TransferPath.Unknown).ToList();
+            if (reconnected.Count == 0) continue;
+            if (reconnected.All(s => s.Path == TransferPath.Direct)) return;
+            Log.Warn($"Direct: the link to {peerName} is up but the transfer resumed over the network");
+            Problem?.Invoke(L.T("The direct connection to {0} started, but Beam couldn't reach it. Check that Beam is allowed through the firewall.", peerName));
+            return;
+        }
     }
 
     /// <summary>The Connection setting changed: forget per-device choices and switch running transfers.</summary>

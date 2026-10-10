@@ -55,14 +55,15 @@ internal static class AndroidHost
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>
         {
-            s.ReceiveFolder = ReceiveFolder;
+            // Downloads/Beam unless the user chose another folder in Settings.
+            if (string.IsNullOrWhiteSpace(s.ReceiveFolder) || !s.ReceiveFolder.StartsWith('/')) s.ReceiveFolder = ReceiveFolder;
             s.CloseToTray = false;
             s.StartWithWindows = false;
             if (firstRun) s.DeviceName = FriendlyDeviceName();
         });
         try
         {
-            Directory.CreateDirectory(ReceiveFolder);
+            Directory.CreateDirectory(_node.Settings.Current.EffectiveReceiveFolder);
         }
         catch (Exception ex)
         {

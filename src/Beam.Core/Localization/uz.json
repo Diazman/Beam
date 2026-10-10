@@ -456,5 +456,10 @@
   "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Bu kodni telefon kamerasi bilan skanerlang va \"Ulanish\"ni bosing. Soʻng Beam'ni ochish uchun pastdagi kodni skanerlang.",
   "Starting the direct connection…": "Toʻgʻridan-toʻgʻri ulanish boshlanmoqda…",
   "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Bu kompyuter telefon uchun oʻz Wi-Fi'sini yaratadi: iPhone va Android bilan istalgan joyda ishlaydi. Telefon unga ulanganda internet boʻlmaydi.",
-  "Use the normal Wi-Fi instead": "Oddiy Wi-Fi'dan foydalanish"
+  "Use the normal Wi-Fi instead": "Oddiy Wi-Fi'dan foydalanish",
+  "Can't use this folder": "Bu jilddan foydalanib boʻlmaydi",
+  "Beam can't save files in that folder. Choose another one.": "Beam bu jildga fayl saqlay olmaydi. Boshqasini tanlang.",
+  "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam bu jildga fayl saqlay olmaydi. Telefondagi Download yoki Documents jildini yoki ularning ichidagi jildni tanlang.",
+  "Use Download/Beam": "Download/Beam'dan foydalanish",
+  "Send log": "Jurnalni yuborish"
 }

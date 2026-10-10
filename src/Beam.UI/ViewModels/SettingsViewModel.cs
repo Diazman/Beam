@@ -81,8 +81,8 @@ public sealed class SettingsViewModel : ObservableObject
             Directory.CreateDirectory(ReceiveFolder);
             _platform.OpenFolder(ReceiveFolder);
         });
-        ResetFolderCommand = new RelayCommand(() => _node.Settings.Update(s => s.ReceiveFolder = null), () => !UsesDefaultFolder);
-        OpenLogsCommand = new RelayCommand(() => _platform.OpenFolder(_node.Paths.LogDirectory));
+        ResetFolderCommand = new RelayCommand(() => _node.Settings.Update(s => s.ReceiveFolder = _platform.DefaultReceiveFolder), () => !UsesDefaultFolder);
+        OpenLogsCommand = new RelayCommand(() => _platform.ShareLog(_node.Paths.LogDirectory));
         CopyAddressCommand = new AsyncCommand(() => _ui.CopyToClipboardAsync(LocalAddresses));
         UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
         RestorePurchaseCommand = new AsyncCommand(RestorePurchaseAsync);
@@ -122,7 +122,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string ReceiveFolder => _node.Settings.Current.EffectiveReceiveFolder;
 
-    public bool UsesDefaultFolder => string.IsNullOrEmpty(_node.Settings.Current.ReceiveFolder);
+    public bool UsesDefaultFolder => string.IsNullOrEmpty(_node.Settings.Current.ReceiveFolder)
+                                     || string.Equals(_node.Settings.Current.ReceiveFolder, _platform.DefaultReceiveFolder, StringComparison.OrdinalIgnoreCase);
 
     public bool SupportsStartup => _platform.SupportsStartWithSystem;
 
@@ -357,9 +358,19 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async Task ChangeFolderAsync()
     {
-        var folder = await _ui.PickFolderAsync(L.T("Choose where received files are saved"), ReceiveFolder);
-        if (string.IsNullOrEmpty(folder)) return;
-        _node.Settings.Update(s => s.ReceiveFolder = string.Equals(folder, KnownFolders.Downloads, StringComparison.OrdinalIgnoreCase) ? null : folder);
+        var picked = await _ui.PickFolderAsync(L.T("Choose where received files are saved"), ReceiveFolder);
+        if (string.IsNullOrEmpty(picked)) return;
+        var choice = _platform.CheckReceiveFolder(picked);
+        if (choice.Path == null)
+        {
+            await _main.ShowDialogAsync(new ConfirmViewModel(L.T("Can't use this folder"),
+                choice.Problem ?? L.T("Beam can't save files in that folder. Choose another one."), L.T("OK"), ""));
+            return;
+        }
+
+        var folder = choice.Path;
+        _node.Settings.Update(s => s.ReceiveFolder = _platform.DefaultReceiveFolder == null
+                                                      && string.Equals(folder, KnownFolders.Downloads, StringComparison.OrdinalIgnoreCase) ? null : folder);
     }
 
     private async void RemoveTrusted(TrustedDeviceViewModel device)
