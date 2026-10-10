@@ -461,5 +461,6 @@
   "Beam can't save files in that folder. Choose another one.": "Beam bu klasöre dosya kaydedemiyor. Başka bir klasör seçin.",
   "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam bu klasöre dosya kaydedemiyor. Telefondaki Download veya Documents klasörünü ya da bunların içindeki bir klasörü seçin.",
   "Use Download/Beam": "Download/Beam'i kullan",
-  "Send log": "Günlüğü gönder"
+  "Send log": "Günlüğü gönder",
+  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon doğrudan bağlantıya katılamadı. Telefon DIRECT-… ağına bağlanmayı sorduğunda Bağlan'a dokunun. Cihazları birbirine yaklaştırıp tekrar deneyin."
 }
