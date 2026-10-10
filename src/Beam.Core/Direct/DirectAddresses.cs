@@ -39,6 +39,31 @@ public static class DirectAddresses
         lock (Gate) _refreshedAt = long.MinValue;
     }
 
+    /// <summary>
+    /// Adapters that can carry traffic. Windows doesn't always report its Wi-Fi Direct adapter as "Up" while it hosts
+    /// a direct network, so anything that isn't clearly down (and has an address) counts.
+    /// </summary>
+    public static bool IsUsable(NetworkInterface nic) =>
+        nic.NetworkInterfaceType != NetworkInterfaceType.Loopback
+        && nic.OperationalStatus is not (OperationalStatus.Down or OperationalStatus.NotPresent or OperationalStatus.LowerLayerDown);
+
+    /// <summary>One line per adapter with an IPv4 address, for the log (helps when a direct connection doesn't work).</summary>
+    public static string Describe()
+    {
+        try
+        {
+            return string.Join("; ", NetworkInterface.GetAllNetworkInterfaces()
+                .Select(nic => (nic, ips: nic.GetIPProperties().UnicastAddresses.Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork)
+                    .Select(u => $"{u.Address}/{u.PrefixLength}").ToList()))
+                .Where(x => x.ips.Count > 0)
+                .Select(x => $"{x.nic.Name} [{x.nic.Description}] {x.nic.OperationalStatus}{(IsDirectAdapter(x.nic.Name, x.nic.Description) ? " direct" : "")}: {string.Join(", ", x.ips)}"));
+        }
+        catch (Exception ex)
+        {
+            return "adapters unavailable: " + ex.Message;
+        }
+    }
+
     /// <summary>Wi-Fi Direct adapters: "p2p-wlan0-0" on Android, "Microsoft Wi-Fi Direct Virtual Adapter" on Windows.</summary>
     internal static bool IsDirectAdapter(string name, string description) =>
         name.StartsWith("p2p", StringComparison.OrdinalIgnoreCase)
@@ -55,7 +80,7 @@ public static class DirectAddresses
             {
                 foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    if (!IsUsable(nic)) continue;
                     var direct = IsDirectAdapter(nic.Name, nic.Description);
                     foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
                     {

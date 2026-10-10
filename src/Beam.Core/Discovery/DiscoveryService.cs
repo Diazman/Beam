@@ -443,7 +443,7 @@ public sealed class DiscoveryService : IDisposable
         {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                if (!Direct.DirectAddresses.IsUsable(nic)) continue;
                 if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
                 IPInterfaceProperties props;
                 try { props = nic.GetIPProperties(); } catch { continue; }

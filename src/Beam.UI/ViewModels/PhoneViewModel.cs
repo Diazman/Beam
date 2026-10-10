@@ -33,6 +33,8 @@ public sealed class PhoneViewModel : ObservableObject
     private DirectNetwork? _directNetwork;
     private bool _directStarting;
     private Geometry? _wifiQr;
+    private DateTime _directStartedAt;
+    private bool _usingAssumedDirectAddress;
     private readonly DispatcherTimer _directTimer;
 
     public PhoneViewModel(BeamNode node, IUiServices ui, MainViewModel main)
@@ -213,6 +215,8 @@ public sealed class PhoneViewModel : ObservableObject
         {
             var network = await _node.Direct.HostForBrowserAsync(CancellationToken.None);
             _directNetwork = network;
+            _directStartedAt = DateTime.UtcNow;
+            _usingAssumedDirectAddress = false;
             WifiQr = QrCode.Create(network.ToWifiQrText()).Geometry;
             _directTimer.Start();
         }
@@ -262,7 +266,19 @@ public sealed class PhoneViewModel : ObservableObject
             {
                 // Only the address on this computer's own Wi-Fi: the phone has no other network then.
                 links = links.Where(l => System.Net.IPAddress.TryParse(new Uri(l).Host, out var ip) && _node.Transfers.IsDirectAddress(ip)).ToList();
-                if (links.Count > 0) _directTimer.Stop();
+                if (links.Count == 0 && DateTime.UtcNow - _directStartedAt > TimeSpan.FromSeconds(5))
+                {
+                    // Some PCs don't show the direct network's adapter: Windows always takes 192.168.137.1 on it.
+                    if (!_usingAssumedDirectAddress)
+                    {
+                        _usingAssumedDirectAddress = true;
+                        Log.Warn($"Direct network address not found; using 192.168.137.1. Adapters: {DirectAddresses.Describe()}");
+                    }
+
+                    links = new List<string> { $"http://192.168.137.1:{_node.PhoneLink.Port}/{_node.PhoneLink.Token}/" };
+                }
+
+                if (links.Count > 0 && !_usingAssumedDirectAddress) _directTimer.Stop();
             }
 
             var link = links.FirstOrDefault() ?? "";
