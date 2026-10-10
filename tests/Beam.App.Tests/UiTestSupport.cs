@@ -309,7 +309,8 @@ public sealed class UiHarness : IAsyncDisposable
     {
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-        var frame = Window.CaptureRenderedFrame() ?? throw new InvalidOperationException("Nothing rendered");
+        // Disposed right away: frames left to the finalizer have crashed Skia's encoder (access violation on Windows).
+        using var frame = Window.CaptureRenderedFrame() ?? throw new InvalidOperationException("Nothing rendered");
         var folder = Path.Combine(FindRepoRoot(), "artifacts", folderName);
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, name + ".png");
