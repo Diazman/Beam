@@ -551,13 +551,11 @@
   "{0} can't connect directly. Both devices need the latest Beam, and phones need Android 10 or newer.": "{0} не может подключиться напрямую. На обоих устройствах нужна последняя версия Beam, а на телефонах — Android 10 или новее.",
   "{0} couldn't join the direct connection.": "{0} не смог присоединиться к прямому подключению.",
   "{0} couldn't start a direct connection.": "{0} не смог создать прямое подключение.",
-  "First, join this computer's Wi-Fi": "Сначала подключитесь к Wi-Fi этого компьютера",
   "Getting the address on this computer's Wi-Fi ready…": "Подготовка адреса в Wi-Fi этого компьютера…",
   "Network:": "Сеть:",
   "No Wi-Fi network? Connect directly": "Нет сети Wi-Fi? Подключитесь напрямую",
   "Or join it in the phone's Wi-Fi settings:": "Или подключитесь в настройках Wi-Fi телефона:",
   "Password:": "Пароль:",
-  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться». Затем отсканируйте код ниже, чтобы открыть Beam.",
   "Starting the direct connection…": "Запуск прямого подключения…",
   "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Этот компьютер создаёт собственную сеть Wi-Fi для телефона: работает с iPhone и Android где угодно. Пока телефон подключён к ней, интернета на нём нет.",
   "Use the normal Wi-Fi instead": "Использовать обычный Wi-Fi",
@@ -580,5 +578,9 @@
   "That's not a Beam code": "Это не код Beam",
   "{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.": "{0} появляется здесь, когда находится поблизости: в той же сети Wi-Fi или напрямую, если Wi-Fi нет (выберите «Прямое подключение» в настройках компьютера). Файлы от него принимаются без вопросов.",
   "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} появляется здесь, когда находится в той же сети Wi-Fi. Файлы от него принимаются без вопросов.",
-  "{0} · Nearby · connects directly": "{0} · Поблизости · подключается напрямую"
+  "{0} · Nearby · connects directly": "{0} · Поблизости · подключается напрямую",
+  "Choose a folder to send": "Выберите папку для отправки",
+  "No Beam app on the phone (iPhone)? First join this computer's Wi-Fi": "На телефоне нет приложения Beam (iPhone)? Сначала подключитесь к Wi-Fi этого компьютера",
+  "Scan this code with the phone's camera and tap Join, then scan the code above. The Beam app doesn't need this step.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться», затем отсканируйте код выше. Приложению Beam этот шаг не нужен.",
+  "With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.": "С приложением Beam достаточно одного этого кода: приложение само подключится к Wi-Fi этого компьютера и свяжет устройства."
 }

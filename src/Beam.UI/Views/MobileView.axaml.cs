@@ -31,20 +31,28 @@ public partial class MobileView : UserControl, IUiServices
             Title = L.T("Choose files to send"),
             AllowMultiple = true,
         });
-        // Phones hand out content:// addresses rather than paths; IExternalFiles opens them.
-        return files.Select(f => f.TryGetLocalPath() ?? f.Path.ToString()).ToList();
+        // Phones hand out content:// addresses rather than paths; IExternalFiles opens them. The address must stay
+        // exactly as Android wrote it: Uri.ToString() decodes %3A and %2F, and Android then refuses the changed address.
+        return files.Select(Address).ToList();
     }
 
-    // Phones can't send whole folders yet (pickers return folder addresses Beam can't list).
-    public Task<IReadOnlyList<string>> PickFoldersAsync() => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+    /// <summary>Returns the folder's address (content://…/tree/…); the platform lists what's inside when sending.</summary>
+    public async Task<IReadOnlyList<string>> PickFoldersAsync()
+    {
+        if (Top is not { } top) return Array.Empty<string>();
+        var folders = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = L.T("Choose a folder to send"), AllowMultiple = false });
+        return folders.Select(Address).ToList();
+    }
 
     /// <summary>Returns the picked folder's address (content://…/tree/…); the platform turns it into a path it can save into.</summary>
     public async Task<string?> PickFolderAsync(string title, string? startFolder)
     {
         if (Top is not { } top) return null;
         var folders = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = title, AllowMultiple = false });
-        return folders.Count == 0 ? null : folders[0].TryGetLocalPath() ?? folders[0].Path.ToString();
+        return folders.Count == 0 ? null : Address(folders[0]);
     }
+
+    private static string Address(IStorageItem item) => item.TryGetLocalPath() ?? item.Path.OriginalString;
 
     public async Task CopyToClipboardAsync(string text)
     {

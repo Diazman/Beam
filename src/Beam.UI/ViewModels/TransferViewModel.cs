@@ -193,7 +193,7 @@ public sealed class TransferViewModel : ObservableObject
     public bool IsDirectPath => Session.Path == TransferPath.Direct && !Session.IsSwitchingPath;
 
     /// <summary>Running over Wi-Fi and both devices can connect directly.</summary>
-    public bool CanSwitchToDirect => CanSwitch && Method != ConnectionMethod.Direct
+    public bool CanSwitchToDirect => CanSwitch && Method != ConnectionMethod.Direct && Session.Path != TransferPath.Direct
                                      && _findDevice?.Invoke(Session.PeerId) is { } peer && _direct!.CanConnectDirectly(peer);
 
     /// <summary>Running (or set up) over a direct link: going back to the Wi-Fi network, e.g. to get internet.</summary>

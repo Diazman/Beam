@@ -24,6 +24,7 @@ public sealed class DirectManager
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(150); // the phone may first try Wi-Fi Direct, then ask its user to connect
     private static readonly TimeSpan FindTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan PairingLanWait = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(180);
 
     private readonly TransferService _transfers;
@@ -388,7 +389,46 @@ public sealed class DirectManager
     }
 
     /// <summary>Brings up a direct link with <paramref name="peer"/> (no-op when one is already up).</summary>
-    public async Task ConnectAsync(DeviceInfo peer, CancellationToken cancellationToken)
+    public Task ConnectAsync(DeviceInfo peer, CancellationToken cancellationToken) => ConnectAsync(peer, viaKnownNetwork: false, cancellationToken);
+
+    /// <summary>
+    /// Right after pairing by code: when the PC isn't on this phone's network but its own network is in range, joins it,
+    /// so one scan both pairs and connects. False when there was nothing to do (same network, or the PC's network is off).
+    /// </summary>
+    public async Task<bool> ConnectAfterPairingAsync(DeviceInfo peer, CancellationToken cancellationToken)
+    {
+        if (_link is not { } link || !Roles.HasFlag(DirectRoles.Join) || KnownNetworkFor(peer.Id) is not { } known) return false;
+        var deadline = Environment.TickCount64 + (long)PairingLanWait.TotalMilliseconds;
+        bool? visible = null; // null: this device can't see Wi-Fi scan results (then just try)
+        while (Environment.TickCount64 < deadline)
+        {
+            // Answered over the shared network (or already linked): nothing to join.
+            if (_discovery.Find(peer.Id) is { Endpoints.Count: > 0 } found && (!IsNearbyOnlyDirectly(peer.Id) || HasDirectPath(found))) return false;
+            if (link is IDirectNetworkScanner scanner && scanner.VisibleNetworks() is { Count: > 0 } networks)
+                visible = visible == true || networks.Contains(known.Ssid);
+            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (visible == false)
+        {
+            Log.Info($"Direct: {peer.Name} isn't on this network and its network {known.Ssid} isn't in range yet");
+            return false;
+        }
+
+        Log.Info($"Direct: {peer.Name} isn't on this network after pairing; joining {known.Ssid}");
+        try
+        {
+            await ConnectAsync(peer, viaKnownNetwork: true, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            Report(ex);
+            return false;
+        }
+    }
+
+    private async Task ConnectAsync(DeviceInfo peer, bool viaKnownNetwork, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(SetupTimeout);
@@ -402,11 +442,12 @@ public sealed class DirectManager
             IPAddress? host = null;
             var known = Roles.HasFlag(DirectRoles.Join) ? KnownNetworkFor(peer.Id) : null;
             var plan = PlanFor(peer);
-            if (known != null && (current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
+            if (known != null && (viaKnownNetwork || current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
             {
                 // No shared network to ask over, but this phone knows the PC's network (paired): join it directly.
                 Log.Info($"Direct: joining {peer.Name}'s known network {known.Ssid}");
-                host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase), token).ConfigureAwait(false);
+                host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase) { HostIsComputer = IsComputer(known.Kind, current.Platform) }, token)
+                    .ConfigureAwait(false);
                 plan = Plan.None;
             }
 
@@ -421,7 +462,7 @@ public sealed class DirectManager
                     var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Host }, token).ConfigureAwait(false);
                     if (!reply.Ok || string.IsNullOrEmpty(reply.Ssid) || string.IsNullOrEmpty(reply.Passphrase))
                         throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name));
-                    var network = new DirectNetwork(reply.Ssid, reply.Passphrase);
+                    var network = new DirectNetwork(reply.Ssid, reply.Passphrase) { HostIsComputer = IsComputer(current.Kind, current.Platform) };
                     Remember(peer.Id, peer.Name, peer.Fingerprint, peer.Kind, network);
                     host = await link.JoinAsync(network, token).ConfigureAwait(false);
                     break;
@@ -555,7 +596,7 @@ public sealed class DirectManager
                 if (_link == null || !Roles.HasFlag(DirectRoles.Join)) throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
                 Log.Info($"Direct: joining {request.Ssid} for {peerName}");
-                var joining = new DirectNetwork(request.Ssid, request.Passphrase);
+                var joining = new DirectNetwork(request.Ssid, request.Passphrase) { HostIsComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform) };
                 Remember(peerId, peerName, peerFingerprint, peerKind, joining);
                 var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
@@ -580,6 +621,9 @@ public sealed class DirectManager
                 return new DirectResponseMessage { Ok = false, Message = "Unknown request." };
         }
     }
+
+    private static bool IsComputer(string? kind, string? platform) =>
+        platform == "windows" || kind is DeviceKinds.Desktop or DeviceKinds.Laptop;
 
     private void SetPeerMethod(string peerId, ConnectionMethod method)
     {

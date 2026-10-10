@@ -447,13 +447,11 @@
   "{0} can't connect directly. Both devices need the latest Beam, and phones need Android 10 or newer.": "{0} toʻgʻridan-toʻgʻri ulana olmaydi. Ikkala qurilmada Beam'ning soʻnggi versiyasi, telefonlarda esa Android 10 yoki undan yangisi boʻlishi kerak.",
   "{0} couldn't join the direct connection.": "{0} toʻgʻridan-toʻgʻri ulanishga qoʻshila olmadi.",
   "{0} couldn't start a direct connection.": "{0} toʻgʻridan-toʻgʻri ulanishni boshlay olmadi.",
-  "First, join this computer's Wi-Fi": "Avval bu kompyuterning Wi-Fi'siga ulaning",
   "Getting the address on this computer's Wi-Fi ready…": "Bu kompyuter Wi-Fi'sidagi manzil tayyorlanmoqda…",
   "Network:": "Tarmoq:",
   "No Wi-Fi network? Connect directly": "Wi-Fi tarmogʻi yoʻqmi? Toʻgʻridan-toʻgʻri ulaning",
   "Or join it in the phone's Wi-Fi settings:": "Yoki telefonning Wi-Fi sozlamalarida ulaning:",
   "Password:": "Parol:",
-  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Bu kodni telefon kamerasi bilan skanerlang va \"Ulanish\"ni bosing. Soʻng Beam'ni ochish uchun pastdagi kodni skanerlang.",
   "Starting the direct connection…": "Toʻgʻridan-toʻgʻri ulanish boshlanmoqda…",
   "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Bu kompyuter telefon uchun oʻz Wi-Fi'sini yaratadi: iPhone va Android bilan istalgan joyda ishlaydi. Telefon unga ulanganda internet boʻlmaydi.",
   "Use the normal Wi-Fi instead": "Oddiy Wi-Fi'dan foydalanish",
@@ -476,5 +474,9 @@
   "That's not a Beam code": "Bu Beam kodi emas",
   "{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.": "{0} yaqinda boʻlganda shu yerda koʻrinadi: bir xil Wi-Fi'da yoki Wi-Fi boʻlmasa toʻgʻridan-toʻgʻri (kompyuter Sozlamalarida Toʻgʻridan-toʻgʻri ulanishni tanlang). Undan kelgan fayllar soʻralmasdan qabul qilinadi.",
   "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} bir xil Wi-Fi'da boʻlganda shu yerda koʻrinadi. Undan kelgan fayllar soʻralmasdan qabul qilinadi.",
-  "{0} · Nearby · connects directly": "{0} · Yaqinda · toʻgʻridan-toʻgʻri ulanadi"
+  "{0} · Nearby · connects directly": "{0} · Yaqinda · toʻgʻridan-toʻgʻri ulanadi",
+  "Choose a folder to send": "Yuborish uchun jild tanlang",
+  "No Beam app on the phone (iPhone)? First join this computer's Wi-Fi": "Telefonda Beam ilovasi yoʻqmi (iPhone)? Avval bu kompyuterning Wi-Fi'siga ulaning",
+  "Scan this code with the phone's camera and tap Join, then scan the code above. The Beam app doesn't need this step.": "Bu kodni telefon kamerasi bilan skanerlang va Ulanish tugmasini bosing, soʻng yuqoridagi kodni skanerlang. Beam ilovasiga bu qadam kerak emas.",
+  "With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.": "Beam ilovasi bilan shu bitta kod yetarli: ilova bu kompyuterning Wi-Fi'siga oʻzi ulanadi va bogʻlanadi."
 }

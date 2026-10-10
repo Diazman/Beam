@@ -25,6 +25,10 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
     private static readonly TimeSpan GroupTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan P2pJoinTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan WifiJoinTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan VisibleTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Networks to join as ordinary Wi-Fi (joining them the Wi-Fi Direct way failed before).</summary>
+    private readonly HashSet<string> _joinAsWifi = new();
 
     private readonly Context _context;
     private readonly Func<string> _deviceName;
@@ -49,14 +53,16 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
     /// Wi-Fi networks in range, from Android's scan results (needs Nearby devices on Android 13+, location before).
     /// Asks for a fresh scan at most every 30 s (Android limits apps to a few scans per two minutes).
     /// </summary>
-    public IReadOnlyCollection<string> VisibleNetworks()
+    public IReadOnlyCollection<string> VisibleNetworks() => VisibleNetworks(scanEveryMs: 30_000);
+
+    private IReadOnlyCollection<string> VisibleNetworks(int scanEveryMs)
     {
         try
         {
             var permission = OperatingSystem.IsAndroidVersionAtLeast(33) ? Manifest.Permission.NearbyWifiDevices : Manifest.Permission.AccessFineLocation;
             if (_context.CheckSelfPermission(permission) != Permission.Granted) return Array.Empty<string>();
             if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return Array.Empty<string>();
-            if (System.Environment.TickCount64 - _lastScanStart > 30_000)
+            if (System.Environment.TickCount64 - _lastScanStart > scanEveryMs)
             {
                 _lastScanStart = System.Environment.TickCount64;
 #pragma warning disable CA1422 // still the way to ask for a scan; Android throttles it
@@ -129,42 +135,80 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
 
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             ReleaseWifiNetwork();
-            try
+            // A computer's network (Windows) is joined as ordinary Wi-Fi straight away: joining it the Wi-Fi Direct way
+            // fails on many phones and only costs time. So does a network where that already failed once.
+            if (!network.HostIsComputer && !_joinAsWifi.Contains(network.Ssid))
             {
-                var config = new WifiP2pConfig.Builder()
-                    .SetNetworkName(network.Ssid)!
-                    .SetPassphrase(network.Passphrase)!
-                    .EnablePersistentMode(false)!
-                    .Build();
-                Log.Info($"Wi-Fi Direct: joining {network.Ssid}");
-                await RunAsync(listener => _manager!.Connect(channel, config, listener), "join the direct network").ConfigureAwait(false);
-
-                var deadline = DateTime.UtcNow + P2pJoinTimeout;
-                while (DateTime.UtcNow < deadline)
-                {
-                    if (await ConnectionInfoAsync(channel).ConfigureAwait(false) is { GroupFormed: true, IsGroupOwner: false, GroupOwnerAddress: { } owner })
-                    {
-                        Log.Info($"Wi-Fi Direct: joined {network.Ssid}, host at {owner.HostAddress}");
-                        return IPAddress.Parse(owner.HostAddress!);
-                    }
-
-                    await Task.Delay(500, cancellationToken).ConfigureAwait(false);
-                }
-
-                Log.Warn($"Wi-Fi Direct: didn't join {network.Ssid} within {P2pJoinTimeout.TotalSeconds:0} s");
-            }
-            catch (DirectLinkException ex)
-            {
-                Log.Warn($"Wi-Fi Direct: joining {network.Ssid} failed: {ex.Message}");
+                if (await TryJoinAsP2pAsync(channel, network, cancellationToken).ConfigureAwait(false) is { } owner) return owner;
+                _joinAsWifi.Add(network.Ssid);
+                await RemoveGroupAsync(channel).ConfigureAwait(false);
             }
 
-            await RemoveGroupAsync(channel).ConfigureAwait(false);
             return await JoinAsWifiNetworkAsync(network, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private async Task<IPAddress?> TryJoinAsP2pAsync(WifiP2pManager.Channel channel, DirectNetwork network, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var config = new WifiP2pConfig.Builder()
+                .SetNetworkName(network.Ssid)!
+                .SetPassphrase(network.Passphrase)!
+                .EnablePersistentMode(false)!
+                .Build();
+            Log.Info($"Wi-Fi Direct: joining {network.Ssid}");
+            await RunAsync(listener => _manager!.Connect(channel, config, listener), "join the direct network").ConfigureAwait(false);
+
+            var deadline = DateTime.UtcNow + P2pJoinTimeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (await ConnectionInfoAsync(channel).ConfigureAwait(false) is { GroupFormed: true, IsGroupOwner: false, GroupOwnerAddress: { } owner })
+                {
+                    Log.Info($"Wi-Fi Direct: joined {network.Ssid}, host at {owner.HostAddress}");
+                    return IPAddress.Parse(owner.HostAddress!);
+                }
+
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            }
+
+            Log.Warn($"Wi-Fi Direct: didn't join {network.Ssid} within {P2pJoinTimeout.TotalSeconds:0} s");
+        }
+        catch (DirectLinkException ex)
+        {
+            Log.Warn($"Wi-Fi Direct: joining {network.Ssid} failed: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Waits (up to <see cref="VisibleTimeout"/>) until the network shows up in Wi-Fi scans. A network that was just
+    /// started takes a few seconds to appear; asking Android for it before that ends in "no network found".
+    /// </summary>
+    private async Task WaitUntilVisibleAsync(string ssid, CancellationToken cancellationToken)
+    {
+        var deadline = System.Environment.TickCount64 + (long)VisibleTimeout.TotalMilliseconds;
+        _lastScanStart = 0; // scan now
+        var sawAnything = false;
+        while (System.Environment.TickCount64 < deadline)
+        {
+            var visible = VisibleNetworks(scanEveryMs: 5_000);
+            if (visible.Contains(ssid))
+            {
+                Log.Info($"Wi-Fi: {ssid} is in range");
+                return;
+            }
+
+            sawAnything |= visible.Count > 0;
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+        }
+
+        Log.Info(sawAnything ? $"Wi-Fi: {ssid} didn't show up in scans; asking Android anyway" : "Wi-Fi: no scan results; asking Android anyway");
     }
 
     public void Stop()
@@ -189,6 +233,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
             .RemoveCapability(NetCapability.Internet)!
             .SetNetworkSpecifier(specifier)!
             .Build();
+        await WaitUntilVisibleAsync(network.Ssid, cancellationToken).ConfigureAwait(false);
         var callback = new WifiCallback(network.Ssid);
         Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
         try

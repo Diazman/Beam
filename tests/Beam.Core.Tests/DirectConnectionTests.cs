@@ -232,4 +232,30 @@ public class PairingTests
         phone.Node.Direct.CheckKnownNetworks((IDirectNetworkScanner)phoneLink);
         Assert.False(phone.Node.Direct.IsNearbyOnlyDirectly(listed.Id));
     }
+
+    [Fact]
+    public async Task ScanningThePcsCodeJoinsItsNetworkWhenThereIsNoSharedWifi()
+    {
+        var air = new FakeDirectAir();
+        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink);
+        air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+
+        // The PC's Phone page runs its direct network (Connect directly); its code carries that network.
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pc.Node.Direct.Start();
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
+
+        // One scan: paired, then joined the PC's network without asking for anything else.
+        var device = phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo("http://192.168.137.1:47831/t/"))!);
+        Assert.True(await phone.Node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None));
+        Assert.Equal(1, air.Joined);
+        Assert.True(air.LastJoin!.HostIsComputer, "a PC's network is joined as ordinary Wi-Fi right away");
+        Assert.NotEmpty(phone.Node.Discovery.Find(pc.Node.Identity.DeviceId)!.Endpoints);
+
+        // Already linked: scanning again changes nothing.
+        Assert.False(await phone.Node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None));
+        Assert.Equal(1, air.Joined);
+    }
 }

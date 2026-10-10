@@ -22,6 +22,33 @@ public static class ManifestBuilder
         foreach (var input in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (external != null && external.TryGetFolderName(input, out var folderName))
+            {
+                if (!seenSources.Add(input)) continue;
+                var root = FileNaming.MakeUnique(SafePath.SanitizeSegment(folderName), usedRoots.Contains, isDirectory: true);
+                usedRoots.Add(root);
+                rootNames.Add(root);
+                entries.Add(new ManifestEntry { RelativePath = root, SourcePath = input, IsDirectory = true, ModifiedUtc = DateTime.UtcNow });
+                foreach (var item in external.ListFolder(input, cancellationToken))
+                {
+                    var relative = root + "/" + string.Join('/', item.RelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(SafePath.SanitizeSegment));
+                    entries.Add(item.File is { } inner
+                        ? new ManifestEntry
+                        {
+                            RelativePath = relative,
+                            SourcePath = input + "#" + item.RelativePath,
+                            OpenExternal = inner.OpenRead,
+                            Size = inner.Size,
+                            ModifiedUtc = item.ModifiedUtc,
+                        }
+                        : new ManifestEntry { RelativePath = relative, SourcePath = input + "#" + item.RelativePath, IsDirectory = true, ModifiedUtc = item.ModifiedUtc });
+                    if (entries.Count % 500 == 0) progress?.Invoke(entries.Count);
+                }
+
+                progress?.Invoke(entries.Count);
+                continue;
+            }
+
             if (external != null && external.TryGet(input, out var file))
             {
                 if (!seenSources.Add(input)) continue;

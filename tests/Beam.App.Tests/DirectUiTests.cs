@@ -104,7 +104,10 @@ public class DirectUiTests
         Assert.False(phone.OffersDirect);
         await UiHarness.WaitForAsync(() => phone.Link.Length > 0, "page address on the direct network");
         await UiHarness.PumpAsync(100);
-        Assert.Contains("First, join this computer's Wi-Fi", app.VisibleTexts());
+        // One code for the Beam app (it joins the network itself); the Wi-Fi code is only for phones without the app.
+        Assert.Contains("With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.", app.VisibleTexts());
+        Assert.Contains("No Beam app on the phone (iPhone)? First join this computer's Wi-Fi", app.VisibleTexts());
+        Assert.Equal(phone.DirectNetworkName, app.Node.CreatePairingCode().Ssid);
         app.Screenshot("direct-04-iphone");
 
         phone.StopDirectCommand.Execute(null);
