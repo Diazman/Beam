@@ -80,6 +80,20 @@ public sealed class FakePlatform : IPlatformServices
 
     public void ShareLog(string logDirectory) => Calls.Add("share-log:" + logDirectory);
 
+    /// <summary>Phones can scan codes (like the Android app); set to override.</summary>
+    public bool CanScanCodes
+    {
+        get => _canScanCodes ?? IsPhone;
+        set => _canScanCodes = value;
+    }
+
+    private bool? _canScanCodes;
+
+    /// <summary>What the "camera" reads next (null: the user cancelled).</summary>
+    public string? ScannedCode { get; set; }
+
+    public Task<string?> ScanCodeAsync() => Task.FromResult(ScannedCode);
+
     public bool FirewallBlocks { get; set; }
 
     public Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(FirewallBlocks);

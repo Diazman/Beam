@@ -124,6 +124,7 @@ public sealed class BeamNode : IAsyncDisposable
         Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
         Transfers.Start(_options.TransferPort);
         Discovery.Start();
+        Direct.Start();
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
@@ -138,6 +139,40 @@ public sealed class BeamNode : IAsyncDisposable
             throw new TransferException(TransferErrorKind.SendLimitReached,
                 L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
         return Transfers.Send(device, paths, () => Direct.Order(Discovery.Find(device.Id) ?? device));
+    }
+
+    /// <summary>
+    /// This device's pairing code (shown as a QR code on the PC): who it is, where it is, and its direct network,
+    /// so a phone's Beam app that scans it can find and reach it from then on, with or without a shared Wi-Fi.
+    /// </summary>
+    public PairingCode CreatePairingCode() => new()
+    {
+        DeviceId = Identity.DeviceId,
+        Name = Settings.Current.DeviceName,
+        Fingerprint = Identity.Fingerprint,
+        Kind = _options.DeviceKind ?? DeviceKinds.Desktop,
+        Addresses = GetLocalAddresses().Where(a => !a.StartsWith("192.168.137.", StringComparison.Ordinal)).Take(4).ToList(),
+        Ssid = Direct.CanHost ? Direct.OwnNetwork().Ssid : null,
+        Passphrase = Direct.CanHost ? Direct.OwnNetwork().Passphrase : null,
+    };
+
+    /// <summary>
+    /// Pairs with the device whose code was scanned: trusts it (its files are accepted without asking), remembers
+    /// its direct network, and looks for it at the addresses in the code. Returns the device.
+    /// </summary>
+    public DeviceInfo Pair(PairingCode code)
+    {
+        var device = code.ToDevice();
+        Settings.Update(s =>
+        {
+            s.TrustedDevices.RemoveAll(t => string.Equals(t.Fingerprint, code.Fingerprint, StringComparison.OrdinalIgnoreCase));
+            s.TrustedDevices.Add(new TrustedDevice { Fingerprint = code.Fingerprint, DeviceId = code.DeviceId, Name = code.Name });
+        });
+        if (code.Network is { } network) Direct.Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind, network);
+        foreach (var endpoint in device.Endpoints) Discovery.AddUnicastTarget(endpoint.Address);
+        Discovery.Refresh();
+        Log.Info($"Paired with {code.Name} ({code.DeviceId}) from its code");
+        return device;
     }
 
     /// <summary>Sends a piece of text or a link (counts as a send for the free edition).</summary>
@@ -243,6 +278,7 @@ public sealed class BeamNode : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return; // safe to call more than once
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
+        Direct.Stop();
         Discovery.Dispose();
         await PhoneLink.DisposeAsync().ConfigureAwait(false);
         await Transfers.DisposeAsync().ConfigureAwait(false);

@@ -52,6 +52,9 @@ public sealed class DeviceViewModel : ObservableObject
                 "ios" => "iPhone",
                 _ => L.T("Computer"),
             };
+            // A paired PC seen only by its direct network (no shared Wi-Fi): Beam joins that network when sending.
+            if (_device.Endpoints.Count == 0 && _device.DirectRoles.HasFlag(Beam.Core.Direct.DirectRoles.Host))
+                return L.T("{0} · Nearby · connects directly", platform);
             return _device.IsManual ? $"{platform} · {_device.AddressText}" : L.T("{0} · Nearby", platform);
         }
     }
@@ -159,6 +162,7 @@ public sealed class HomeViewModel : ObservableObject
         UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
         SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
         RefreshCommand = new RelayCommand(Refresh);
+        ScanCodeCommand = new AsyncCommand(ScanCodeAsync);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
 
@@ -345,6 +349,11 @@ public sealed class HomeViewModel : ObservableObject
     public AsyncCommand SendTextCommand { get; }
 
     public RelayCommand RefreshCommand { get; }
+
+    /// <summary>Phones: scan a computer's code to pair with it (works with and without a shared Wi-Fi).</summary>
+    public AsyncCommand ScanCodeCommand { get; }
+
+    public bool CanScanCodes => _main.Platform.CanScanCodes;
 
     public AsyncCommand ConnectByAddressCommand { get; }
 
@@ -607,6 +616,26 @@ public sealed class HomeViewModel : ObservableObject
         }
 
         if (vm != null && !vm.IsSelected) SelectDevice(vm);
+    }
+
+    private async Task ScanCodeAsync()
+    {
+        var scanned = await _main.Platform.ScanCodeAsync();
+        if (string.IsNullOrWhiteSpace(scanned)) return; // cancelled
+        if (Beam.Core.Direct.PairingCode.TryParse(scanned) is not { } code)
+        {
+            await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("That's not a Beam code"),
+                L.T("On the computer, open Beam and go to Phone, then scan the code shown there."), L.T("OK"), ""));
+            return;
+        }
+
+        var device = _node.Pair(code);
+        Log.Info($"Paired with {device.Name} by scanning its code");
+        await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Paired with {0}", device.Name),
+            code.Network != null
+                ? L.T("{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.", device.Name)
+                : L.T("{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.", device.Name),
+            L.T("OK"), ""));
     }
 
     private async Task SendTextAsync()

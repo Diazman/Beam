@@ -34,6 +34,10 @@ public sealed class DirectManager
     private readonly ConcurrentDictionary<string, ConnectionMethod> _peerMethod = new();
     private readonly ConcurrentDictionary<string, byte> _linkedPeers = new();
     private readonly SemaphoreSlim _setup = new(1, 1);
+    private readonly CancellationTokenSource _stopping = new();
+    private readonly ConcurrentDictionary<string, long> _nearbyOnlyDirect = new();
+    private readonly ConcurrentDictionary<string, long> _autoJoinedAt = new();
+    private int _availabilityRunning;
 
     internal DirectManager(TransferService transfers, DiscoveryService discovery, SettingsStore settings, Func<string> selfId, IDirectLink? link)
     {
@@ -48,6 +52,12 @@ public sealed class DirectManager
 
     /// <summary>Stands for a phone's web browser (Phone page) using this device's direct network.</summary>
     private const string BrowserUser = "phone-browser";
+
+    /// <summary>Stands for "keep the network on so paired phones can find this PC" (Connection setting: Direct).</summary>
+    private const string AvailableUser = "available";
+
+    private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan AutoJoinInterval = TimeSpan.FromMinutes(2);
 
     /// <summary>The preferred method or the direct link changed (raised on a background thread).</summary>
     public event Action? Changed;
@@ -127,6 +137,195 @@ public sealed class DirectManager
         return true;
     }
 
+    /// <summary>This device's own direct network: created once and kept, so paired devices can find it again.</summary>
+    public DirectNetwork OwnNetwork()
+    {
+        var current = _settings.Current;
+        if (!string.IsNullOrEmpty(current.DirectNetworkName) && !string.IsNullOrEmpty(current.DirectNetworkPassphrase))
+            return new DirectNetwork(current.DirectNetworkName, current.DirectNetworkPassphrase);
+        var created = DirectNetwork.Create(current.DeviceName);
+        _settings.Update(s =>
+        {
+            s.DirectNetworkName = created.Ssid;
+            s.DirectNetworkPassphrase = created.Passphrase;
+        });
+        return created;
+    }
+
+    /// <summary>The direct network of a paired device, if this device knows it.</summary>
+    public KnownDirectNetwork? KnownNetworkFor(string deviceId) =>
+        _settings.Current.KnownDirectNetworks.FirstOrDefault(k => k.DeviceId == deviceId);
+
+    /// <summary>Paired devices whose direct network is in range but that aren't on this device's network.</summary>
+    public bool IsNearbyOnlyDirectly(string deviceId) => _nearbyOnlyDirect.ContainsKey(deviceId);
+
+    /// <summary>Keeps a paired device's direct network, so this device can join it later without any other network.</summary>
+    public void Remember(string deviceId, string name, string fingerprint, string kind, DirectNetwork network)
+    {
+        if (!Roles.HasFlag(DirectRoles.Join) || string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(fingerprint)) return;
+        var known = KnownNetworkFor(deviceId);
+        if (known != null && known.Ssid == network.Ssid && known.Passphrase == network.Passphrase && known.Name == name) return;
+        _settings.Update(s =>
+        {
+            s.KnownDirectNetworks.RemoveAll(k => k.DeviceId == deviceId);
+            s.KnownDirectNetworks.Add(new KnownDirectNetwork
+            {
+                DeviceId = deviceId,
+                Name = name,
+                Fingerprint = fingerprint.ToLowerInvariant(),
+                Kind = kind,
+                Ssid = network.Ssid,
+                Passphrase = network.Passphrase,
+            });
+        });
+        Log.Info($"Direct: remembered {name}'s direct network {network.Ssid}");
+    }
+
+    /// <summary>Starts the background work: keeping this PC's network on (Direct setting) and, on phones, watching for paired PCs.</summary>
+    internal void Start()
+    {
+        UpdateAvailability();
+        if (_link is IDirectNetworkScanner scanner && Roles.HasFlag(DirectRoles.Join))
+            _ = Task.Run(() => WatchKnownNetworksAsync(scanner, _stopping.Token));
+    }
+
+    internal void Stop()
+    {
+        _stopping.Cancel();
+        if (_linkedPeers.TryRemove(AvailableUser, out _)) StopLinkIfUnused();
+    }
+
+    /// <summary>
+    /// A PC set to Direct keeps its own network on, so paired phones can find and join it with no Wi-Fi network around.
+    /// (Only devices that can't join others' networks, i.e. PCs: a phone keeping a network on would cost battery.)
+    /// </summary>
+    private void UpdateAvailability()
+    {
+        if (_link == null || Roles != DirectRoles.Host) return;
+        if (_settings.Current.Connection == ConnectionMethod.Direct)
+        {
+            if (Interlocked.Exchange(ref _availabilityRunning, 1) == 0) _ = Task.Run(KeepAvailableAsync);
+        }
+        else if (_linkedPeers.TryRemove(AvailableUser, out _))
+        {
+            StopLinkIfUnused();
+        }
+    }
+
+    private async Task KeepAvailableAsync()
+    {
+        try
+        {
+            while (!_stopping.IsCancellationRequested && _settings.Current.Connection == ConnectionMethod.Direct)
+            {
+                try
+                {
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(30));
+                    var network = await _link!.HostAsync(OwnNetwork(), timeout.Token).ConfigureAwait(false);
+                    if (_linkedPeers.TryAdd(AvailableUser, 0))
+                    {
+                        Log.Info($"Direct: {network.Ssid} is on for paired phones");
+                        DirectAddresses.Invalidate();
+                        Changed?.Invoke();
+                    }
+                }
+                catch (Exception ex) when (!_stopping.IsCancellationRequested)
+                {
+                    Log.Warn($"Direct: keeping the direct network on failed: {ex.Message}");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(60), _stopping.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // stopping
+        }
+        finally
+        {
+            Volatile.Write(ref _availabilityRunning, 0);
+        }
+    }
+
+    /// <summary>
+    /// Phones: notices paired PCs whose direct network is in range while they aren't on the phone's network, lists them
+    /// as nearby, and (Direct setting) joins one so both sides can send without any Wi-Fi network.
+    /// </summary>
+    private async Task WatchKnownNetworksAsync(IDirectNetworkScanner scanner, CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                CheckKnownNetworks(scanner);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Direct: checking for paired direct networks failed", ex);
+            }
+
+            try
+            {
+                await Task.Delay(ScanInterval, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    internal void CheckKnownNetworks(IDirectNetworkScanner scanner)
+    {
+        var known = _settings.Current.KnownDirectNetworks;
+        if (known.Count == 0) return;
+        var visible = scanner.VisibleNetworks();
+        foreach (var network in known)
+        {
+            var found = _discovery.Find(network.DeviceId);
+            var onNetwork = found != null && found.Endpoints.Count > 0;
+            if (onNetwork || !visible.Contains(network.Ssid))
+            {
+                _nearbyOnlyDirect.TryRemove(network.DeviceId, out _);
+                continue;
+            }
+
+            // In range, but not on this phone's network: list it, ready to connect directly.
+            _nearbyOnlyDirect[network.DeviceId] = Environment.TickCount64;
+            _discovery.ReportReachable(new DeviceInfo
+            {
+                Id = network.DeviceId,
+                Name = network.Name,
+                Fingerprint = network.Fingerprint,
+                Kind = string.IsNullOrEmpty(network.Kind) ? DeviceKinds.Desktop : network.Kind,
+                Platform = "windows",
+                DirectRoles = DirectRoles.Host,
+            });
+
+            var last = _autoJoinedAt.GetValueOrDefault(network.DeviceId);
+            if (_settings.Current.Connection == ConnectionMethod.Direct && Environment.TickCount64 - last > AutoJoinInterval.TotalMilliseconds)
+            {
+                _autoJoinedAt[network.DeviceId] = Environment.TickCount64;
+                Log.Info($"Direct: {network.Name}'s network {network.Ssid} is in range; joining it");
+                _ = JoinKnownInBackgroundAsync(network.DeviceId);
+            }
+        }
+    }
+
+    private async Task JoinKnownInBackgroundAsync(string deviceId)
+    {
+        if (_discovery.Find(deviceId) is not { } device) return;
+        try
+        {
+            await ConnectAsync(device, _stopping.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!_stopping.IsCancellationRequested)
+        {
+            Log.Warn($"Direct: joining {device.Name}'s network failed: {ex.Message}");
+        }
+    }
+
     /// <summary>This device can start a direct network that phones join without an app (iPhone: by scanning a Wi-Fi code).</summary>
     public bool CanHost => Roles.HasFlag(DirectRoles.Host);
 
@@ -137,7 +336,7 @@ public sealed class DirectManager
     public async Task<DirectNetwork> HostForBrowserAsync(CancellationToken cancellationToken)
     {
         if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't connect directly."));
-        var network = await _link.HostAsync(cancellationToken).ConfigureAwait(false);
+        var network = await _link.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
         _linkedPeers[BrowserUser] = 0;
         _ = Task.Delay(3000).ContinueWith(_ => Log.Info($"Direct network {network.Ssid} for a phone's browser. Adapters: {DirectAddresses.Describe()}"), TaskScheduler.Default);
         DirectAddresses.Invalidate();
@@ -184,6 +383,8 @@ public sealed class DirectManager
             _linkedPeers.Clear();
             StopLinkIfUnused();
         }
+
+        UpdateAvailability();
     }
 
     /// <summary>Brings up a direct link with <paramref name="peer"/> (no-op when one is already up).</summary>
@@ -195,24 +396,40 @@ public sealed class DirectManager
         await _setup.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (HasDirectPath(_discovery.Find(peer.Id) ?? peer)) return;
+            var current = _discovery.Find(peer.Id) ?? peer;
+            if (HasDirectPath(current)) return;
             var link = _link ?? throw new DirectLinkException(L.T("This device can't connect directly."));
             IPAddress? host = null;
-            switch (PlanFor(peer))
+            var known = Roles.HasFlag(DirectRoles.Join) ? KnownNetworkFor(peer.Id) : null;
+            var plan = PlanFor(peer);
+            if (known != null && (current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
             {
+                // No shared network to ask over, but this phone knows the PC's network (paired): join it directly.
+                Log.Info($"Direct: joining {peer.Name}'s known network {known.Ssid}");
+                host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase), token).ConfigureAwait(false);
+                plan = Plan.None;
+            }
+
+            switch (plan)
+            {
+                case Plan.None when known != null && host != null:
+                    break;
+
                 case Plan.JoinPeer:
                 {
                     Log.Info($"Direct: asking {peer.Name} to start a direct network");
                     var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Host }, token).ConfigureAwait(false);
                     if (!reply.Ok || string.IsNullOrEmpty(reply.Ssid) || string.IsNullOrEmpty(reply.Passphrase))
                         throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name));
-                    host = await link.JoinAsync(new DirectNetwork(reply.Ssid, reply.Passphrase), token).ConfigureAwait(false);
+                    var network = new DirectNetwork(reply.Ssid, reply.Passphrase);
+                    Remember(peer.Id, peer.Name, peer.Fingerprint, peer.Kind, network);
+                    host = await link.JoinAsync(network, token).ConfigureAwait(false);
                     break;
                 }
 
                 case Plan.HostForPeer:
                 {
-                    var network = await link.HostAsync(token).ConfigureAwait(false);
+                    var network = await link.HostAsync(OwnNetwork(), token).ConfigureAwait(false);
                     Log.Info($"Direct: started {network.Ssid}; asking {peer.Name} to join");
                     try
                     {
@@ -250,8 +467,11 @@ public sealed class DirectManager
 
     private async Task BeforeConnectAsync(DeviceInfo peer, CancellationToken token)
     {
-        if (MethodFor(peer.Id) != ConnectionMethod.Direct || !CanConnectDirectly(peer)) return;
-        if (HasDirectPath(_discovery.Find(peer.Id) ?? peer)) return;
+        var current = _discovery.Find(peer.Id) ?? peer;
+        if (HasDirectPath(current)) return;
+        // Direct when chosen, or when it's the only way: a paired PC seen only by its direct network.
+        var onlyDirect = (current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)) && KnownNetworkFor(peer.Id) != null;
+        if (!onlyDirect && (MethodFor(peer.Id) != ConnectionMethod.Direct || !CanConnectDirectly(peer))) return;
         try
         {
             await ConnectAsync(peer, token).ConfigureAwait(false);
@@ -301,9 +521,9 @@ public sealed class DirectManager
         DirectResponseMessage response;
         try
         {
-            response = await HandleAsync(request, peerId, peerName, token).ConfigureAwait(false);
+            response = await HandleAsync(request, peerId, peerName, token, connection.RemoteFingerprint, connection.RemoteHello.Kind).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is DirectLinkException or OperationCanceledException && !token.IsCancellationRequested)
+        catch (Exception ex) when (!token.IsCancellationRequested)
         {
             Log.Warn($"Direct: {request.Action} for {peerName} failed: {ex.Message}");
             response = new DirectResponseMessage { Ok = false, Message = ex is DirectLinkException ? ex.Message : L.T("Connecting directly took too long.") };
@@ -312,7 +532,8 @@ public sealed class DirectManager
         await connection.Channel.SendAsync(FrameType.DirectResponse, response, token).ConfigureAwait(false);
     }
 
-    private async Task<DirectResponseMessage> HandleAsync(DirectRequestMessage request, string peerId, string peerName, CancellationToken serviceToken)
+    private async Task<DirectResponseMessage> HandleAsync(DirectRequestMessage request, string peerId, string peerName, CancellationToken serviceToken,
+        string peerFingerprint = "", string peerKind = "")
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(serviceToken);
         timeout.CancelAfter(SetupTimeout);
@@ -322,7 +543,7 @@ public sealed class DirectManager
             case DirectActions.Host:
             {
                 if (_link == null || !Roles.HasFlag(DirectRoles.Host)) throw new DirectLinkException(L.T("This device can't connect directly."));
-                var network = await _link.HostAsync(token).ConfigureAwait(false);
+                var network = await _link.HostAsync(OwnNetwork(), token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 Log.Info($"Direct: started {network.Ssid} for {peerName}");
@@ -334,7 +555,9 @@ public sealed class DirectManager
                 if (_link == null || !Roles.HasFlag(DirectRoles.Join)) throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
                 Log.Info($"Direct: joining {request.Ssid} for {peerName}");
-                var host = await _link.JoinAsync(new DirectNetwork(request.Ssid, request.Passphrase), token).ConfigureAwait(false);
+                var joining = new DirectNetwork(request.Ssid, request.Passphrase);
+                Remember(peerId, peerName, peerFingerprint, peerKind, joining);
+                var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 DirectAddresses.Invalidate();

@@ -1,3 +1,4 @@
+using Beam.Core;
 using System.Net;
 using Beam.Core.Direct;
 using Beam.Core.Discovery;
@@ -150,5 +151,85 @@ public class DirectConnectionTests
         Assert.True(DirectAddresses.IsDirectAdapter("Local Area Connection* 12", "Microsoft Wi-Fi Direct Virtual Adapter #2"));
         Assert.False(DirectAddresses.IsDirectAdapter("Wi-Fi", "Intel(R) Wi-Fi 6 AX201 160MHz"));
         Assert.Equal("WIFI:T:WPA;S:DIRECT-ab-Beam-Diaz\\;s PC;P:pa\\:ss\\\\word;;", new DirectNetwork("DIRECT-ab-Beam-Diaz;s PC", "pa:ss\\word").ToWifiQrText());
+    }
+}
+
+public class PairingTests
+{
+    [Fact]
+    public void PairingCodeTravelsInTheLinksFragment()
+    {
+        var code = new PairingCode
+        {
+            DeviceId = "25e3dae905a447668a7b90283ce5fb79",
+            Name = "DILSHODJON",
+            Fingerprint = new string('a', 64),
+            Kind = DeviceKinds.Laptop,
+            Addresses = new() { "192.168.0.109", "10.0.0.5:47822", "not-an-address" },
+            Ssid = "DIRECT-ab-Beam-DILSHODJON",
+            Passphrase = "k3Zp9qWx2mNb",
+        };
+        var link = code.AppendTo("http://192.168.0.109:47831/0123abcd/");
+        Assert.StartsWith("http://192.168.0.109:47831/0123abcd/#beam=", link);
+
+        var parsed = PairingCode.TryParse(link)!;
+        Assert.Equal(code.DeviceId, parsed.DeviceId);
+        Assert.Equal("DILSHODJON", parsed.Name);
+        Assert.Equal(new DirectNetwork("DIRECT-ab-Beam-DILSHODJON", "k3Zp9qWx2mNb"), parsed.Network);
+        Assert.Equal(new[] { "192.168.0.109", "10.0.0.5:47822" }, parsed.Addresses);
+        Assert.Equal(new[] { new IPEndPoint(IPAddress.Parse("192.168.0.109"), AppInfo.TransferPort), new IPEndPoint(IPAddress.Parse("10.0.0.5"), 47822) },
+            parsed.ToDevice().Endpoints);
+        Assert.Equal(code.DeviceId, PairingCode.TryParse(code.AppendTo(null))!.DeviceId);
+
+        Assert.Null(PairingCode.TryParse("http://192.168.0.109:47831/0123abcd/"));
+        Assert.Null(PairingCode.TryParse("WIFI:T:WPA;S:x;P:y;;"));
+        Assert.Null(PairingCode.TryParse("beam:%%%"));
+        Assert.Null(PairingCode.TryParse("beam:" + Convert.ToBase64String("{\"i\":\"\"}"u8.ToArray())));
+    }
+
+    [Fact]
+    public async Task PairedPhoneSendsToThePcDirectlyWithoutAnySharedNetwork()
+    {
+        var air = new FakeDirectAir();
+        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink);
+        air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+
+        // The PC is set to Direct: it keeps its own network on for paired phones, with the same name every time.
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pc.Node.Direct.Start();
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
+        var own = pc.Node.Direct.OwnNetwork();
+        Assert.Equal(own, pc.Node.Direct.OwnNetwork());
+
+        // The phone scans the PC's code once: it trusts the PC and remembers its network.
+        var code = PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo("http://192.168.0.109:47831/t/"))!;
+        Assert.Equal(own.Ssid, code.Ssid);
+        phone.Node.Pair(code);
+        Assert.Contains(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == pc.Node.Identity.DeviceId);
+        Assert.Equal(own.Ssid, phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Ssid);
+
+        // No shared network: the phone notices the PC's network in a Wi-Fi scan and lists the PC.
+        phone.Node.Direct.CheckKnownNetworks((IDirectNetworkScanner)phoneLink);
+        var listed = phone.Node.Discovery.Find(pc.Node.Identity.DeviceId)!;
+        Assert.Empty(listed.Endpoints);
+        Assert.True(phone.Node.Direct.IsNearbyOnlyDirectly(listed.Id));
+
+        // Sending joins the PC's network by itself and goes over it.
+        var file = phone.CreateFile("photo.jpg", 400_000);
+        var session = phone.Node.Send(listed, new[] { file });
+        var paths = new List<TransferPath>();
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(1, air.Joined);
+        Assert.Contains(TransferPath.Direct, paths);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "photo.jpg")));
+
+        // Out of range: no longer listed as reachable directly.
+        air.InRange = false;
+        phone.Node.Direct.CheckKnownNetworks((IDirectNetworkScanner)phoneLink);
+        Assert.False(phone.Node.Direct.IsNearbyOnlyDirectly(listed.Id));
     }
 }

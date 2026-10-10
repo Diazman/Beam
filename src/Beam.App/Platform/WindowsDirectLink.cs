@@ -1,6 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 using Beam.Core.Diagnostics;
 using Beam.Core.Direct;
 using Beam.Core.Localization;
@@ -19,7 +17,6 @@ namespace Beam.App.Platform;
 /// </summary>
 internal sealed class WindowsDirectLink : IDirectLink
 {
-    private const string Alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private readonly Func<string> _deviceName;
     private readonly SemaphoreSlim _gate = new(1, 1);
 #if WINDOWS_WINRT
@@ -41,18 +38,19 @@ internal sealed class WindowsDirectLink : IDirectLink
 #endif
     }
 
-    public async Task<DirectNetwork> HostAsync(CancellationToken cancellationToken)
+    public async Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
 #if WINDOWS_WINRT
-            if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null) return _network;
+            if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
+                && (preferred == null || preferred == _network)) return _network;
             StopPublisher();
             // Phones on this network must be able to reach Beam: Windows treats it as a public network.
             await WindowsFirewall.EnsureForDirectAsync().ConfigureAwait(false);
 
-            var network = new DirectNetwork(NetworkName(_deviceName()), Random(12));
+            var network = preferred ?? DirectNetwork.Create(_deviceName());
             var publisher = new WiFiDirectAdvertisementPublisher();
             var advertisement = publisher.Advertisement;
             advertisement.IsAutonomousGroupOwnerEnabled = true;
@@ -148,28 +146,4 @@ internal sealed class WindowsDirectLink : IDirectLink
         _publisher = null;
     }
 #endif
-
-    /// <summary>
-    /// "DIRECT-" plus two random characters is required for Wi-Fi Direct groups (Android checks it);
-    /// the rest shows people whose network it is. At most 32 bytes.
-    /// </summary>
-    internal static string NetworkName(string deviceName)
-    {
-        var name = new StringBuilder("DIRECT-").Append(Random(2)).Append("-Beam-");
-        foreach (var c in deviceName)
-        {
-            if (!(char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_')) continue;
-            if (name.Length >= 32) break;
-            name.Append(c);
-        }
-
-        return name.ToString().TrimEnd(' ', '-');
-    }
-
-    private static string Random(int length)
-    {
-        var chars = new char[length];
-        for (var i = 0; i < length; i++) chars[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
-        return new string(chars);
-    }
 }

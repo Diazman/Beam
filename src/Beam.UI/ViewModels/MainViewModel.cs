@@ -97,6 +97,8 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     /// <summary>Running on a phone or tablet (see <see cref="IPlatformServices.IsPhone"/>).</summary>
     public bool IsPhone => _platform.IsPhone;
 
+    internal IPlatformServices Platform => _platform;
+
     public HomeViewModel Home { get; }
 
     public PhoneViewModel Phone { get; }

@@ -3,6 +3,7 @@ using Android.Content;
 using Android.Media;
 using Android.OS;
 using Android.Provider;
+using Android.Runtime;
 using Beam.Core.Localization;
 using Beam.App.Platform;
 using Beam.Core.Diagnostics;
@@ -85,6 +86,34 @@ internal sealed class AndroidPlatformServices : IPlatformServices
     }
 
     public string? DefaultReceiveFolder => AndroidHost.ReceiveFolder;
+
+    public bool CanScanCodes => true;
+
+    /// <summary>Google's code scanner: a full-screen camera view from Google Play services (Beam needs no camera permission).</summary>
+    public Task<string?> ScanCodeAsync()
+    {
+        var done = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var context = AndroidHost.CurrentActivity ?? Context;
+            var options = new Xamarin.Google.MLKit.Vision.CodeScanner.GmsBarcodeScannerOptions.Builder()
+                .SetBarcodeFormats(Xamarin.Google.MLKit.Vision.Barcode.Common.Barcode.FormatQrCode)!
+                .Build();
+            var scanner = Xamarin.Google.MLKit.Vision.CodeScanner.GmsBarcodeScanning.GetClient(context, options);
+            var listener = new ScanListener(done);
+            scanner.StartScan()
+                .AddOnSuccessListener(listener)
+                .AddOnFailureListener(listener)
+                .AddOnCanceledListener(listener);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not start the code scanner", ex);
+            done.TrySetResult(null);
+        }
+
+        return done.Task;
+    }
 
     /// <summary>
     /// The folder picker returns a content:// address ("…/tree/primary:Download/Projects"). Beam saves with normal
@@ -178,6 +207,27 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         {
             Log.Warn("No app can open this", ex);
         }
+    }
+
+    private sealed class ScanListener : Java.Lang.Object, Android.Gms.Tasks.IOnSuccessListener, Android.Gms.Tasks.IOnFailureListener, Android.Gms.Tasks.IOnCanceledListener
+    {
+        private readonly TaskCompletionSource<string?> _done;
+
+        public ScanListener(TaskCompletionSource<string?> done) => _done = done;
+
+        public void OnSuccess(Java.Lang.Object? result)
+        {
+            var barcode = result?.JavaCast<Xamarin.Google.MLKit.Vision.Barcode.Common.Barcode>();
+            _done.TrySetResult(barcode?.RawValue);
+        }
+
+        public void OnFailure(Java.Lang.Exception e)
+        {
+            Log.Warn($"Code scanner failed: {e.Message}");
+            _done.TrySetResult(null);
+        }
+
+        public void OnCanceled() => _done.TrySetResult(null);
     }
 
     private sealed class ScanCallback : Java.Lang.Object, MediaScannerConnection.IOnScanCompletedListener

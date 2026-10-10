@@ -113,6 +113,9 @@ internal static class AndroidHost
         return waiting.Task;
     }
 
+    /// <summary>The activity on screen, for things that need one (the code scanner).</summary>
+    public static Activity? CurrentActivity => _activity?.TryGetTarget(out var activity) == true ? activity : null;
+
     /// <summary>Called by the activity with the user's answer to <see cref="RequestPermissionAsync"/>.</summary>
     public static void OnPermissionResult(int requestCode, Permission[] results)
     {

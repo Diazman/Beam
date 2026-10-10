@@ -20,9 +20,8 @@ namespace Beam.Droid;
 /// Android 12), so it then joins it as an ordinary Wi-Fi network (Android asks the user once), and Beam's
 /// traffic goes over that network until the direct link is stopped. Needs Android 10.
 /// </summary>
-internal sealed class AndroidDirectLink : IDirectLink
+internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
 {
-    private const string Alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private static readonly TimeSpan GroupTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan P2pJoinTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan WifiJoinTimeout = TimeSpan.FromSeconds(60);
@@ -44,7 +43,40 @@ internal sealed class AndroidDirectLink : IDirectLink
 
     public DirectRoles Roles => _manager != null ? DirectRoles.Host | DirectRoles.Join : DirectRoles.None;
 
-    public async Task<DirectNetwork> HostAsync(CancellationToken cancellationToken)
+    private long _lastScanStart;
+
+    /// <summary>
+    /// Wi-Fi networks in range, from Android's scan results (needs Nearby devices on Android 13+, location before).
+    /// Asks for a fresh scan at most every 30 s (Android limits apps to a few scans per two minutes).
+    /// </summary>
+    public IReadOnlyCollection<string> VisibleNetworks()
+    {
+        try
+        {
+            var permission = OperatingSystem.IsAndroidVersionAtLeast(33) ? Manifest.Permission.NearbyWifiDevices : Manifest.Permission.AccessFineLocation;
+            if (_context.CheckSelfPermission(permission) != Permission.Granted) return Array.Empty<string>();
+            if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return Array.Empty<string>();
+            if (System.Environment.TickCount64 - _lastScanStart > 30_000)
+            {
+                _lastScanStart = System.Environment.TickCount64;
+#pragma warning disable CA1422 // still the way to ask for a scan; Android throttles it
+                wifi.StartScan();
+#pragma warning restore CA1422
+            }
+
+#pragma warning disable CA1422 // ScanResult.Ssid: the replacement needs Android 13
+            return wifi.ScanResults?.Select(r => r.Ssid?.Trim('"')).Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToHashSet()
+                   ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+#pragma warning restore CA1422
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Wi-Fi scan results unavailable: {ex.Message}");
+            return Array.Empty<string>();
+        }
+    }
+
+    public async Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -55,7 +87,7 @@ internal sealed class AndroidDirectLink : IDirectLink
                 return new DirectNetwork(existing.NetworkName, existing.Passphrase);
 
             await RemoveGroupAsync(channel).ConfigureAwait(false);
-            var network = new DirectNetwork(NetworkName(_deviceName()), Random(12));
+            var network = preferred ?? DirectNetwork.Create(_deviceName());
             var config = new WifiP2pConfig.Builder()
                 .SetNetworkName(network.Ssid)!
                 .SetPassphrase(network.Passphrase)!
@@ -305,19 +337,7 @@ internal sealed class AndroidDirectLink : IDirectLink
         return listener.Group.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
-    /// <summary>"DIRECT-" plus two random characters is required by Android for Wi-Fi Direct groups.</summary>
-    private static string NetworkName(string deviceName)
-    {
-        var name = "DIRECT-" + Random(2) + "-Beam-" + new string(deviceName.Where(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-').ToArray());
-        return (name.Length > 32 ? name[..32] : name).TrimEnd(' ', '-');
-    }
 
-    private static string Random(int length)
-    {
-        var chars = new char[length];
-        for (var i = 0; i < length; i++) chars[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
-        return new string(chars);
-    }
 
     private sealed class WifiCallback : ConnectivityManager.NetworkCallback
     {

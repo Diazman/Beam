@@ -288,7 +288,8 @@ public sealed class PhoneViewModel : ObservableObject
                 CopyStatus = "";
                 if (link.Length > 0)
                 {
-                    Qr = QrCode.Create(link).Geometry;
+                    // The phone's camera opens the link; the Beam app's scanner also reads the pairing part after "#beam=".
+                    Qr = QrCode.Create(_node.CreatePairingCode().AppendTo(link)).Geometry;
                 }
                 else
                 {
