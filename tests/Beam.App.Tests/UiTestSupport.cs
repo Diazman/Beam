@@ -71,6 +71,15 @@ public sealed class FakePlatform : IPlatformServices
 
     public void OpenFolder(string path) => Calls.Add("open-folder:" + path);
 
+    public string? DefaultReceiveFolder { get; set; }
+
+    /// <summary>What the platform makes of a picked folder (phones: content:// addresses); default: use it as is.</summary>
+    public Func<string, ReceiveFolderChoice> FolderCheck { get; set; } = picked => new ReceiveFolderChoice(picked);
+
+    public ReceiveFolderChoice CheckReceiveFolder(string picked) => FolderCheck(picked);
+
+    public void ShareLog(string logDirectory) => Calls.Add("share-log:" + logDirectory);
+
     public void RevealInFolder(string path) => Calls.Add("reveal:" + path);
 
     public void OpenFile(string path) => Calls.Add("open-file:" + path);

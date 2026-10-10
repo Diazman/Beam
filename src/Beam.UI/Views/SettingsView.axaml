@@ -51,12 +51,12 @@
                 <TextBlock Grid.Column="1" Text="{Binding ReceiveFolder}" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding ReceiveFolder}" VerticalAlignment="Center" />
               </Grid>
-              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0" IsVisible="{Binding IsDesktop}">
-                <Button Content="{l:T 'Change…'}" Command="{Binding ChangeFolderCommand}" />
-                <Button Content="{l:T 'Open folder'}" Command="{Binding OpenFolderCommand}" />
-                <Button Classes="link" Content="{l:T 'Use Downloads'}" Command="{Binding ResetFolderCommand}"
-                        IsVisible="{Binding !UsesDefaultFolder}" />
-              </StackPanel>
+              <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Button Content="{l:T 'Change…'}" Command="{Binding ChangeFolderCommand}" Margin="0,0,8,6" />
+                <Button Content="{l:T 'Open folder'}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,6" />
+                <Button Classes="link" Content="{l:T 'Use Downloads', Phone='Use Download/Beam'}" Command="{Binding ResetFolderCommand}"
+                        IsVisible="{Binding !UsesDefaultFolder}" Margin="0,0,0,6" VerticalAlignment="Center" />
+              </WrapPanel>
               <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0" IsVisible="{Binding IsDesktop}"
                          Text="{l:T 'You can also choose a different folder each time you accept files.'}" />
             </StackPanel>
@@ -236,8 +236,8 @@
             </TextBlock>
             <TextBlock Classes="caption" TextWrapping="Wrap"
                        Text="{l:T 'Transfers go directly between computers on your network, are encrypted, and every file is checked after it arrives.', Phone='Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.'}" />
-            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsDesktop}">
-              <Button Content="{l:T 'Open log folder'}" Command="{Binding OpenLogsCommand}"
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{l:T 'Open log folder', Phone='Send log'}" Command="{Binding OpenLogsCommand}"
                       ToolTip.Tip="{l:T 'Technical details that help when troubleshooting'}" />
             </StackPanel>
           </StackPanel>

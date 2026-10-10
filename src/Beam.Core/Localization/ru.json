@@ -560,5 +560,10 @@
   "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться». Затем отсканируйте код ниже, чтобы открыть Beam.",
   "Starting the direct connection…": "Запуск прямого подключения…",
   "This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it's connected to it.": "Этот компьютер создаёт собственную сеть Wi-Fi для телефона: работает с iPhone и Android где угодно. Пока телефон подключён к ней, интернета на нём нет.",
-  "Use the normal Wi-Fi instead": "Использовать обычный Wi-Fi"
+  "Use the normal Wi-Fi instead": "Использовать обычный Wi-Fi",
+  "Can't use this folder": "Эту папку нельзя использовать",
+  "Beam can't save files in that folder. Choose another one.": "Beam не может сохранять файлы в эту папку. Выберите другую.",
+  "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam не может сохранять файлы в эту папку. Выберите на телефоне папку Download или Documents либо папку внутри них.",
+  "Use Download/Beam": "Использовать Download/Beam",
+  "Send log": "Отправить журнал"
 }
