@@ -126,6 +126,9 @@ internal static class AndroidHost
         _activity = new WeakReference<Activity>(activity);
         var wanted = new List<string>();
         if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) wanted.Add(Manifest.Permission.PostNotifications);
+        // Direct connections (Wi-Fi Direct): "Nearby devices" on Android 13+, location before (Android 10-12).
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) wanted.Add(Manifest.Permission.NearbyWifiDevices);
+        else if (Build.VERSION.SdkInt >= BuildVersionCodes.Q) wanted.Add(Manifest.Permission.AccessFineLocation);
         if (Build.VERSION.SdkInt <= BuildVersionCodes.Q) wanted.Add(Manifest.Permission.WriteExternalStorage);
         var missing = wanted.Where(p => activity.CheckSelfPermission(p) != Permission.Granted).ToArray();
         if (missing.Length > 0) activity.RequestPermissions(missing, 1);

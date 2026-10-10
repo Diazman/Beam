@@ -462,5 +462,10 @@
   "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam bu klasöre dosya kaydedemiyor. Telefondaki Download veya Documents klasörünü ya da bunların içindeki bir klasörü seçin.",
   "Use Download/Beam": "Download/Beam'i kullan",
   "Send log": "Günlüğü gönder",
-  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon doğrudan bağlantıya katılamadı. Telefon DIRECT-… ağına bağlanmayı sorduğunda Bağlan'a dokunun. Cihazları birbirine yaklaştırıp tekrar deneyin."
+  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon doğrudan bağlantıya katılamadı. Telefon DIRECT-… ağına bağlanmayı sorduğunda Bağlan'a dokunun. Cihazları birbirine yaklaştırıp tekrar deneyin.",
+  "Allow": "İzin ver",
+  "Allow direct connections?": "Doğrudan bağlantılara izin verilsin mi?",
+  "Direct connections are still blocked": "Doğrudan bağlantılar hâlâ engelli",
+  "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Windows Güvenlik Duvarı, bu bilgisayara doğrudan (Wi-Fi ağı olmadan) bağlanan telefonları engelliyor. Beam'e yalnızca doğrudan bağlantılarda izin verilsin mi? Windows bir kez izin isteyecek. Diğer genel ağlar engelli kalır.",
+  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu değişikliğe izin vermedi. Bir dahaki doğrudan bağlantıda Beam yeniden soracak."
 }

@@ -125,6 +125,23 @@ public class DirectConnectionTests
     }
 
     [Fact]
+    public void LocalAdaptersAreReadOnTheFirstCheck()
+    {
+        // Regression: the adapter cache's "never read" marker overflowed, so direct links were never recognized.
+        DirectAddresses.Invalidate();
+        Assert.False(DirectAddresses.IsDirect(IPAddress.Parse("203.0.113.9")));
+        Assert.True(DirectAddresses.LocalAddressCount > 0);
+    }
+
+    [Fact]
+    public void FreeSpaceIsMeasuredOnTheFoldersOwnStorage()
+    {
+        // Regression: on Android "/" (the read-only system partition, 0 bytes free) was measured instead.
+        using var dir = new TempDir();
+        Assert.True(Transfer.DiskSpace.GetAvailableBytes(dir.Combine("not", "created", "yet")) > 0);
+    }
+
+    [Fact]
     public void RolesAndDirectAdaptersAreRecognized()
     {
         Assert.Equal(DirectRoles.Host | DirectRoles.Join, DirectRolesText.Parse(DirectRolesText.Format(DirectRoles.Host | DirectRoles.Join)));

@@ -158,9 +158,18 @@ internal sealed class AndroidDirectLink : IDirectLink
             .SetNetworkSpecifier(specifier)!
             .Build();
         var callback = new WifiCallback(network.Ssid);
-        _wifiNetwork = callback;
         Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
-        connectivity.RequestNetwork(request!, callback, (int)WifiJoinTimeout.TotalMilliseconds);
+        try
+        {
+            connectivity.RequestNetwork(request!, callback, (int)WifiJoinTimeout.TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Wi-Fi: Android refused the network request", ex);
+            throw new DirectLinkException(L.T("This phone couldn't join the direct connection. Move the devices closer together and try again."), ex);
+        }
+
+        _wifiNetwork = callback; // registered: released by ReleaseWifiNetwork
 
         Android.Net.Network? joined;
         try
@@ -218,7 +227,15 @@ internal sealed class AndroidDirectLink : IDirectLink
         {
             var connectivity = (ConnectivityManager?)_context.GetSystemService(Context.ConnectivityService);
             connectivity?.BindProcessToNetwork(null);
-            connectivity?.UnregisterNetworkCallback(callback);
+            try
+            {
+                connectivity?.UnregisterNetworkCallback(callback);
+            }
+            catch (Java.Lang.IllegalArgumentException)
+            {
+                // Android already dropped the request (e.g. it timed out).
+            }
+
             Log.Info($"Wi-Fi: left {callback.Ssid}");
         }
         catch (Exception ex)

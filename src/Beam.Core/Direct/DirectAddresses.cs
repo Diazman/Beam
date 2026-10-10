@@ -17,7 +17,8 @@ public static class DirectAddresses
 
     private static readonly object Gate = new();
     private static List<(uint Address, uint Mask, bool Direct)> _local = new();
-    private static long _refreshedAt = long.MinValue;
+    private static bool _fresh;
+    private static long _refreshedAt;
 
     /// <summary>True when <paramref name="remote"/> is on the same subnet as one of this device's direct-link adapters.</summary>
     public static bool IsDirect(IPAddress remote)
@@ -33,10 +34,27 @@ public static class DirectAddresses
         return false;
     }
 
+    /// <summary>How many local IPv4 addresses the last check saw (tests).</summary>
+    internal static int LocalAddressCount => LocalAdapters().Count;
+
+    /// <summary>
+    /// The address of the device hosting the direct network this device is on (Windows: 192.168.137.1, Android:
+    /// 192.168.49.1), when one of this device's addresses is on such a network as a guest; else null.
+    /// </summary>
+    public static IEnumerable<IPAddress> DirectHostsOfLocalNetworks()
+    {
+        foreach (var (address, _, _) in LocalAdapters())
+        {
+            if (!KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network) || (address & 0xFF) == 1) continue;
+            var host = (address & 0xFFFFFF00) | 1;
+            yield return new IPAddress(new[] { (byte)(host >> 24), (byte)(host >> 16), (byte)(host >> 8), (byte)host });
+        }
+    }
+
     /// <summary>Re-reads the adapters on the next check (after joining or leaving a direct network).</summary>
     public static void Invalidate()
     {
-        lock (Gate) _refreshedAt = long.MinValue;
+        lock (Gate) _fresh = false;
     }
 
     /// <summary>
@@ -74,7 +92,8 @@ public static class DirectAddresses
     {
         lock (Gate)
         {
-            if (Environment.TickCount64 - _refreshedAt < 3000) return _local;
+            // (Not "now - long.MinValue": that overflows, and the adapters were never read on real devices.)
+            if (_fresh && Environment.TickCount64 - _refreshedAt < 3000) return _local;
             var list = new List<(uint, uint, bool)>();
             try
             {
@@ -97,6 +116,7 @@ public static class DirectAddresses
 
             _local = list;
             _refreshedAt = Environment.TickCount64;
+            _fresh = true;
             return _local;
         }
     }
