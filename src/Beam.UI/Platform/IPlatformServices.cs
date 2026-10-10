@@ -35,6 +35,12 @@ public interface IPlatformServices
     /// <summary>Turns what the folder picker returned into a folder Beam can save into (phones get content:// addresses).</summary>
     ReceiveFolderChoice CheckReceiveFolder(string picked) => new(picked);
 
+    /// <summary>The device can scan QR codes (phones, with the camera).</summary>
+    bool CanScanCodes => false;
+
+    /// <summary>Scans a QR code with the camera; null when cancelled or unavailable.</summary>
+    Task<string?> ScanCodeAsync() => Task.FromResult<string?>(null);
+
     /// <summary>True when the system firewall would stop devices on a direct connection from reaching Beam (Windows).</summary>
     Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(false);
 

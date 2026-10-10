@@ -23,6 +23,23 @@ public sealed class FakeDirectAir
 
     public IDirectLink Link(DirectRoles roles) => new FakeLink(this, roles);
 
+    /// <summary>Whether the host's direct network shows up in Wi-Fi scans (phones notice paired PCs this way).</summary>
+    public bool InRange { get; set; } = true;
+
+    /// <summary>
+    /// The two devices share no network at all: the joiner only reaches the host after joining its direct network.
+    /// </summary>
+    public void ConnectDirectOnly(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice)
+    {
+        joiner.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
+        host.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
+        _onJoined = () =>
+        {
+            joiner.Discovery.ReportReachable(hostDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Transfers.Port) } });
+            host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
+        };
+    }
+
     /// <summary>Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address.</summary>
     public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice)
     {
@@ -37,7 +54,7 @@ public sealed class FakeDirectAir
         };
     }
 
-    private sealed class FakeLink : IDirectLink
+    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner
     {
         private readonly FakeDirectAir _air;
 
@@ -49,11 +66,11 @@ public sealed class FakeDirectAir
 
         public DirectRoles Roles { get; }
 
-        public Task<DirectNetwork> HostAsync(CancellationToken cancellationToken)
+        public Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
         {
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
             Interlocked.Increment(ref _air._hosted);
-            return Task.FromResult(_air._network ??= new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
+            return Task.FromResult(_air._network ??= preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
         }
 
         public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
@@ -64,6 +81,9 @@ public sealed class FakeDirectAir
             _air._onJoined?.Invoke();
             return DirectAddress;
         }
+
+        public IReadOnlyCollection<string> VisibleNetworks() =>
+            _air.InRange && _air._network != null ? new[] { _air._network.Ssid } : Array.Empty<string>();
 
         public void Stop()
         {

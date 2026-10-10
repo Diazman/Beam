@@ -467,5 +467,14 @@
   "Allow direct connections?": "Doğrudan bağlantılara izin verilsin mi?",
   "Direct connections are still blocked": "Doğrudan bağlantılar hâlâ engelli",
   "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Windows Güvenlik Duvarı, bu bilgisayara doğrudan (Wi-Fi ağı olmadan) bağlanan telefonları engelliyor. Beam'e yalnızca doğrudan bağlantılarda izin verilsin mi? Windows bir kez izin isteyecek. Diğer genel ağlar engelli kalır.",
-  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu değişikliğe izin vermedi. Bir dahaki doğrudan bağlantıda Beam yeniden soracak."
+  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu değişikliğe izin vermedi. Bir dahaki doğrudan bağlantıda Beam yeniden soracak.",
+  "Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.": "Telefonunuzda Beam uygulaması var mı? Eşleştirmek için bu kodu uygulamada (Kodu tara) tarayın: sonra Wi-Fi olmadan bile birbirlerini kendiliğinden bulurlar.",
+  "On the computer, open Beam and go to Phone, then scan the code shown there.": "Bilgisayarda Beam'i açıp Telefon bölümüne gidin, ardından orada gösterilen kodu tarayın.",
+  "Paired with {0}": "{0} ile eşleştirildi",
+  "Scan a computer's code to pair with it": "Eşleştirmek için bir bilgisayarın kodunu tarayın",
+  "Scan the computer's code": "Bilgisayarın kodunu tara",
+  "That's not a Beam code": "Bu bir Beam kodu değil",
+  "{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.": "{0} yakında olduğunda burada görünür: aynı Wi-Fi'da ya da Wi-Fi yokken doğrudan (bilgisayarın Ayarlar bölümünde Doğrudan bağlantı'yı seçin). Ondan gelen dosyalar sorulmadan kabul edilir.",
+  "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} aynı Wi-Fi'da olduğunda burada görünür. Ondan gelen dosyalar sorulmadan kabul edilir.",
+  "{0} · Nearby · connects directly": "{0} · Yakında · doğrudan bağlanır"
 }

@@ -467,5 +467,14 @@
   "Allow direct connections?": "Toʻgʻridan-toʻgʻri ulanishlarga ruxsat berilsinmi?",
   "Direct connections are still blocked": "Toʻgʻridan-toʻgʻri ulanishlar hali ham bloklangan",
   "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Windows xavfsizlik devori bu kompyuterga toʻgʻridan-toʻgʻri (Wi-Fi tarmogʻisiz) ulanadigan telefonlarni bloklaydi. Beam'ga faqat toʻgʻridan-toʻgʻri ulanishlarda ruxsat berilsinmi? Windows bir marta ruxsat soʻraydi. Boshqa umumiy tarmoqlar bloklangan qoladi.",
-  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu oʻzgarishga ruxsat bermadi. Keyingi safar toʻgʻridan-toʻgʻri ulanganda Beam yana soʻraydi."
+  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu oʻzgarishga ruxsat bermadi. Keyingi safar toʻgʻridan-toʻgʻri ulanganda Beam yana soʻraydi.",
+  "Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.": "Telefoningizda Beam ilovasi bormi? Ularni bogʻlash uchun bu kodni ilovada skanerlang (Kodni skanerlash): shundan soʻng ular Wi-Fi'siz ham bir-birini oʻzi topadi.",
+  "On the computer, open Beam and go to Phone, then scan the code shown there.": "Kompyuterda Beam'ni oching va Telefon boʻlimiga oʻting, soʻng u yerda koʻrsatilgan kodni skanerlang.",
+  "Paired with {0}": "{0} bilan bogʻlandi",
+  "Scan a computer's code to pair with it": "Bogʻlanish uchun kompyuter kodini skanerlang",
+  "Scan the computer's code": "Kompyuter kodini skanerlash",
+  "That's not a Beam code": "Bu Beam kodi emas",
+  "{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.": "{0} yaqinda boʻlganda shu yerda koʻrinadi: bir xil Wi-Fi'da yoki Wi-Fi boʻlmasa toʻgʻridan-toʻgʻri (kompyuter Sozlamalarida Toʻgʻridan-toʻgʻri ulanishni tanlang). Undan kelgan fayllar soʻralmasdan qabul qilinadi.",
+  "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} bir xil Wi-Fi'da boʻlganda shu yerda koʻrinadi. Undan kelgan fayllar soʻralmasdan qabul qilinadi.",
+  "{0} · Nearby · connects directly": "{0} · Yaqinda · toʻgʻridan-toʻgʻri ulanadi"
 }

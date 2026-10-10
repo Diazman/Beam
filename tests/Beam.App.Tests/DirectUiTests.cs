@@ -138,4 +138,35 @@ public class DirectUiTests
         await second;
         Assert.True(other.Node.Settings.Current.FirewallPromptDeclined);
     }
+
+    [AvaloniaFact]
+    public async Task PhoneScansTheComputersCodeToPair()
+    {
+        await using var laptop = new UiHarness("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
+        await laptop.InitializeAsync();
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true,
+            directLink: new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.Join));
+        await phone.InitializeAsync();
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Scan the computer's code", phone.VisibleTexts());
+        phone.Screenshot("pair-01-scan-button");
+
+        // Something that isn't a Beam code.
+        phone.Platform.ScannedCode = "https://example.com";
+        phone.ViewModel.Home.ScanCodeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "not a Beam code");
+        Assert.Equal("That's not a Beam code", ((ViewModels.Dialogs.ConfirmViewModel)phone.ViewModel.Dialog!).Title);
+        phone.ViewModel.Dialog!.Dismiss();
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Home.ScanCodeCommand.CanExecute(null), "scan finished");
+
+        // The code the laptop's Phone page shows.
+        phone.Platform.ScannedCode = laptop.Node.CreatePairingCode().AppendTo("http://192.168.0.109:47831/t/");
+        phone.ViewModel.Home.ScanCodeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel { Title: "Paired with Laptop" }, "paired");
+        await UiHarness.PumpAsync(100);
+        Assert.Empty(phone.TextOutsideWindow());
+        phone.Screenshot("pair-02-paired");
+        Assert.Contains(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == laptop.Node.Identity.DeviceId);
+        Assert.NotNull(phone.Node.Direct.KnownNetworkFor(laptop.Node.Identity.DeviceId));
+    }
 }

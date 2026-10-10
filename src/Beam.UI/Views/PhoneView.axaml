@@ -64,7 +64,7 @@
         <Grid ColumnDefinitions="Auto,*">
           <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
           <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
-            <Path Data="{Binding Qr}" Fill="Black" Stretch="Uniform" Width="208" Height="208" />
+            <Path Data="{Binding Qr}" Fill="Black" Stretch="Uniform" Width="240" Height="240" />
           </Border>
           <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="10">
             <TextBlock Classes="h3" Text="{l:T 'Scan with your phone\'s camera'}" />
@@ -72,6 +72,8 @@
               <Run Text="{l:T '1. Open the camera and point it at the code, then tap the link.'}" />
               <LineBreak />
               <Run Text="{l:T '2. On the page that opens, choose files to send here, or download what you share below.'}" />
+              <LineBreak />
+              <Run Text="{l:T 'Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.'}" />
             </TextBlock>
             <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
               <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"

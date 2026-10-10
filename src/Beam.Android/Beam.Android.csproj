@@ -29,6 +29,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Google's code scanner (Scan code): its own screen from Google Play services, no camera permission for Beam. -->
+    <PackageReference Include="Xamarin.GooglePlayServices.Code.Scanner" Version="116.1.0.17" />
     <PackageReference Include="Avalonia.Android" Version="11.3.22" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
   </ItemGroup>

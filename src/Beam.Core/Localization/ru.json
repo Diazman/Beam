@@ -571,5 +571,14 @@
   "Allow direct connections?": "Разрешить прямые подключения?",
   "Direct connections are still blocked": "Прямые подключения по-прежнему заблокированы",
   "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Брандмауэр Windows блокирует телефоны, которые подключаются к этому компьютеру напрямую (без сети Wi-Fi). Разрешить Beam только прямые подключения? Windows один раз попросит разрешение. Другие общедоступные сети останутся заблокированными.",
-  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows не разрешил это изменение. Beam спросит снова при следующем прямом подключении."
+  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows не разрешил это изменение. Beam спросит снова при следующем прямом подключении.",
+  "Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.": "Есть приложение Beam на телефоне? Отсканируйте этот код в приложении («Сканировать код»), чтобы связать устройства: после этого они будут находить друг друга сами, даже без Wi-Fi.",
+  "On the computer, open Beam and go to Phone, then scan the code shown there.": "На компьютере откройте Beam и перейдите в раздел «Телефон», затем отсканируйте показанный там код.",
+  "Paired with {0}": "Связано с {0}",
+  "Scan a computer's code to pair with it": "Отсканируйте код компьютера, чтобы связаться с ним",
+  "Scan the computer's code": "Сканировать код компьютера",
+  "That's not a Beam code": "Это не код Beam",
+  "{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.": "{0} появляется здесь, когда находится поблизости: в той же сети Wi-Fi или напрямую, если Wi-Fi нет (выберите «Прямое подключение» в настройках компьютера). Файлы от него принимаются без вопросов.",
+  "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} появляется здесь, когда находится в той же сети Wi-Fi. Файлы от него принимаются без вопросов.",
+  "{0} · Nearby · connects directly": "{0} · Поблизости · подключается напрямую"
 }

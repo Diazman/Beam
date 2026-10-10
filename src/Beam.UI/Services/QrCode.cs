@@ -11,7 +11,8 @@ public static class QrCode
     public static (Geometry Geometry, int Modules) Create(string text)
     {
         using var generator = new QRCodeGenerator();
-        using var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.M);
+        // Long codes (a link with pairing details) use less error correction so the modules stay big enough to scan.
+        using var data = generator.CreateQrCode(text, text.Length > 150 ? QRCodeGenerator.ECCLevel.L : QRCodeGenerator.ECCLevel.M);
         var matrix = data.ModuleMatrix; // includes a 4-module quiet zone
         var size = matrix.Count;
         var geometry = new StreamGeometry();
