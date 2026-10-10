@@ -27,6 +27,9 @@ public sealed class PhoneViewModel : ObservableObject
     private readonly DispatcherTimer _idleTimer;
     private DateTime _lastActivity = DateTime.UtcNow;
     private Geometry? _qr;
+    private Geometry? _appQr;
+    private string? _appQrLink;
+    private bool _showBrowserSteps;
     private string _link = "";
     private string _problem = "";
     private string _copyStatus = "";
@@ -50,6 +53,8 @@ public sealed class PhoneViewModel : ObservableObject
         StopSharingCommand = new RelayCommand(() => _node.PhoneLink.StopSharing());
         ConnectDirectlyCommand = new AsyncCommand(ConnectDirectlyAsync);
         StopDirectCommand = new RelayCommand(StopDirect);
+        ShowBrowserStepsCommand = new RelayCommand(() => SetBrowserSteps(true));
+        HideBrowserStepsCommand = new RelayCommand(() => SetBrowserSteps(false));
         // The computer's direct-network address appears a moment after the network starts.
         _directTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh());
 
@@ -131,6 +136,26 @@ public sealed class PhoneViewModel : ObservableObject
     public bool IsDirect => _directNetwork != null;
 
     public bool IsDirectStarting => _directStarting;
+
+    /// <summary>Connecting directly, for the Beam app: one code that pairs and joins this computer's Wi-Fi.</summary>
+    public bool ShowsAppCode => IsDirect && !_showBrowserSteps;
+
+    /// <summary>Connecting directly without the app: join this computer's Wi-Fi with the camera, then open the page.</summary>
+    public bool ShowsBrowserSteps => IsDirect && _showBrowserSteps;
+
+    /// <summary>The page's code (camera opens the link; the app pairs). Over the shared Wi-Fi, or step 2 without the app.</summary>
+    public bool ShowsPageCode => IsOn && (!IsDirect || _showBrowserSteps);
+
+    /// <summary>The Beam app's code while connecting directly: works before the page's address on that network is known.</summary>
+    public Geometry? AppQr
+    {
+        get => _appQr;
+        private set => SetProperty(ref _appQr, value);
+    }
+
+    public RelayCommand ShowBrowserStepsCommand { get; }
+
+    public RelayCommand HideBrowserStepsCommand { get; }
 
     /// <summary>"Join this Wi-Fi" code for the phone's camera.</summary>
     public Geometry? WifiQr
@@ -232,10 +257,19 @@ public sealed class PhoneViewModel : ObservableObject
         }
     }
 
+    private void SetBrowserSteps(bool show)
+    {
+        _showBrowserSteps = show;
+        Refresh();
+    }
+
     private void StopDirect()
     {
         if (_directNetwork == null) return;
         _directNetwork = null;
+        _showBrowserSteps = false;
+        AppQr = null;
+        _appQrLink = null;
         WifiQr = null;
         _directTimer.Stop();
         _node.Direct.StopForBrowser();
@@ -289,7 +323,7 @@ public sealed class PhoneViewModel : ObservableObject
                 if (link.Length > 0)
                 {
                     // The phone's camera opens the link; the Beam app's scanner also reads the pairing part after "#beam=".
-                    Qr = QrCode.Create(_node.CreatePairingCode().AppendTo(link)).Geometry;
+                    Qr = QrCode.Create(_node.CreatePairingCode(connectDirectly: IsDirect).AppendTo(link)).Geometry;
                 }
                 else
                 {
@@ -299,6 +333,11 @@ public sealed class PhoneViewModel : ObservableObject
             }
 
             OtherLinks = links.Count > 1 ? L.T("Other networks: {0}", string.Join("  ·  ", links.Skip(1))) : "";
+            if (IsDirect && (AppQr == null || _appQrLink != Link))
+            {
+                _appQrLink = Link;
+                AppQr = QrCode.Create(_node.CreatePairingCode(connectDirectly: true).AppendTo(Link.Length > 0 ? Link : null)).Geometry;
+            }
         }
         else
         {
@@ -313,6 +352,7 @@ public sealed class PhoneViewModel : ObservableObject
                      nameof(IsConnected), nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
                      nameof(CanConnectDirectly), nameof(OffersDirect), nameof(IsDirect), nameof(IsDirectStarting),
                      nameof(DirectNetworkName), nameof(DirectPassword), nameof(IsWaitingForDirectAddress),
+                     nameof(ShowsAppCode), nameof(ShowsBrowserSteps), nameof(ShowsPageCode),
                  })
         {
             OnPropertyChanged(name);

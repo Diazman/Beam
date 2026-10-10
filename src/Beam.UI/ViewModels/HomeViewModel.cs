@@ -670,7 +670,7 @@ public sealed class HomeViewModel : ObservableObject
         var device = _node.Pair(code);
         Log.Info($"Paired with {device.Name} by scanning its code");
         // Not on the same Wi-Fi? Join the computer's own network now: one scan pairs and connects.
-        _ = _node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None);
+        _ = _node.Direct.ConnectAfterPairingAsync(device, code.ConnectDirectly, CancellationToken.None);
         await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Paired with {0}", device.Name),
             code.Network != null
                 ? L.T("{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.", device.Name)

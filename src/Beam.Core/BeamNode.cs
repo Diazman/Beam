@@ -145,7 +145,8 @@ public sealed class BeamNode : IAsyncDisposable
     /// This device's pairing code (shown as a QR code on the PC): who it is, where it is, and its direct network,
     /// so a phone's Beam app that scans it can find and reach it from then on, with or without a shared Wi-Fi.
     /// </summary>
-    public PairingCode CreatePairingCode() => new()
+    /// <param name="connectDirectly">This computer's network is on for phones: the app should join it right away.</param>
+    public PairingCode CreatePairingCode(bool connectDirectly = false) => new()
     {
         DeviceId = Identity.DeviceId,
         Name = Settings.Current.DeviceName,
@@ -154,6 +155,7 @@ public sealed class BeamNode : IAsyncDisposable
         Addresses = GetLocalAddresses().Where(a => !a.StartsWith("192.168.137.", StringComparison.Ordinal)).Take(4).ToList(),
         Ssid = Direct.CanHost ? Direct.OwnNetwork().Ssid : null,
         Passphrase = Direct.CanHost ? Direct.OwnNetwork().Passphrase : null,
+        ConnectDirectly = connectDirectly && Direct.CanHost,
     };
 
     /// <summary>

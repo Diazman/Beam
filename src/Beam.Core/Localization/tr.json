@@ -476,7 +476,12 @@
   "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} aynı Wi-Fi'da olduğunda burada görünür. Ondan gelen dosyalar sorulmadan kabul edilir.",
   "{0} · Nearby · connects directly": "{0} · Yakında · doğrudan bağlanır",
   "Choose a folder to send": "Gönderilecek bir klasör seçin",
-  "No Beam app on the phone (iPhone)? First join this computer's Wi-Fi": "Telefonda Beam uygulaması yok mu (iPhone)? Önce bu bilgisayarın Wi-Fi'ına katılın",
-  "Scan this code with the phone's camera and tap Join, then scan the code above. The Beam app doesn't need this step.": "Bu kodu telefonun kamerasıyla tarayıp Katıl'a dokunun, ardından yukarıdaki kodu tarayın. Beam uygulamasının bu adıma ihtiyacı yoktur.",
-  "With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.": "Beam uygulamasıyla bu tek kod yeterli: uygulama bu bilgisayarın Wi-Fi'ına kendisi katılır ve eşleşir."
+  "Back to the Beam app code": "Beam uygulaması koduna dön",
+  "No Beam app? Connect with the browser": "Beam uygulaması yok mu? Tarayıcıyla bağlanın",
+  "On the phone, open Beam and tap the scan button (the code icon next to Nearby computers). The app joins this computer's Wi-Fi and pairs by itself, then you can send files both ways.": "Telefonda Beam'i açın ve tarama düğmesine dokunun (Yakındaki bilgisayarlar yanındaki kod simgesi). Uygulama bu bilgisayarın Wi-Fi'ına kendisi katılır ve eşleşir; ardından iki yönde de dosya gönderebilirsiniz.",
+  "Scan this code in the Beam app": "Bu kodu Beam uygulamasında tarayın",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam in the browser.": "Bu kodu telefonun kamerasıyla tarayıp Katıl'a dokunun. Ardından Beam'i tarayıcıda açmak için aşağıdaki kodu tarayın.",
+  "Step 1: join this computer's Wi-Fi": "Adım 1: bu bilgisayarın Wi-Fi'ına katılın",
+  "Still in testing: it depends on each device's Wi-Fi hardware, takes a few seconds to set up and can drop now and then. If it drops, Beam picks up over Wi-Fi without losing what was already sent. Best for large files with the devices close together; for everyday transfers, Same Wi-Fi network is the most reliable.": "Hâlâ test aşamasında: her cihazın Wi-Fi donanımına bağlıdır, kurulması birkaç saniye sürer ve ara sıra kopabilir. Koparsa Beam, gönderilmiş olanı kaybetmeden Wi-Fi üzerinden devam eder. Cihazlar yakınken büyük dosyalar için idealdir; günlük aktarımlar için en güvenilir seçenek Aynı Wi-Fi ağıdır.",
+  "The phone has no internet while it's connected to this computer's Wi-Fi.": "Telefon bu bilgisayarın Wi-Fi'ına bağlıyken internete erişemez."
 }

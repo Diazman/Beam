@@ -392,40 +392,51 @@ public sealed class DirectManager
     public Task ConnectAsync(DeviceInfo peer, CancellationToken cancellationToken) => ConnectAsync(peer, viaKnownNetwork: false, cancellationToken);
 
     /// <summary>
-    /// Right after pairing by code: when the PC isn't on this phone's network but its own network is in range, joins it,
-    /// so one scan both pairs and connects. False when there was nothing to do (same network, or the PC's network is off).
+    /// Right after pairing by code. With <paramref name="connectDirectly"/> (the code was shown with the computer's
+    /// network on) joins that network and switches to it, even on the same Wi-Fi. Otherwise joins it only when the
+    /// computer isn't on this phone's network but its network is in range. False when there was nothing to do.
     /// </summary>
-    public async Task<bool> ConnectAfterPairingAsync(DeviceInfo peer, CancellationToken cancellationToken)
+    public async Task<bool> ConnectAfterPairingAsync(DeviceInfo peer, bool connectDirectly, CancellationToken cancellationToken)
     {
         if (_link is not { } link || !Roles.HasFlag(DirectRoles.Join) || KnownNetworkFor(peer.Id) is not { } known) return false;
-        var deadline = Environment.TickCount64 + (long)PairingLanWait.TotalMilliseconds;
-        bool? visible = null; // null: this device can't see Wi-Fi scan results (then just try)
-        while (Environment.TickCount64 < deadline)
+        if (HasDirectPath(_discovery.Find(peer.Id) ?? peer)) return false;
+        if (!connectDirectly)
         {
-            // Answered over the shared network (or already linked): nothing to join.
-            if (_discovery.Find(peer.Id) is { Endpoints.Count: > 0 } found && (!IsNearbyOnlyDirectly(peer.Id) || HasDirectPath(found))) return false;
-            if (link is IDirectNetworkScanner scanner && scanner.VisibleNetworks() is { Count: > 0 } networks)
-                visible = visible == true || networks.Contains(known.Ssid);
-            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+            var deadline = Environment.TickCount64 + (long)PairingLanWait.TotalMilliseconds;
+            bool? visible = null; // null: this device can't see Wi-Fi scan results (then just try)
+            while (Environment.TickCount64 < deadline)
+            {
+                // Answered over the shared network (or already linked): nothing to join.
+                if (_discovery.Find(peer.Id) is { Endpoints.Count: > 0 } found && (!IsNearbyOnlyDirectly(peer.Id) || HasDirectPath(found))) return false;
+                if (link is IDirectNetworkScanner scanner && scanner.VisibleNetworks() is { Count: > 0 } networks)
+                    visible = visible == true || networks.Contains(known.Ssid);
+                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (visible == false)
+            {
+                Log.Info($"Direct: {peer.Name} isn't on this network and its network {known.Ssid} isn't in range yet");
+                return false;
+            }
         }
 
-        if (visible == false)
-        {
-            Log.Info($"Direct: {peer.Name} isn't on this network and its network {known.Ssid} isn't in range yet");
-            return false;
-        }
-
-        Log.Info($"Direct: {peer.Name} isn't on this network after pairing; joining {known.Ssid}");
+        Log.Info($"Direct: joining {peer.Name}'s network {known.Ssid} after pairing{(connectDirectly ? " (asked by its code)" : "")}");
         try
         {
             await ConnectAsync(peer, viaKnownNetwork: true, cancellationToken).ConfigureAwait(false);
-            return true;
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             Report(ex);
             return false;
         }
+
+        // Send over the direct link from now on, and tell the computer to do the same.
+        _peerMethod[peer.Id] = ConnectionMethod.Direct;
+        Changed?.Invoke();
+        if (_discovery.Find(peer.Id) is { } reachable)
+            await TellAsync(reachable, new DirectRequestMessage { Action = DirectActions.Prefer, Method = Encode(ConnectionMethod.Direct) }).ConfigureAwait(false);
+        return true;
     }
 
     private async Task ConnectAsync(DeviceInfo peer, bool viaKnownNetwork, CancellationToken cancellationToken)

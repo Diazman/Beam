@@ -34,8 +34,54 @@
       <Border Classes="card" IsVisible="{Binding IsDirectStarting}" Padding="20">
         <TextBlock Text="{l:T 'Starting the direct connection…'}" />
       </Border>
+      <!-- Connecting directly with the Beam app: one code pairs and joins this computer's Wi-Fi -->
+      <Border Classes="card" IsVisible="{Binding ShowsAppCode}" Padding="24">
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
+            <Path Data="{Binding AppQr}" Fill="Black" Stretch="Uniform" Width="240" Height="240" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="10">
+            <TextBlock Classes="h3" Text="{l:T 'Scan this code in the Beam app'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="{l:T 'On the phone, open Beam and tap the scan button (the code icon next to Nearby computers). The app joins this computer\'s Wi-Fi and pairs by itself, then you can send files both ways.'}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{l:T 'The phone has no internet while it\'s connected to this computer\'s Wi-Fi.'}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+              <Button Classes="accent" Content="{l:T 'No Beam app? Connect with the browser'}" Command="{Binding ShowBrowserStepsCommand}" />
+              <Button Content="{l:T 'Use the normal Wi-Fi instead'}" Command="{Binding StopDirectCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Without the app, step 1: a camera can't join a Wi-Fi and open a link from one code -->
+      <Border Classes="card" IsVisible="{Binding ShowsBrowserSteps}" Padding="24">
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Background="White" CornerRadius="12" Padding="14" VerticalAlignment="Top">
+            <Path Data="{Binding WifiQr}" Fill="Black" Stretch="Uniform" Width="168" Height="168" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="8">
+            <TextBlock Classes="h3" Text="{l:T 'Step 1: join this computer\'s Wi-Fi'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="{l:T 'Scan this code with the phone\'s camera and tap Join. Then scan the code below to open Beam in the browser.'}" />
+            <TextBlock Classes="caption" Text="{l:T 'Or join it in the phone\'s Wi-Fi settings:'}" Margin="0,4,0,0" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="caption" Text="{l:T 'Network:'}" VerticalAlignment="Center" />
+              <SelectableTextBlock Text="{Binding DirectNetworkName}" FontWeight="SemiBold" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="caption" Text="{l:T 'Password:'}" VerticalAlignment="Center" />
+              <SelectableTextBlock Text="{Binding DirectPassword}" FontWeight="SemiBold" />
+            </StackPanel>
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsWaitingForDirectAddress}"
+                       Text="{l:T 'Getting the address on this computer\'s Wi-Fi ready…'}" />
+            <Button Content="{l:T 'Back to the Beam app code'}" Command="{Binding HideBrowserStepsCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
       <!-- On -->
-      <Border Classes="card" IsVisible="{Binding IsOn}" Padding="24">
+      <Border Classes="card" IsVisible="{Binding ShowsPageCode}" Padding="24">
         <Grid ColumnDefinitions="Auto,*">
           <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
           <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
@@ -47,13 +93,9 @@
               <Run Text="{l:T '1. Open the camera and point it at the code, then tap the link.'}" />
               <LineBreak />
               <Run Text="{l:T '2. On the page that opens, choose files to send here, or download what you share below.'}" />
-              <LineBreak />
-              <Run Text="{l:T 'Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.'}" />
             </TextBlock>
-            <Border Classes="notice" IsVisible="{Binding IsDirect}">
-              <TextBlock TextWrapping="Wrap"
-                         Text="{l:T 'With the Beam app, this one code is enough: the app joins this computer\'s Wi-Fi and pairs by itself.'}" />
-            </Border>
+            <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding !IsDirect}"
+                       Text="{l:T 'Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.'}" />
             <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
               <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
                        Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding IsConnected}" />
@@ -72,31 +114,6 @@
               <Button Content="{l:T 'Turn off'}" Command="{Binding TurnOffCommand}" />
               <Button Content="{l:T 'Use the normal Wi-Fi instead'}" Command="{Binding StopDirectCommand}" IsVisible="{Binding IsDirect}" />
             </StackPanel>
-          </StackPanel>
-        </Grid>
-      </Border>
-
-      <!-- Phones without the Beam app: a camera can't join a Wi-Fi and open a link from one code, so this one comes first -->
-      <Border Classes="card" IsVisible="{Binding IsDirect}" Padding="20">
-        <Grid ColumnDefinitions="Auto,*">
-          <Border Background="White" CornerRadius="10" Padding="10" VerticalAlignment="Top">
-            <Path Data="{Binding WifiQr}" Fill="Black" Stretch="Uniform" Width="140" Height="140" />
-          </Border>
-          <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="6">
-            <TextBlock Classes="h3" Text="{l:T 'No Beam app on the phone (iPhone)? First join this computer\'s Wi-Fi'}" TextWrapping="Wrap" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Scan this code with the phone\'s camera and tap Join, then scan the code above. The Beam app doesn\'t need this step.'}" />
-            <TextBlock Classes="caption" Text="{l:T 'Or join it in the phone\'s Wi-Fi settings:'}" Margin="0,4,0,0" />
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Classes="caption" Text="{l:T 'Network:'}" VerticalAlignment="Center" />
-              <SelectableTextBlock Text="{Binding DirectNetworkName}" FontWeight="SemiBold" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Classes="caption" Text="{l:T 'Password:'}" VerticalAlignment="Center" />
-              <SelectableTextBlock Text="{Binding DirectPassword}" FontWeight="SemiBold" />
-            </StackPanel>
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsWaitingForDirectAddress}"
-                       Text="{l:T 'Getting the address on this computer\'s Wi-Fi ready…'}" />
           </StackPanel>
         </Grid>
       </Border>

@@ -249,13 +249,35 @@ public class PairingTests
 
         // One scan: paired, then joined the PC's network without asking for anything else.
         var device = phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo("http://192.168.137.1:47831/t/"))!);
-        Assert.True(await phone.Node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None));
+        Assert.True(await phone.Node.Direct.ConnectAfterPairingAsync(device, connectDirectly: false, CancellationToken.None));
         Assert.Equal(1, air.Joined);
         Assert.True(air.LastJoin!.HostIsComputer, "a PC's network is joined as ordinary Wi-Fi right away");
         Assert.NotEmpty(phone.Node.Discovery.Find(pc.Node.Identity.DeviceId)!.Endpoints);
 
         // Already linked: scanning again changes nothing.
-        Assert.False(await phone.Node.Direct.ConnectAfterPairingAsync(device, CancellationToken.None));
+        Assert.False(await phone.Node.Direct.ConnectAfterPairingAsync(device, connectDirectly: false, CancellationToken.None));
         Assert.Equal(1, air.Joined);
+    }
+
+    [Fact]
+    public async Task TheCodeShownForConnectingDirectlyJoinsRightAwayAndSwitchesBothSides()
+    {
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pc.Node.Direct.Start();
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
+
+        var code = PairingCode.TryParse(pc.Node.CreatePairingCode(connectDirectly: true).AppendTo("http://192.168.137.1:47831/t/"))!;
+        Assert.True(code.ConnectDirectly);
+        var device = phone.Node.Pair(code);
+        var started = Environment.TickCount64;
+        Assert.True(await phone.Node.Direct.ConnectAfterPairingAsync(device, code.ConnectDirectly, CancellationToken.None));
+        Assert.True(Environment.TickCount64 - started < 3000, "no waiting for the shared Wi-Fi first");
+        Assert.Equal(1, air.Joined);
+        Assert.Equal(ConnectionMethod.Direct, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
+        await Wait.UntilAsync(() => pc.Node.Direct.MethodFor(phone.Node.Identity.DeviceId) == ConnectionMethod.Direct, because: "the PC was told");
     }
 }

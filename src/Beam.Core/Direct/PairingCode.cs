@@ -37,6 +37,13 @@ public sealed class PairingCode
     [JsonPropertyName("p")]
     public string? Passphrase { get; set; }
 
+    /// <summary>
+    /// Shown while the computer's own network is on for phones (Phone page, Connect directly): the app joins that
+    /// network right away, even when both are on the same Wi-Fi, so one scan pairs and connects directly.
+    /// </summary>
+    [JsonPropertyName("d")]
+    public bool ConnectDirectly { get; set; }
+
     /// <summary>Appends the pairing information to a link (the Phone page's), or returns it as a "beam:" text.</summary>
     public string AppendTo(string? link)
     {
@@ -70,6 +77,7 @@ public sealed class PairingCode
             {
                 code.Ssid = null;
                 code.Passphrase = null;
+                code.ConnectDirectly = false;
             }
 
             return code;
