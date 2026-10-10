@@ -565,5 +565,6 @@
   "Beam can't save files in that folder. Choose another one.": "Beam не может сохранять файлы в эту папку. Выберите другую.",
   "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam не может сохранять файлы в эту папку. Выберите на телефоне папку Download или Documents либо папку внутри них.",
   "Use Download/Beam": "Использовать Download/Beam",
-  "Send log": "Отправить журнал"
+  "Send log": "Отправить журнал",
+  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Телефон не смог присоединиться к прямому подключению. Когда телефон предложит подключиться к сети DIRECT-…, нажмите «Подключиться». Поднесите устройства ближе и попробуйте ещё раз."
 }

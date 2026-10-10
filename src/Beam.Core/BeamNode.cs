@@ -217,7 +217,7 @@ public sealed class BeamNode : IAsyncDisposable
         {
             foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                if (!DirectAddresses.IsUsable(nic)) continue;
                 if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
                 foreach (var address in nic.GetIPProperties().UnicastAddresses)
                 {

@@ -461,5 +461,6 @@
   "Beam can't save files in that folder. Choose another one.": "Beam bu jildga fayl saqlay olmaydi. Boshqasini tanlang.",
   "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam bu jildga fayl saqlay olmaydi. Telefondagi Download yoki Documents jildini yoki ularning ichidagi jildni tanlang.",
   "Use Download/Beam": "Download/Beam'dan foydalanish",
-  "Send log": "Jurnalni yuborish"
+  "Send log": "Jurnalni yuborish",
+  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon toʻgʻridan-toʻgʻri ulanishga qoʻshila olmadi. Telefon DIRECT-… tarmogʻiga ulanishni soʻraganda \"Ulanish\"ni bosing. Qurilmalarni bir-biriga yaqinlashtirib, qayta urinib koʻring."
 }

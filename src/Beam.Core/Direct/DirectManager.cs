@@ -22,9 +22,9 @@ namespace Beam.Core.Direct;
 /// </summary>
 public sealed class DirectManager
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(150); // the phone may first try Wi-Fi Direct, then ask its user to connect
     private static readonly TimeSpan FindTimeout = TimeSpan.FromSeconds(20);
-    private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(75);
+    private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(180);
 
     private readonly TransferService _transfers;
     private readonly DiscoveryService _discovery;
@@ -139,6 +139,7 @@ public sealed class DirectManager
         if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't connect directly."));
         var network = await _link.HostAsync(cancellationToken).ConfigureAwait(false);
         _linkedPeers[BrowserUser] = 0;
+        _ = Task.Delay(3000).ContinueWith(_ => Log.Info($"Direct network {network.Ssid} for a phone's browser. Adapters: {DirectAddresses.Describe()}"), TaskScheduler.Default);
         DirectAddresses.Invalidate();
         Changed?.Invoke();
         return network;
@@ -278,10 +279,16 @@ public sealed class DirectManager
                 next = Environment.TickCount64 + 2000;
             }
 
-            if (_discovery.Find(peer.Id) is { } found && HasDirectPath(found)) return;
+            if (_discovery.Find(peer.Id) is { } found && HasDirectPath(found))
+            {
+                Log.Info($"Direct: found {peer.Name} at {string.Join(", ", found.Endpoints)}");
+                return;
+            }
+
             await Task.Delay(250, token).ConfigureAwait(false);
         }
 
+        Log.Warn($"Direct: {peer.Name} not found on the direct link. Adapters: {DirectAddresses.Describe()}");
         throw new DirectLinkException(L.T("The direct connection to {0} started, but Beam couldn't reach it. Check that Beam is allowed through the firewall.", peer.Name));
     }
 
