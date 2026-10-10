@@ -476,7 +476,12 @@
   "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} bir xil Wi-Fi'da boʻlganda shu yerda koʻrinadi. Undan kelgan fayllar soʻralmasdan qabul qilinadi.",
   "{0} · Nearby · connects directly": "{0} · Yaqinda · toʻgʻridan-toʻgʻri ulanadi",
   "Choose a folder to send": "Yuborish uchun jild tanlang",
-  "No Beam app on the phone (iPhone)? First join this computer's Wi-Fi": "Telefonda Beam ilovasi yoʻqmi (iPhone)? Avval bu kompyuterning Wi-Fi'siga ulaning",
-  "Scan this code with the phone's camera and tap Join, then scan the code above. The Beam app doesn't need this step.": "Bu kodni telefon kamerasi bilan skanerlang va Ulanish tugmasini bosing, soʻng yuqoridagi kodni skanerlang. Beam ilovasiga bu qadam kerak emas.",
-  "With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.": "Beam ilovasi bilan shu bitta kod yetarli: ilova bu kompyuterning Wi-Fi'siga oʻzi ulanadi va bogʻlanadi."
+  "Back to the Beam app code": "Beam ilovasi kodiga qaytish",
+  "No Beam app? Connect with the browser": "Beam ilovasi yoʻqmi? Brauzer orqali ulaning",
+  "On the phone, open Beam and tap the scan button (the code icon next to Nearby computers). The app joins this computer's Wi-Fi and pairs by itself, then you can send files both ways.": "Telefonda Beam'ni oching va skanerlash tugmasini bosing (Yaqindagi kompyuterlar yonidagi kod belgisi). Ilova bu kompyuterning Wi-Fi'siga oʻzi ulanadi va bogʻlanadi, soʻng ikki tomonga ham fayl yuborishingiz mumkin.",
+  "Scan this code in the Beam app": "Bu kodni Beam ilovasida skanerlang",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam in the browser.": "Bu kodni telefon kamerasi bilan skanerlang va Ulanish tugmasini bosing. Soʻng Beam'ni brauzerda ochish uchun pastdagi kodni skanerlang.",
+  "Step 1: join this computer's Wi-Fi": "1-qadam: bu kompyuterning Wi-Fi'siga ulaning",
+  "Still in testing: it depends on each device's Wi-Fi hardware, takes a few seconds to set up and can drop now and then. If it drops, Beam picks up over Wi-Fi without losing what was already sent. Best for large files with the devices close together; for everyday transfers, Same Wi-Fi network is the most reliable.": "Hali sinovda: har bir qurilmaning Wi-Fi uskunasiga bogʻliq, sozlanishi bir necha soniya oladi va vaqti-vaqti bilan uzilishi mumkin. Uzilsa, Beam yuborilganini yoʻqotmasdan Wi-Fi orqali davom etadi. Qurilmalar yaqin boʻlganda katta fayllar uchun eng qulay; kundalik uzatishlar uchun eng ishonchlisi — Bir xil Wi-Fi tarmogʻi.",
+  "The phone has no internet while it's connected to this computer's Wi-Fi.": "Telefon bu kompyuterning Wi-Fi'siga ulanganda internet boʻlmaydi."
 }

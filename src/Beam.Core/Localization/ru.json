@@ -580,7 +580,12 @@
   "{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.": "{0} появляется здесь, когда находится в той же сети Wi-Fi. Файлы от него принимаются без вопросов.",
   "{0} · Nearby · connects directly": "{0} · Поблизости · подключается напрямую",
   "Choose a folder to send": "Выберите папку для отправки",
-  "No Beam app on the phone (iPhone)? First join this computer's Wi-Fi": "На телефоне нет приложения Beam (iPhone)? Сначала подключитесь к Wi-Fi этого компьютера",
-  "Scan this code with the phone's camera and tap Join, then scan the code above. The Beam app doesn't need this step.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться», затем отсканируйте код выше. Приложению Beam этот шаг не нужен.",
-  "With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.": "С приложением Beam достаточно одного этого кода: приложение само подключится к Wi-Fi этого компьютера и свяжет устройства."
+  "Back to the Beam app code": "Назад к коду для приложения Beam",
+  "No Beam app? Connect with the browser": "Нет приложения Beam? Подключитесь через браузер",
+  "On the phone, open Beam and tap the scan button (the code icon next to Nearby computers). The app joins this computer's Wi-Fi and pairs by itself, then you can send files both ways.": "На телефоне откройте Beam и нажмите кнопку сканирования (значок кода рядом с «Компьютеры поблизости»). Приложение само подключится к Wi-Fi этого компьютера и свяжет устройства, после чего можно отправлять файлы в обе стороны.",
+  "Scan this code in the Beam app": "Отсканируйте этот код в приложении Beam",
+  "Scan this code with the phone's camera and tap Join. Then scan the code below to open Beam in the browser.": "Отсканируйте этот код камерой телефона и нажмите «Подключиться». Затем отсканируйте код ниже, чтобы открыть Beam в браузере.",
+  "Step 1: join this computer's Wi-Fi": "Шаг 1: подключитесь к Wi-Fi этого компьютера",
+  "Still in testing: it depends on each device's Wi-Fi hardware, takes a few seconds to set up and can drop now and then. If it drops, Beam picks up over Wi-Fi without losing what was already sent. Best for large files with the devices close together; for everyday transfers, Same Wi-Fi network is the most reliable.": "Всё ещё в тестировании: зависит от Wi-Fi-оборудования каждого устройства, настраивается несколько секунд и иногда может обрываться. При обрыве Beam продолжит по Wi-Fi, не теряя уже отправленное. Лучше всего подходит для больших файлов, когда устройства рядом; для повседневных передач надёжнее всего «Одна сеть Wi-Fi».",
+  "The phone has no internet while it's connected to this computer's Wi-Fi.": "Пока телефон подключён к Wi-Fi этого компьютера, у него нет интернета."
 }

@@ -169,6 +169,10 @@
                              Text="{l:T 'The devices connect to each other without the router: faster on a slow or busy network, and works with no Wi-Fi network at all. You can switch during a transfer, too.'}" />
                 </StackPanel>
               </RadioButton>
+              <Border Classes="notice warning" IsVisible="{Binding UseDirect}" Margin="28,2,0,0">
+                <TextBlock TextWrapping="Wrap" FontSize="12"
+                           Text="{l:T 'Still in testing: it depends on each device\'s Wi-Fi hardware, takes a few seconds to set up and can drop now and then. If it drops, Beam picks up over Wi-Fi without losing what was already sent. Best for large files with the devices close together; for everyday transfers, Same Wi-Fi network is the most reliable.'}" />
+              </Border>
               <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding DirectUnsupported}"
                          Text="{l:T 'This computer can\'t connect directly.', Phone='This phone can\'t connect directly. Direct connections need Android 10 or newer.'}" />
             </StackPanel>

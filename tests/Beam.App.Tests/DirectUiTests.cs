@@ -104,11 +104,25 @@ public class DirectUiTests
         Assert.False(phone.OffersDirect);
         await UiHarness.WaitForAsync(() => phone.Link.Length > 0, "page address on the direct network");
         await UiHarness.PumpAsync(100);
-        // One code for the Beam app (it joins the network itself); the Wi-Fi code is only for phones without the app.
-        Assert.Contains("With the Beam app, this one code is enough: the app joins this computer's Wi-Fi and pairs by itself.", app.VisibleTexts());
-        Assert.Contains("No Beam app on the phone (iPhone)? First join this computer's Wi-Fi", app.VisibleTexts());
-        Assert.Equal(phone.DirectNetworkName, app.Node.CreatePairingCode().Ssid);
-        app.Screenshot("direct-04-iphone");
+        // Only the Beam app's code: it pairs and joins this computer's network in one scan.
+        var texts = app.VisibleTexts();
+        Assert.Contains("Scan this code in the Beam app", texts);
+        Assert.DoesNotContain("Step 1: join this computer's Wi-Fi", texts);
+        Assert.DoesNotContain("Scan with your phone's camera", texts);
+        Assert.NotNull(phone.AppQr);
+        Assert.True(app.Node.CreatePairingCode(connectDirectly: true).ConnectDirectly);
+        app.Screenshot("direct-04-app-code");
+
+        // No app (iPhone): join the Wi-Fi with the camera, then open the page.
+        phone.ShowBrowserStepsCommand.Execute(null);
+        await UiHarness.PumpAsync(100);
+        texts = app.VisibleTexts();
+        Assert.Contains("Step 1: join this computer's Wi-Fi", texts);
+        Assert.Contains("Scan with your phone's camera", texts);
+        Assert.DoesNotContain("Scan this code in the Beam app", texts);
+        app.Screenshot("direct-04b-browser-steps");
+        phone.HideBrowserStepsCommand.Execute(null);
+        Assert.True(phone.ShowsAppCode);
 
         phone.StopDirectCommand.Execute(null);
         Assert.False(phone.IsDirect);
