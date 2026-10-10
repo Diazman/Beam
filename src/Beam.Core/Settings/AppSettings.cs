@@ -61,6 +61,9 @@ public sealed class AppSettings
 
     public bool NotificationsEnabled { get; set; } = true;
 
+    /// <summary>The user said "not now" to allowing direct connections through the firewall (asked once at start).</summary>
+    public bool FirewallPromptDeclined { get; set; }
+
     public bool NotifyOnIncomingRequest { get; set; } = true;
 
     public bool NotifyOnTransferFinished { get; set; } = true;

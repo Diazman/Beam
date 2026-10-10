@@ -477,6 +477,18 @@ public sealed class DiscoveryService : IDisposable
         }
 
         _interfaces = list;
+
+        // A guest on another device's direct network (e.g. a phone that joined a PC's DIRECT-… Wi-Fi from a QR code):
+        // ask its host directly instead of relying on broadcasts.
+        if (_options.UseMulticastAndBroadcast)
+        {
+            Direct.DirectAddresses.Invalidate();
+            foreach (var host in Direct.DirectAddresses.DirectHostsOfLocalNetworks())
+            {
+                var target = new IPEndPoint(host, _options.Port);
+                if (_unicastTargets.TryAdd(target, 0)) Log.Info($"Discovery: on {host}'s direct network; asking it directly");
+            }
+        }
     }
 
     private static IPAddress? ComputeBroadcast(IPAddress address, IPAddress? mask)

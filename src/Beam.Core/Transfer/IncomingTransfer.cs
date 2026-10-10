@@ -1066,7 +1066,18 @@ public static class DiskSpace
     {
         try
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(path));
+            var full = Path.GetFullPath(path);
+            if (!OperatingSystem.IsWindows())
+            {
+                // Unix/Android: ask about the folder itself (its storage), not "/" — on Android "/" is the read-only
+                // system partition with 0 bytes free. Use the nearest folder that exists; unknown when it says 0.
+                var existing = full;
+                while (!Directory.Exists(existing) && Path.GetDirectoryName(existing) is { } parent) existing = parent;
+                var free = new DriveInfo(existing).AvailableFreeSpace;
+                return free > 0 ? free : -1;
+            }
+
+            var root = Path.GetPathRoot(full);
             if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal)) return -1;
             return new DriveInfo(root).AvailableFreeSpace;
         }

@@ -229,7 +229,32 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         HandleCommandLine(commandLine);
+        await OfferFirewallPermissionAsync();
         await Pro.RefreshAsync();
+    }
+
+    /// <summary>
+    /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
+    /// couldn't reach it. Ask once when the app opens; direct connections ask again when they're used.
+    /// </summary>
+    private async Task OfferFirewallPermissionAsync()
+    {
+        if (!Node.Direct.CanHost || Node.Settings.Current.FirewallPromptDeclined) return;
+        if (!await _platform.FirewallBlocksDirectAsync()) return;
+        var allow = await ShowDialogAsync(new ConfirmViewModel(
+            L.T("Allow direct connections?"),
+            L.T("Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked."),
+            L.T("Allow"), L.T("Not now")));
+        if (allow is true)
+        {
+            if (!await _platform.AllowDirectThroughFirewallAsync())
+                await ShowDialogAsync(new ConfirmViewModel(L.T("Direct connections are still blocked"),
+                    L.T("Windows didn't allow the change. Beam will ask again the next time you connect directly."), L.T("OK"), ""));
+        }
+        else
+        {
+            Node.Settings.Update(s => s.FirewallPromptDeclined = true);
+        }
     }
 
     /// <summary>Shows what Pro offers and lets the user buy it. True when the user has Pro afterwards.</summary>

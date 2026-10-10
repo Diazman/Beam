@@ -80,6 +80,17 @@ public sealed class FakePlatform : IPlatformServices
 
     public void ShareLog(string logDirectory) => Calls.Add("share-log:" + logDirectory);
 
+    public bool FirewallBlocks { get; set; }
+
+    public Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(FirewallBlocks);
+
+    public Task<bool> AllowDirectThroughFirewallAsync()
+    {
+        Calls.Add("allow-firewall");
+        FirewallBlocks = false;
+        return Task.FromResult(true);
+    }
+
     public void RevealInFolder(string path) => Calls.Add("reveal:" + path);
 
     public void OpenFile(string path) => Calls.Add("open-file:" + path);

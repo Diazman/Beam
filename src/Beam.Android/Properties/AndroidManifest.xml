@@ -8,6 +8,8 @@
   <!-- Direct connections (Wi-Fi Direct): Android 13+ asks for "Nearby devices" (never used for location);
        older versions require the location permission for Wi-Fi Direct. -->
   <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <!-- Joining the PC's direct network as an ordinary Wi-Fi network for Beam only (WifiNetworkSpecifier). -->
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
   <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
   <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />

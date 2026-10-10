@@ -114,4 +114,28 @@ public class DirectUiTests
         phone.TurnOffCommand.Execute(null);
         await UiHarness.WaitForAsync(() => phone.IsOff, "turned off");
     }
+
+    [AvaloniaFact]
+    public async Task StartupOffersToAllowDirectConnectionsThroughTheFirewall()
+    {
+        await using var app = new UiHarness("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
+        app.Platform.FirewallBlocks = true;
+        var init = app.InitializeAsync();
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
+        var dialog = (ViewModels.Dialogs.ConfirmViewModel)app.ViewModel.Dialog!;
+        Assert.Equal("Allow direct connections?", dialog.Title);
+        app.Screenshot("direct-05-firewall");
+        dialog.PrimaryCommand.Execute(null);
+        await init;
+        Assert.Contains("allow-firewall", app.Platform.Calls);
+
+        // "Not now" is remembered: no question at the next start.
+        await using var other = new UiHarness("Desktop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
+        other.Platform.FirewallBlocks = true;
+        var second = other.InitializeAsync();
+        await UiHarness.WaitForAsync(() => other.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
+        ((ViewModels.Dialogs.ConfirmViewModel)other.ViewModel.Dialog!).SecondaryCommand.Execute(null);
+        await second;
+        Assert.True(other.Node.Settings.Current.FirewallPromptDeclined);
+    }
 }

@@ -462,5 +462,10 @@
   "Beam can't save files in that folder. Choose Download or Documents on the phone, or a folder inside them.": "Beam bu jildga fayl saqlay olmaydi. Telefondagi Download yoki Documents jildini yoki ularning ichidagi jildni tanlang.",
   "Use Download/Beam": "Download/Beam'dan foydalanish",
   "Send log": "Jurnalni yuborish",
-  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon toʻgʻridan-toʻgʻri ulanishga qoʻshila olmadi. Telefon DIRECT-… tarmogʻiga ulanishni soʻraganda \"Ulanish\"ni bosing. Qurilmalarni bir-biriga yaqinlashtirib, qayta urinib koʻring."
+  "This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again.": "Bu telefon toʻgʻridan-toʻgʻri ulanishga qoʻshila olmadi. Telefon DIRECT-… tarmogʻiga ulanishni soʻraganda \"Ulanish\"ni bosing. Qurilmalarni bir-biriga yaqinlashtirib, qayta urinib koʻring.",
+  "Allow": "Ruxsat berish",
+  "Allow direct connections?": "Toʻgʻridan-toʻgʻri ulanishlarga ruxsat berilsinmi?",
+  "Direct connections are still blocked": "Toʻgʻridan-toʻgʻri ulanishlar hali ham bloklangan",
+  "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Windows xavfsizlik devori bu kompyuterga toʻgʻridan-toʻgʻri (Wi-Fi tarmogʻisiz) ulanadigan telefonlarni bloklaydi. Beam'ga faqat toʻgʻridan-toʻgʻri ulanishlarda ruxsat berilsinmi? Windows bir marta ruxsat soʻraydi. Boshqa umumiy tarmoqlar bloklangan qoladi.",
+  "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu oʻzgarishga ruxsat bermadi. Keyingi safar toʻgʻridan-toʻgʻri ulanganda Beam yana soʻraydi."
 }

@@ -35,6 +35,12 @@ public interface IPlatformServices
     /// <summary>Turns what the folder picker returned into a folder Beam can save into (phones get content:// addresses).</summary>
     ReceiveFolderChoice CheckReceiveFolder(string picked) => new(picked);
 
+    /// <summary>True when the system firewall would stop devices on a direct connection from reaching Beam (Windows).</summary>
+    Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(false);
+
+    /// <summary>Allows Beam through the firewall for direct connections (Windows asks for administrator permission).</summary>
+    Task<bool> AllowDirectThroughFirewallAsync() => Task.FromResult(true);
+
     /// <summary>Lets the user pass Beam's log on, for troubleshooting (desktop: opens the log folder).</summary>
     void ShareLog(string logDirectory) => OpenFolder(logDirectory);
 }
