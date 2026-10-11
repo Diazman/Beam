@@ -4,9 +4,9 @@
     <OutputType>WinExe</OutputType>
     <!--
       net8.0: development and automated UI tests on any OS.
-      net8.0-windows10.0.19041.0: the shipping Windows build (adds native toast notifications).
+      net8.0-windows10.0.26100.0: the shipping Windows build (adds native toast notifications).
     -->
-    <TargetFrameworks>net8.0;net8.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net8.0-windows10.0.26100.0</TargetFrameworks>
     <RootNamespace>Beam.App</RootNamespace>
     <AssemblyName>Beam</AssemblyName>
     <ApplicationIcon>Assets\beam.ico</ApplicationIcon>

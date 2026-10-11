@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             xmlns:l="using:Beam.App.Localization"
+             x:Class="Beam.App.Views.Dialogs.ConnectionHelpView"
+             x:DataType="dlg:ConnectionHelpViewModel"
+             Classes="dialogBody w500">
+  <StackPanel Spacing="12">
+    <TextBlock Classes="dialogTitle" Text="{l:T 'How to keep the phone connected'}" />
+    <ScrollViewer MaxHeight="440" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="10">
+        <StackPanel Spacing="4">
+          <TextBlock TextWrapping="Wrap" Text="{l:T '1. Install the Beam app on the phone.'}" />
+          <TextBlock TextWrapping="Wrap" Text="{l:T '2. Open Beam on the phone, tap the scan button and scan the code on this page.'}" />
+          <TextBlock TextWrapping="Wrap" Text="{l:T '3. If the phone asks to connect to this computer\'s Wi-Fi, tap Connect.'}" />
+          <TextBlock TextWrapping="Wrap" Text="{l:T '4. Keep the phone near this computer while files transfer.'}" />
+        </StackPanel>
+
+        <!-- This computer's Wi-Fi shares its internet -->
+        <StackPanel Spacing="8" IsVisible="{Binding SharesInternet}">
+          <TextBlock Classes="h3" TextWrapping="Wrap" Text="{l:T 'This computer\'s Wi-Fi has internet'}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding InternetText}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding JoinText}" />
+          <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
+          <Border Background="White" CornerRadius="12" Padding="12" HorizontalAlignment="Left">
+            <Path Data="{Binding WiFiQr}" Fill="Black" Stretch="Uniform" Width="160" Height="160" />
+          </Border>
+        </StackPanel>
+
+        <!-- No internet on this computer's Wi-Fi: why phones leave it, and how to stop that -->
+        <StackPanel Spacing="8" IsVisible="{Binding NoInternet}">
+          <TextBlock Classes="h3" TextWrapping="Wrap" Text="{l:T 'Why the phone may leave this computer\'s Wi-Fi'}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="{l:T 'This computer\'s Wi-Fi has no internet: this computer isn\'t online, or its Wi-Fi can\'t share internet while it stays connected. Phones prefer Wi-Fi with internet, so in the middle of a transfer the phone may switch to another saved Wi-Fi nearby. Beam reconnects and continues, but the transfer pauses each time.'}" />
+          <TextBlock TextWrapping="Wrap" Text="{l:T 'To prevent it, on the phone:'}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="{l:T '• Open Settings → Wi-Fi. For every other saved Wi-Fi in range, turn off Auto-reconnect, or tap Forget (you can join it again later).'}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="{l:T '• Turn off options that switch networks by themselves, such as Wi-Fi assistant, Smart network switch or Switch to mobile data.'}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+    <Button Classes="accent" Content="{l:T 'Got it'}" MinWidth="96" HorizontalAlignment="Right" Command="{Binding CloseCommand}" />
+  </StackPanel>
+</UserControl>

@@ -436,5 +436,20 @@
   "To connect to a computer directly, even without Wi-Fi, and to notice paired computers nearby, Android needs the “Nearby devices” permission.": "Bir bilgisayara Wi-Fi olmadan da doğrudan bağlanmak ve yakındaki eşleşmiş bilgisayarları fark etmek için Android'in “Yakındaki cihazlar” iznine ihtiyacı var.",
   "Transfers between devices with the Beam app go directly between them, are encrypted, and every file is checked after it arrives. Nothing goes through the internet.": "Beam uygulaması olan cihazlar arasındaki aktarımlar doğrudan aralarında gerçekleşir, şifrelenir ve her dosya ulaştıktan sonra kontrol edilir. Hiçbir şey internetten geçmez.",
   "Transfers in progress": "Devam eden aktarımlar",
-  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows, Beam'in ağınızı kullanıp kullanamayacağını sorabilir. Yakındaki cihazların bu bilgisayarı bulabilmesi için İzin ver'i seçin."
+  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows, Beam'in ağınızı kullanıp kullanamayacağını sorabilir. Yakındaki cihazların bu bilgisayarı bulabilmesi için İzin ver'i seçin.",
+  "How to keep the phone connected": "Telefonun bağlı kalması için",
+  "1. Install the Beam app on the phone.": "1. Telefona Beam uygulamasını yükleyin.",
+  "2. Open Beam on the phone, tap the scan button and scan the code on this page.": "2. Telefonda Beam'i açın, tarama düğmesine dokunun ve bu sayfadaki kodu tarayın.",
+  "3. If the phone asks to connect to this computer's Wi-Fi, tap Connect.": "3. Telefon bu bilgisayarın Wi-Fi ağına bağlanmayı sorarsa Bağlan'a dokunun.",
+  "4. Keep the phone near this computer while files transfer.": "4. Dosyalar aktarılırken telefonu bu bilgisayarın yakınında tutun.",
+  "This computer's Wi-Fi has internet": "Bu bilgisayarın Wi-Fi ağında internet var",
+  "This computer shares its internet on its own Wi-Fi ({0}), so the phone has no reason to leave it for another Wi-Fi in the middle of a transfer.": "Bu bilgisayar internetini kendi Wi-Fi ağında ({0}) paylaşıyor; bu yüzden telefonun aktarımın ortasında başka bir Wi-Fi ağına geçmesi için bir neden yok.",
+  "For the steadiest connection, also join {0} in the phone's Wi-Fi settings like any other Wi-Fi: scan this code there, or type the password {1}.": "En kararlı bağlantı için {0} ağına telefonun Wi-Fi ayarlarından da diğer Wi-Fi ağları gibi katılın: oradan bu kodu tarayın veya {1} şifresini yazın.",
+  "Why the phone may leave this computer's Wi-Fi": "Telefon neden bu bilgisayarın Wi-Fi ağından ayrılabilir",
+  "This computer's Wi-Fi has no internet: this computer isn't online, or its Wi-Fi can't share internet while it stays connected. Phones prefer Wi-Fi with internet, so in the middle of a transfer the phone may switch to another saved Wi-Fi nearby. Beam reconnects and continues, but the transfer pauses each time.": "Bu bilgisayarın Wi-Fi ağında internet yok: bilgisayar çevrimdışı ya da Wi-Fi bağdaştırıcısı bağlıyken interneti paylaşamıyor. Telefonlar internetli Wi-Fi ağlarını tercih eder; bu yüzden aktarımın ortasında telefon yakındaki başka bir kayıtlı Wi-Fi ağına geçebilir. Beam yeniden bağlanıp devam eder, ancak aktarım her seferinde duraklar.",
+  "To prevent it, on the phone:": "Bunu önlemek için telefonda:",
+  "• Open Settings → Wi-Fi. For every other saved Wi-Fi in range, turn off Auto-reconnect, or tap Forget (you can join it again later).": "• Ayarlar → Wi-Fi'yi açın. Menzildeki diğer her kayıtlı Wi-Fi ağı için Otomatik yeniden bağlanmayı kapatın veya Unut'a dokunun (daha sonra yeniden katılabilirsiniz).",
+  "• Turn off options that switch networks by themselves, such as Wi-Fi assistant, Smart network switch or Switch to mobile data.": "• Ağları kendiliğinden değiştiren seçenekleri kapatın; örneğin Wi-Fi asistanı, Akıllı ağ geçişi veya Mobil veriye geç.",
+  "Got it": "Anladım",
+  "This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.": "Bu bilgisayar internetini kendi Wi-Fi ağında paylaşıyor; bu yüzden telefonun başka bir Wi-Fi ağına geçmesi için bir neden yok."
 }

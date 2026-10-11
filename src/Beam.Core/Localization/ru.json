@@ -524,5 +524,20 @@
   "To connect to a computer directly, even without Wi-Fi, and to notice paired computers nearby, Android needs the “Nearby devices” permission.": "Чтобы подключаться к компьютеру напрямую, даже без Wi-Fi, и замечать связанные компьютеры поблизости, Android нужно разрешение «Устройства поблизости».",
   "Transfers between devices with the Beam app go directly between them, are encrypted, and every file is checked after it arrives. Nothing goes through the internet.": "Передачи между устройствами с приложением Beam идут напрямую между ними, шифруются, а каждый файл проверяется после получения. Ничего не передаётся через интернет.",
   "Transfers in progress": "Текущие передачи",
-  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows может спросить, можно ли Beam использовать вашу сеть. Выберите «Разрешить», чтобы устройства поблизости могли найти этот компьютер."
+  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows может спросить, можно ли Beam использовать вашу сеть. Выберите «Разрешить», чтобы устройства поблизости могли найти этот компьютер.",
+  "How to keep the phone connected": "Как сохранить подключение телефона",
+  "1. Install the Beam app on the phone.": "1. Установите приложение Beam на телефон.",
+  "2. Open Beam on the phone, tap the scan button and scan the code on this page.": "2. Откройте Beam на телефоне, нажмите кнопку сканирования и отсканируйте код на этой странице.",
+  "3. If the phone asks to connect to this computer's Wi-Fi, tap Connect.": "3. Если телефон спросит, подключиться ли к Wi-Fi этого компьютера, нажмите «Подключить».",
+  "4. Keep the phone near this computer while files transfer.": "4. Держите телефон рядом с компьютером, пока передаются файлы.",
+  "This computer's Wi-Fi has internet": "В Wi-Fi этого компьютера есть интернет",
+  "This computer shares its internet on its own Wi-Fi ({0}), so the phone has no reason to leave it for another Wi-Fi in the middle of a transfer.": "Этот компьютер раздаёт свой интернет через собственный Wi-Fi ({0}), поэтому телефону незачем переключаться на другой Wi-Fi посреди передачи.",
+  "For the steadiest connection, also join {0} in the phone's Wi-Fi settings like any other Wi-Fi: scan this code there, or type the password {1}.": "Для самого стабильного подключения также подключитесь к {0} в настройках Wi-Fi телефона, как к обычной сети: отсканируйте там этот код или введите пароль {1}.",
+  "Why the phone may leave this computer's Wi-Fi": "Почему телефон может отключиться от Wi-Fi этого компьютера",
+  "This computer's Wi-Fi has no internet: this computer isn't online, or its Wi-Fi can't share internet while it stays connected. Phones prefer Wi-Fi with internet, so in the middle of a transfer the phone may switch to another saved Wi-Fi nearby. Beam reconnects and continues, but the transfer pauses each time.": "В Wi-Fi этого компьютера нет интернета: компьютер не в сети или его Wi-Fi не может раздавать интернет, оставаясь подключённым. Телефоны предпочитают Wi-Fi с интернетом, поэтому посреди передачи телефон может переключиться на другую сохранённую сеть Wi-Fi поблизости. Beam переподключится и продолжит, но передача каждый раз будет приостанавливаться.",
+  "To prevent it, on the phone:": "Чтобы этого не происходило, на телефоне:",
+  "• Open Settings → Wi-Fi. For every other saved Wi-Fi in range, turn off Auto-reconnect, or tap Forget (you can join it again later).": "• Откройте Настройки → Wi-Fi. Для каждой другой сохранённой сети Wi-Fi поблизости отключите автоподключение или нажмите «Забыть» (позже к ней можно подключиться снова).",
+  "• Turn off options that switch networks by themselves, such as Wi-Fi assistant, Smart network switch or Switch to mobile data.": "• Отключите функции, которые сами переключают сети, например «Помощник Wi-Fi», «Умное переключение сетей» или «Переключаться на мобильные данные».",
+  "Got it": "Понятно",
+  "This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.": "Этот компьютер раздаёт свой интернет через свой Wi-Fi, поэтому телефону незачем переключаться на другой Wi-Fi."
 }

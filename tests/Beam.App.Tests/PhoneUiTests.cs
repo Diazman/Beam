@@ -81,4 +81,47 @@ public class PhoneUiTests
         await UiHarness.WaitForAsync(() => !phone.IsOn, "browser page off");
         Assert.True(phone.ShowsAppCode);
     }
+
+    [AvaloniaFact]
+    public async Task ConnectionHelpExplainsWhyThePhoneMayLeaveWhenThisComputersWiFiHasNoInternet()
+    {
+        await using var app = new UiHarness();
+        await app.InitializeAsync();
+        app.ViewModel.IsPhonePage = true;
+        await UiHarness.PumpAsync();
+        Assert.Contains("How to keep the phone connected", app.VisibleTexts());
+
+        app.ViewModel.Phone.ConnectionHelpCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ConnectionHelpViewModel, "help dialog");
+        var help = (ConnectionHelpViewModel)app.ViewModel.Dialog!;
+        Assert.False(help.SharesInternet);
+        Assert.Null(help.WiFiQr);
+        await UiHarness.PumpAsync();
+        Assert.Contains("Why the phone may leave this computer's Wi-Fi", app.VisibleTexts());
+        Assert.DoesNotContain("This computer's Wi-Fi has internet", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-03-connection-help");
+
+        help.CloseCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog == null, "closed");
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectionHelpOffersTheWiFiCodeWhenThisComputerSharesItsInternet()
+    {
+        await using var app = new UiHarness();
+        await app.InitializeAsync();
+        var network = new Beam.Core.Direct.DirectNetwork("DIRECT-ab-Beam-Diaz", "pass;word") { SharesInternet = true };
+        _ = app.ViewModel.ShowDialogAsync(new ConnectionHelpViewModel(network));
+        await UiHarness.PumpAsync();
+        var help = (ConnectionHelpViewModel)app.ViewModel.Dialog!;
+        Assert.True(help.SharesInternet);
+        Assert.NotNull(help.WiFiQr);
+        Assert.Contains("This computer's Wi-Fi has internet", app.VisibleTexts());
+        Assert.Contains("pass;word", help.JoinText);
+        Assert.DoesNotContain("Why the phone may leave this computer's Wi-Fi", app.VisibleTexts());
+        Assert.Equal("WIFI:T:WPA;S:DIRECT-ab-Beam-Diaz;P:pass\\;word;;", ConnectionHelpViewModel.WiFiCode(network));
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-04-connection-help-internet");
+    }
 }

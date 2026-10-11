@@ -2,6 +2,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Beam.App.Infrastructure;
 using Beam.App.Services;
+using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Localization;
@@ -48,6 +49,7 @@ public sealed class PhoneViewModel : ObservableObject
         ShareFilesCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFilesAsync()));
         ShareFolderCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFoldersAsync()));
         StopSharingCommand = new RelayCommand(() => _node.PhoneLink.StopSharing());
+        ConnectionHelpCommand = new AsyncCommand(() => _main.ShowDialogAsync(new ConnectionHelpViewModel(_node.Direct.HostedNetwork)));
 
         _node.PhoneLink.Activity += () => Dispatcher.UIThread.Post(() =>
         {
@@ -151,6 +153,14 @@ public sealed class PhoneViewModel : ObservableObject
     public AsyncCommand ShareFolderCommand { get; }
 
     public RelayCommand StopSharingCommand { get; }
+
+    /// <summary>"How to keep the phone connected": steps, and why a phone may leave this computer's Wi-Fi.</summary>
+    public AsyncCommand ConnectionHelpCommand { get; }
+
+    /// <summary>This computer's own Wi-Fi is on and shares its internet (Windows' Mobile hotspot).</summary>
+    public bool SharesInternet => _hosting && _node.Direct.HostedNetwork?.SharesInternet == true;
+
+    public bool NoInternetNote => AppCodeConnectsDirectly && !SharesInternet;
 
     private bool HasActivePhoneTransfers => _node.Transfers.Sessions.Any(s => s.PeerId == PhoneLinkServer.PhonePeerId && !s.IsFinished && s.State != TransferState.WaitingForAcceptance);
 
@@ -299,7 +309,7 @@ public sealed class PhoneViewModel : ObservableObject
 
         foreach (var name in new[]
                  {
-                     nameof(IsOn), nameof(ShowsAppCode), nameof(ShowsBrowserCode), nameof(AppCodeConnectsDirectly), nameof(AppCodeText),
+                     nameof(IsOn), nameof(ShowsAppCode), nameof(SharesInternet), nameof(NoInternetNote), nameof(ShowsBrowserCode), nameof(AppCodeConnectsDirectly), nameof(AppCodeText),
                      nameof(IsHostingStarting), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText), nameof(IsConnected),
                      nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
                  })

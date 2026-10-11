@@ -436,5 +436,20 @@
   "To connect to a computer directly, even without Wi-Fi, and to notice paired computers nearby, Android needs the “Nearby devices” permission.": "Kompyuterga Wi-Fi'siz ham toʻgʻridan-toʻgʻri ulanish va yaqindagi bogʻlangan kompyuterlarni sezish uchun Android'ga “Yaqin atrofdagi qurilmalar” ruxsati kerak.",
   "Transfers between devices with the Beam app go directly between them, are encrypted, and every file is checked after it arrives. Nothing goes through the internet.": "Beam ilovasi oʻrnatilgan qurilmalar oʻrtasidagi uzatishlar toʻgʻridan-toʻgʻri amalga oshadi, shifrlanadi va har bir fayl kelgach tekshiriladi. Hech narsa internet orqali oʻtmaydi.",
   "Transfers in progress": "Davom etayotgan uzatishlar",
-  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows Beam tarmogʻingizdan foydalana olishini soʻrashi mumkin. Yaqindagi qurilmalar bu kompyuterni topa olishi uchun Ruxsat berish tugmasini tanlang."
+  "Windows may ask whether Beam can use your network. Choose Allow so nearby devices can find this computer.": "Windows Beam tarmogʻingizdan foydalana olishini soʻrashi mumkin. Yaqindagi qurilmalar bu kompyuterni topa olishi uchun Ruxsat berish tugmasini tanlang.",
+  "How to keep the phone connected": "Telefon ulanib turishi uchun",
+  "1. Install the Beam app on the phone.": "1. Telefonga Beam ilovasini o‘rnating.",
+  "2. Open Beam on the phone, tap the scan button and scan the code on this page.": "2. Telefonda Beam’ni oching, skanerlash tugmasini bosing va shu sahifadagi kodni skanerlang.",
+  "3. If the phone asks to connect to this computer's Wi-Fi, tap Connect.": "3. Telefon shu kompyuterning Wi-Fi tarmog‘iga ulanishni so‘rasa, «Ulanish»ni bosing.",
+  "4. Keep the phone near this computer while files transfer.": "4. Fayllar uzatilayotganda telefonni shu kompyuter yonida tuting.",
+  "This computer's Wi-Fi has internet": "Shu kompyuterning Wi-Fi tarmog‘ida internet bor",
+  "This computer shares its internet on its own Wi-Fi ({0}), so the phone has no reason to leave it for another Wi-Fi in the middle of a transfer.": "Bu kompyuter o‘z internetini o‘zining Wi-Fi tarmog‘i ({0}) orqali ulashmoqda, shuning uchun telefon uzatish o‘rtasida boshqa Wi-Fi’ga o‘tishiga sabab yo‘q.",
+  "For the steadiest connection, also join {0} in the phone's Wi-Fi settings like any other Wi-Fi: scan this code there, or type the password {1}.": "Eng barqaror ulanish uchun telefonning Wi-Fi sozlamalarida ham {0} tarmog‘iga oddiy Wi-Fi kabi ulaning: u yerda shu kodni skanerlang yoki {1} parolini kiriting.",
+  "Why the phone may leave this computer's Wi-Fi": "Telefon nega shu kompyuterning Wi-Fi tarmog‘idan uzilishi mumkin",
+  "This computer's Wi-Fi has no internet: this computer isn't online, or its Wi-Fi can't share internet while it stays connected. Phones prefer Wi-Fi with internet, so in the middle of a transfer the phone may switch to another saved Wi-Fi nearby. Beam reconnects and continues, but the transfer pauses each time.": "Shu kompyuterning Wi-Fi tarmog‘ida internet yo‘q: kompyuter internetga ulanmagan yoki uning Wi-Fi’si ulangan holda internetni ulasha olmaydi. Telefonlar internetli Wi-Fi’ni afzal ko‘radi, shuning uchun uzatish o‘rtasida telefon yaqindagi boshqa saqlangan Wi-Fi’ga o‘tib ketishi mumkin. Beam qayta ulanib davom ettiradi, lekin uzatish har safar to‘xtab qoladi.",
+  "To prevent it, on the phone:": "Buning oldini olish uchun telefonda:",
+  "• Open Settings → Wi-Fi. For every other saved Wi-Fi in range, turn off Auto-reconnect, or tap Forget (you can join it again later).": "• Sozlamalar → Wi-Fi’ni oching. Yaqindagi har bir boshqa saqlangan Wi-Fi uchun avtomatik ulanishni o‘chiring yoki «Unutish»ni bosing (keyinroq unga yana ulanishingiz mumkin).",
+  "• Turn off options that switch networks by themselves, such as Wi-Fi assistant, Smart network switch or Switch to mobile data.": "• Tarmoqlarni o‘zi almashtiradigan sozlamalarni o‘chiring, masalan Wi-Fi yordamchisi, Aqlli tarmoq almashuvi yoki Mobil internetga o‘tish.",
+  "Got it": "Tushunarli",
+  "This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.": "Bu kompyuter o‘z internetini Wi-Fi orqali ulashmoqda, shuning uchun telefon boshqa Wi-Fi’ga o‘tishiga sabab yo‘q."
 }
