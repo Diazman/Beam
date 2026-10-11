@@ -202,6 +202,29 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task AnotherDeviceAnsweringAtAnOldAddressDoesntStopTheTransfer()
+    {
+        // After switching networks, an address the receiver used before can lead to another device running Beam (or,
+        // through a PC's hotspot, to the sender itself): try its other addresses instead of failing with "couldn't
+        // confirm this is really …".
+        await using var sender = new TestNode("Laptop");
+        await using var receiver = new TestNode("Galaxy");
+        await using var other = new TestNode("Someone else");
+        var file = sender.CreateFile("video.mp4", 300_000, 4);
+        var device = receiver.AsDevice() with
+        {
+            Endpoints = new[] { other.AsDevice().Endpoints[0], receiver.AsDevice().Endpoints[0] },
+        };
+
+        var session = sender.Node.Send(device, new[] { file });
+        await Wait.ForFinishAsync(session);
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+        Assert.Empty(other.Handler.Requests);
+    }
+
+    [Fact]
     public async Task MergesIntoExistingFolderAndRenamesFolderBlockedByFile()
     {
         await using var sender = new TestNode("Sender");

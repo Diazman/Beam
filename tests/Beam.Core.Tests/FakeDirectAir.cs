@@ -72,17 +72,23 @@ public sealed class FakeDirectAir
         };
     }
 
-    /// <summary>Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address.</summary>
-    public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice)
+    /// <summary>
+    /// Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address. With
+    /// <paramref name="hostHearsJoiner"/> false the host doesn't learn where the joiner is on its network by itself (like
+    /// a phone on a PC's hotspot whose announcements don't get through); the joiner then says so in its answer.
+    /// </summary>
+    public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice, bool hostHearsJoiner = true)
     {
         joiner.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
         host.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
         joiner.Discovery.ReportReachable(hostDevice());
         host.Discovery.ReportReachable(joinerDevice());
+        if (!hostHearsJoiner) joiner.Direct.OwnAddressNear = _ => DirectAddress;
         _onJoined = () =>
         {
             joiner.Discovery.ReportReachable(hostDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Transfers.Port) } });
-            host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
+            if (hostHearsJoiner)
+                host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
         };
     }
 

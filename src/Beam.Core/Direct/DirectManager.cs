@@ -28,7 +28,7 @@ public sealed class DirectManager
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(180);
 
     /// <summary>How long a send waits for the direct link when it could go over the shared Wi-Fi instead.</summary>
-    internal static TimeSpan QuickDirectAttempt { get; set; } = TimeSpan.FromSeconds(20);
+    internal static TimeSpan QuickDirectAttempt { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>After a failed direct link, how long to send over Wi-Fi before trying the direct link again.</summary>
     internal static TimeSpan RetryDirectAfter { get; set; } = TimeSpan.FromSeconds(45);
@@ -95,6 +95,9 @@ public sealed class DirectManager
 
     /// <summary>What this device announces: its roles plus, for computers, whether joining them keeps internet.</summary>
     public DirectRoles AnnouncedRoles => Roles == DirectRoles.None ? DirectRoles.None : Roles | Traits();
+
+    /// <summary>This device's address on the network of <c>host</c> (replaceable in tests).</summary>
+    internal Func<IPAddress, IPAddress?> OwnAddressNear { get; set; } = DirectAddresses.OwnAddressNear;
 
     /// <summary>Whether this computer has internet over a cable (replaceable in tests).</summary>
     internal Func<bool> HasWiredInternet { get; set; } = NetworkFacts.HasWiredInternet;
@@ -749,6 +752,7 @@ public sealed class DirectManager
                         var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Join, Ssid = network.Ssid, Passphrase = network.Passphrase }, token)
                             .ConfigureAwait(false);
                         if (!reply.Ok) throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't join the direct connection.", peer.Name), declined: reply.Declined);
+                        if (IPAddress.TryParse(reply.Address, out var joined)) host = joined; // where the other device is now
                     }
                     catch (Exception ex) when (ex is IOException or TransferException { Error.Kind: TransferErrorKind.ConnectionLost })
                     {
@@ -792,6 +796,8 @@ public sealed class DirectManager
         // the other device's own network.
         if (MethodFor(peer.Id) != ConnectionMethod.Direct) return;
         if (!CanConnectDirectly(current) && KnownNetworkFor(peer.Id) == null) return;
+        // Moving the other device onto this one's network by itself (a PC sending to a phone) only for a paired device.
+        if (PlanFor(current) == Plan.HostForPeer && !IsTrusted(current.Fingerprint)) return;
 
         // Reachable over the shared Wi-Fi too: don't hold the transfer up. Try the direct link briefly (unless that just
         // failed), else send over Wi-Fi and keep trying to switch to the direct link in the background.
@@ -1051,7 +1057,10 @@ public sealed class DirectManager
                 DirectAddresses.Invalidate();
                 _discovery.RescanNetworks();
                 if (host != null) _discovery.AddUnicastTarget(host);
-                return new DirectResponseMessage { Ok = true };
+                // Tell the host where to find this device on its network: it reaches it right away, without waiting
+                // for discovery (which a phone on a computer's Wi-Fi can't always announce itself on).
+                var own = host != null ? OwnAddressNear(host) : null;
+                return new DirectResponseMessage { Ok = true, Address = own?.ToString() };
             }
 
             case DirectActions.Prefer:

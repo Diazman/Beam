@@ -74,6 +74,71 @@ public class DirectConnectionTests
         Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task APcSendingToAPairedPhoneBringsThePhoneOntoItsNetwork(bool phonePaired)
+    {
+        // Same Wi-Fi, both set to Direct, the PC sends. The PC can't hear the phone announce itself on its network,
+        // so it needs the address the phone reports when it has joined.
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice(), hostHearsJoiner: false);
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        if (phonePaired)
+            pc.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = phone.Node.Identity.Fingerprint, DeviceId = phone.Node.Identity.DeviceId, Name = "Galaxy" }));
+        var problems = new List<string>();
+        pc.Node.Direct.Problem += problems.Add;
+
+        var paths = new List<TransferPath>();
+        var session = pc.Node.Send(phone.AsDevice(), new[] { pc.CreateFile("video.mp4", 400_000) });
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Empty(problems);
+        if (phonePaired)
+        {
+            Assert.Equal(1, air.Joined);
+            Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
+        }
+        else
+        {
+            Assert.Equal(0, air.Joined); // a phone that isn't paired isn't moved off its Wi-Fi by the PC
+            Assert.Equal(TransferPath.Network, paths.First(p => p != TransferPath.Unknown));
+        }
+    }
+
+    [Fact]
+    public async Task ConnectDirectlyChosenOnThePcDuringATransferMovesThePhoneOntoItsNetwork()
+    {
+        var air = new FakeDirectAir();
+        var slow = new SlowFiles();
+        await using var pc = new TestNode("Laptop", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice(), hostHearsJoiner: false);
+        var problems = new List<string>();
+        pc.Node.Direct.Problem += problems.Add;
+        var file = pc.CreateFile("video.mp4", 30L * 1024 * 1024, 2);
+
+        var session = pc.Node.Send(phone.AsDevice(), new[] { slow.Add(file) });
+        await Wait.UntilAsync(() => session.State == TransferState.Transferring && session.GetSnapshot().TransferredBytes > 1_000_000, because: "sending over Wi-Fi");
+        Assert.Equal(TransferPath.Network, session.Path);
+
+        Assert.True(await pc.Node.Direct.SwitchAsync(phone.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        await Wait.UntilAsync(() => session.Path == TransferPath.Direct, because: "moved to the direct link");
+        Assert.Empty(problems); // not "started, but Beam couldn't reach it"
+
+        // And back to Wi-Fi from either side, without losing the phone.
+        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.SameNetwork));
+        await Wait.UntilAsync(() => session.Path == TransferPath.Network, because: "back on Wi-Fi");
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
+    }
+
     private static readonly DirectRoles PcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
 
     /// <summary><paramref name="sender"/> sends to <paramref name="other"/> and the transfer goes over <paramref name="expected"/>.</summary>
