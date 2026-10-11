@@ -27,12 +27,22 @@ public sealed class DirectManager
     private static readonly TimeSpan PairingLanWait = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(180);
 
+    /// <summary>How long a send waits for the direct link when it could go over the shared Wi-Fi instead.</summary>
+    internal static TimeSpan QuickDirectAttempt { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>After a failed direct link, how long to send over Wi-Fi before trying the direct link again.</summary>
+    internal static TimeSpan RetryDirectAfter { get; set; } = TimeSpan.FromSeconds(45);
+
+    internal static TimeSpan UpgradeCheckInterval { get; set; } = TimeSpan.FromSeconds(10);
+
     private readonly TransferService _transfers;
     private readonly DiscoveryService _discovery;
     private readonly SettingsStore _settings;
     private readonly Func<string> _selfId;
     private readonly IDirectLink? _link;
     private readonly ConcurrentDictionary<string, ConnectionMethod> _peerMethod = new();
+    private readonly ConcurrentDictionary<string, (int Count, long At)> _directFailures = new();
+    private readonly ConcurrentDictionary<string, byte> _upgrading = new();
     private readonly ConcurrentDictionary<string, byte> _linkedPeers = new();
     private readonly SemaphoreSlim _setup = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
@@ -293,7 +303,8 @@ public sealed class DirectManager
         {
             var found = _discovery.Find(network.DeviceId);
             var onNetwork = found != null && found.Endpoints.Count > 0;
-            if (onNetwork || !visible.Contains(network.Ssid))
+            // With Same Wi-Fi chosen, a computer is only found on the shared network, never through its own network.
+            if (onNetwork || !visible.Contains(network.Ssid) || MethodFor(network.DeviceId) != ConnectionMethod.Direct)
             {
                 _nearbyOnlyDirect.TryRemove(network.DeviceId, out _);
                 continue;
@@ -312,7 +323,7 @@ public sealed class DirectManager
             });
 
             var last = _autoJoinedAt.GetValueOrDefault(network.DeviceId);
-            if (_settings.Current.Connection == ConnectionMethod.Direct && Environment.TickCount64 - last > AutoJoinInterval.TotalMilliseconds)
+            if (Environment.TickCount64 - last > AutoJoinInterval.TotalMilliseconds)
             {
                 _autoJoinedAt[network.DeviceId] = Environment.TickCount64;
                 Log.Info($"Direct: {network.Name}'s network {network.Ssid} is in range; joining it");
@@ -438,8 +449,10 @@ public sealed class DirectManager
             return false;
         }
 
-        // Send over the direct link from now on, and tell the computer to do the same.
+        // Send over the direct link from now on (shown as Direct in Settings, where it can be switched back), and
+        // tell the computer to do the same.
         _peerMethod[peer.Id] = ConnectionMethod.Direct;
+        if (_settings.Current.Connection != ConnectionMethod.Direct) _settings.Update(s => s.Connection = ConnectionMethod.Direct);
         Changed?.Invoke();
         if (_discovery.Find(peer.Id) is { } reachable)
             await TellAsync(reachable, new DirectRequestMessage { Action = DirectActions.Prefer, Method = Encode(ConnectionMethod.Direct) }).ConfigureAwait(false);
@@ -526,7 +539,13 @@ public sealed class DirectManager
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            _discovery.RescanNetworks();
             throw new DirectLinkException(L.T("Connecting directly to {0} took too long.", peer.Name));
+        }
+        catch
+        {
+            _discovery.RescanNetworks(); // the attempt may have moved this device off its Wi-Fi and back
+            throw;
         }
         finally
         {
@@ -538,18 +557,120 @@ public sealed class DirectManager
     {
         var current = _discovery.Find(peer.Id) ?? peer;
         if (HasDirectPath(current)) return;
-        // Direct when chosen, or when it's the only way: a paired PC seen only by its direct network.
-        var onlyDirect = (current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)) && KnownNetworkFor(peer.Id) != null;
-        if (!onlyDirect && (MethodFor(peer.Id) != ConnectionMethod.Direct || !CanConnectDirectly(peer))) return;
+        // Only when Direct is chosen (in Settings, or for this device): with Same Wi-Fi, Beam never goes looking for
+        // the other device's own network.
+        if (MethodFor(peer.Id) != ConnectionMethod.Direct) return;
+        if (!CanConnectDirectly(current) && KnownNetworkFor(peer.Id) == null) return;
+
+        // Reachable over the shared Wi-Fi too: don't hold the transfer up. Try the direct link briefly (unless that just
+        // failed), else send over Wi-Fi and keep trying to switch to the direct link in the background.
+        var overNetwork = current.Endpoints.Any(e => !_transfers.IsDirectAddress(e.Address));
+        if (overNetwork)
+        {
+            if (DirectFailedRecently(peer.Id) || !LooksInRange(peer.Id))
+            {
+                WatchForDirectLink(peer.Id);
+                return;
+            }
+        }
+
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (overNetwork) limit.CancelAfter(QuickDirectAttempt);
         try
         {
-            await ConnectAsync(peer, token).ConfigureAwait(false);
+            await ConnectAsync(peer, limit.Token).ConfigureAwait(false);
+            _directFailures.TryRemove(peer.Id, out _);
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
-            // The network still works: send over it instead of failing.
-            Report(ex);
+            DirectFailed(peer.Id);
+            if (overNetwork)
+            {
+                Log.Info($"Direct: no direct link to {peer.Name} yet ({ex.Message}); sending over Wi-Fi meanwhile");
+                WatchForDirectLink(peer.Id);
+            }
+            else
+            {
+                // Nothing else to send over; the transfer reports that it can't reach the device.
+                Report(ex);
+            }
         }
+    }
+
+    private void DirectFailed(string peerId) =>
+        _directFailures.AddOrUpdate(peerId, _ => (1, Environment.TickCount64), (_, f) => (f.Count + 1, Environment.TickCount64));
+
+    /// <summary>
+    /// A direct link failed lately: wait before trying again (longer after each failure, as each try can briefly
+    /// take the phone off its Wi-Fi), and send over Wi-Fi meanwhile.
+    /// </summary>
+    private bool DirectFailedRecently(string peerId)
+    {
+        if (!_directFailures.TryGetValue(peerId, out var failed)) return false;
+        var wait = RetryDirectAfter.TotalMilliseconds * Math.Min(1 << Math.Min(failed.Count - 1, 3), 8);
+        return Environment.TickCount64 - failed.At < wait;
+    }
+
+    /// <summary>False when this phone can see Wi-Fi networks and the device's known network isn't among them.</summary>
+    private bool LooksInRange(string peerId)
+    {
+        if (_link is not IDirectNetworkScanner scanner || KnownNetworkFor(peerId) is not { } known) return true;
+        var visible = scanner.VisibleNetworks();
+        return visible.Count == 0 || visible.Contains(known.Ssid); // nothing visible: can't tell (no scan permission)
+    }
+
+    /// <summary>
+    /// Direct is chosen but transfers with <paramref name="peerId"/> run over Wi-Fi (the direct link failed or was
+    /// out of range): keep trying in the background, and move them to the direct link once it's up.
+    /// </summary>
+    private void WatchForDirectLink(string peerId)
+    {
+        if (!_upgrading.TryAdd(peerId, 0)) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var token = _stopping.Token;
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(UpgradeCheckInterval, token).ConfigureAwait(false);
+                    if (MethodFor(peerId) != ConnectionMethod.Direct) return;
+                    var running = _transfers.Sessions.Where(s => s.PeerId == peerId && !s.IsFinished).ToList();
+                    if (running.Count == 0) return;
+                    if (running.All(s => s.Path == TransferPath.Direct)) return;
+                    if (_discovery.Find(peerId) is not { } peer) continue;
+                    if (DirectFailedRecently(peerId) || !LooksInRange(peerId)) continue;
+
+                    using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    limit.CancelAfter(QuickDirectAttempt);
+                    try
+                    {
+                        Log.Info($"Direct: trying the direct link to {peer.Name} again");
+                        await ConnectAsync(peer, limit.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (!token.IsCancellationRequested)
+                    {
+                        DirectFailed(peerId);
+                        Log.Info($"Direct: still no direct link to {peer.Name} ({ex.Message})");
+                        continue;
+                    }
+
+                    _directFailures.TryRemove(peerId, out _);
+                    var moved = _transfers.InterruptConnections(peerId);
+                    Log.Info($"Direct: link to {peer.Name} is up; moving {moved} transfer(s) to it");
+                    if (moved > 0) _ = CheckReconnectedDirectlyAsync(peerId, peer.Name);
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // stopping
+            }
+            finally
+            {
+                _upgrading.TryRemove(peerId, out _);
+            }
+        });
     }
 
     private async Task FindOnDirectLinkAsync(DeviceInfo peer, IPAddress? host, CancellationToken token)
@@ -735,6 +856,7 @@ public sealed class DirectManager
         }
 
         DirectAddresses.Invalidate();
+        _discovery.RescanNetworks(); // back on the normal Wi-Fi: look for devices there right away
         Changed?.Invoke();
     }
 
