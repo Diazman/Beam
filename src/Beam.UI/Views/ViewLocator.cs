@@ -23,6 +23,7 @@ public sealed class ViewLocator : IDataTemplate
         [typeof(WelcomeViewModel)] = () => new WelcomeView(),
         [typeof(SendTextViewModel)] = () => new SendTextView(),
         [typeof(IncomingTextViewModel)] = () => new IncomingTextView(),
+        [typeof(ConnectionHelpViewModel)] = () => new ConnectionHelpView(),
     };
 
     public Control? Build(object? param) => param != null && Views.TryGetValue(param.GetType(), out var create) ? create() : null;

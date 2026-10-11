@@ -28,10 +28,14 @@
             <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding AppCodeText}" />
             <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsHostingStarting}"
                        Text="{l:T 'Getting this computer\'s own Wi-Fi ready…'}" />
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding AppCodeConnectsDirectly}"
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding NoInternetNote}"
                        Text="{l:T 'The phone has no internet while it\'s connected to this computer\'s Wi-Fi.'}" />
-            <Button Classes="accent" Content="{l:T 'Don\'t have the Beam app? Connect with the browser'}" Command="{Binding ShowBrowserCommand}"
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding SharesInternet}"
+                       Text="{l:T 'This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.'}" />
+            <Button Content="{l:T 'How to keep the phone connected'}" Command="{Binding ConnectionHelpCommand}"
                     HorizontalAlignment="Left" Margin="0,6,0,0" />
+            <Button Classes="accent" Content="{l:T 'Don\'t have the Beam app? Connect with the browser'}" Command="{Binding ShowBrowserCommand}"
+                    HorizontalAlignment="Left" />
           </StackPanel>
         </Grid>
       </Border>

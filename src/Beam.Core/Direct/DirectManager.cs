@@ -823,8 +823,13 @@ public sealed class DirectManager
             }
         }
 
-        return await _link!.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
+        var network = await _link!.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
+        HostedNetwork = network;
+        return network;
     }
+
+    /// <summary>This computer's own network while it is on (null when off or never started).</summary>
+    public DirectNetwork? HostedNetwork { get; private set; }
 
     private static bool IsComputer(string? kind, string? platform) =>
         platform == "windows" || kind is DeviceKinds.Desktop or DeviceKinds.Laptop;
@@ -848,6 +853,7 @@ public sealed class DirectManager
         try
         {
             _link.Stop();
+            HostedNetwork = null;
             Log.Info("Direct: link stopped");
         }
         catch (Exception ex)

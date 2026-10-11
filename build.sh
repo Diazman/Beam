@@ -21,5 +21,5 @@ if [[ "${SKIP_TESTS:-0}" != "1" ]]; then
 fi
 
 echo "==> Publishing ${RUNTIME}"
-dotnet publish src/Beam.App -f net8.0-windows10.0.19041.0 -p:PublishProfile="${RUNTIME}"
+dotnet publish src/Beam.App -f net8.0-windows10.0.26100.0 -p:PublishProfile="${RUNTIME}"
 ls -lh "artifacts/publish/${RUNTIME}/"

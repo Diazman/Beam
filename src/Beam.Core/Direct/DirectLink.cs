@@ -47,6 +47,12 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
     /// </summary>
     public bool HostIsComputer { get; init; }
 
+    /// <summary>
+    /// The network shares the host's internet (Windows' Mobile hotspot), so phones on it have no reason to switch to
+    /// another Wi-Fi. Not part of the network's identity.
+    /// </summary>
+    public bool SharesInternet { get; init; }
+
     public bool Equals(DirectNetwork? other) => other is not null && Ssid == other.Ssid && Passphrase == other.Passphrase;
 
     public override int GetHashCode() => HashCode.Combine(Ssid, Passphrase);

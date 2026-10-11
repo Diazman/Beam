@@ -36,7 +36,7 @@ if (-not $SkipTests) {
 }
 
 Step "Publishing $Runtime"
-dotnet publish src/Beam.App -f net8.0-windows10.0.19041.0 -p:PublishProfile=$Runtime
+dotnet publish src/Beam.App -f net8.0-windows10.0.26100.0 -p:PublishProfile=$Runtime
 if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
 $exe = "artifacts/publish/$Runtime/Beam.exe"
 Write-Host ("Built {0} ({1:N1} MB)" -f $exe, ((Get-Item $exe).Length / 1MB))
