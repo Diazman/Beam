@@ -23,7 +23,6 @@ public enum TransferErrorKind
     IdentityMismatch,
     SecureConnectionFailed,
     NothingToSend,
-    SendLimitReached,
     Protocol,
 }
 

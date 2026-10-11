@@ -21,11 +21,12 @@ public class DirectConnectionTests
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", pro: false, directLink: air.Link(DirectRoles.Host | DirectRoles.Join)); // 5 MB/s: the transfer takes a while
+        var slow = new SlowFiles(); // the transfer takes a while
+        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 4);
 
-        var session = phone.Node.Send(pc.AsDevice(), new[] { file });
+        var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
         await Wait.UntilAsync(() => session.State == TransferState.Transferring && session.GetSnapshot().TransferredBytes > 2_000_000, because: "transferring over Wi-Fi");
         Assert.Equal(TransferPath.Network, session.Path);
         Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));

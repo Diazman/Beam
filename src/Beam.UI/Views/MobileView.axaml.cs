@@ -11,6 +11,24 @@ public partial class MobileView : UserControl, IUiServices
 {
     public MobileView() => InitializeComponent();
 
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (Top is { } top) top.BackRequested += OnBackRequested;
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        if (Top is { } top) top.BackRequested -= OnBackRequested;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    /// <summary>The phone's Back button: dialogs close and other tabs go back to Send before Beam is left.</summary>
+    private void OnBackRequested(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.MainViewModel main && main.GoBack()) e.Handled = true;
+    }
+
     /// <summary>Set by the phone host while the app is in the foreground.</summary>
     public bool IsInForeground { get; set; } = true;
 

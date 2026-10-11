@@ -7,7 +7,6 @@ using System.Text;
 using System.Text.Json;
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
-using Beam.Core.Licensing;
 using Beam.Core.Transfer;
 using Beam.Core.Localization;
 
@@ -28,7 +27,6 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     private static readonly TimeSpan UploadIdleLimit = TimeSpan.FromMinutes(3);
 
     private readonly TransferService _transfers;
-    private readonly SendQuota _quota;
     private readonly Func<string> _deviceName;
     private readonly Func<IncomingPolicy> _policy;
     private readonly IIncomingTransferHandler _handler;
@@ -44,10 +42,9 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     private int _connections;
     private byte[] _token = Array.Empty<byte>();
 
-    internal PhoneLinkServer(TransferService transfers, SendQuota quota, Func<string> deviceName, Func<IncomingPolicy> policy, IIncomingTransferHandler handler)
+    internal PhoneLinkServer(TransferService transfers, Func<string> deviceName, Func<IncomingPolicy> policy, IIncomingTransferHandler handler)
     {
         _transfers = transfers;
-        _quota = quota;
         _deviceName = deviceName;
         _policy = policy;
         _handler = handler;
@@ -131,8 +128,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Offers files (folders are expanded) for the phone to download. Counts as one send towards the free
-    /// edition's daily limit; throws <see cref="TransferException"/> (<see cref="TransferErrorKind.SendLimitReached"/>) when it is used up.
+    /// Offers files (folders are expanded) for the phone to download.
     /// </summary>
     public TransferSession Share(IReadOnlyList<string> paths)
     {
@@ -160,9 +156,6 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         }
 
         if (entries.Count == 0) throw new TransferException(TransferErrorKind.NothingToSend, L.T("There's nothing to share: the files are empty folders or can't be found."));
-        if (!_quota.TryUse())
-            throw new TransferException(TransferErrorKind.SendLimitReached,
-                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
 
         StopSharing();
         var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, PhonePeerId, "your phone", "");
@@ -545,7 +538,6 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         try
         {
             await StoredZip.WriteAsync(stream, items,
-                bytes => _transfers.SendLimiter.WaitAsync(bytes, token),
                 (item, bytes) =>
                 {
                     var entry = byItem[item];
@@ -628,7 +620,6 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 int read;
                 while (sent < length && (read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, length - sent)), token).ConfigureAwait(false)) > 0)
                 {
-                    await _transfers.SendLimiter.WaitAsync(read, token).ConfigureAwait(false);
                     await stream.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
                     sent += read;
                     if (counted) session.AddTransferred(read);
@@ -681,9 +672,8 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     {
         using var resource = typeof(PhoneLinkServer).Assembly.GetManifestResourceStream("Beam.Core.Phone.phone.html")
                              ?? throw new InvalidOperationException("Phone page missing from the build.");
-        using var memory = new MemoryStream();
-        resource.CopyTo(memory);
-        return memory.ToArray();
+        using var reader = new StreamReader(resource);
+        return System.Text.Encoding.UTF8.GetBytes(reader.ReadToEnd().Replace("{{ANDROID_APP_URL}}", AppInfo.AndroidAppUrl));
     });
 
     private sealed class SharedEntry

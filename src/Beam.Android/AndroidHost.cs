@@ -30,6 +30,7 @@ internal static class AndroidHost
     private static WeakReference<Activity>? _activity;
     private static TaskCompletionSource<bool>? _permission;
     private static int _permissionRequest = 100;
+    private static TransferKeepAlive? _keepAlive; // held for the life of the app
 
     private static Context Context => global::Android.App.Application.Context;
 
@@ -71,6 +72,7 @@ internal static class AndroidHost
         }
 
         _node.Transfers.SessionFinished += AddToMediaLibrary;
+        _keepAlive = new TransferKeepAlive(Context, _node.Transfers);
         AcquireMulticastLock();
         _viewModel = new MainViewModel(_node, new AndroidPlatformServices(), view, new UnavailableStoreService());
         var share = Interlocked.Exchange(ref _pendingShare, null);
@@ -123,15 +125,14 @@ internal static class AndroidHost
         Interlocked.Exchange(ref _permission, null)?.TrySetResult(results.Length > 0 && results.All(r => r == Permission.Granted));
     }
 
-    /// <summary>Notifications (Android 13+) and, up to Android 10, saving to Downloads need the user's OK.</summary>
+    /// <summary>
+    /// Up to Android 10, saving to Downloads needs the user's OK, which Beam can't work without. Everything else
+    /// (notifications, Nearby devices) is asked when it's needed, after Beam explains why.
+    /// </summary>
     public static void RequestPermissions(Activity activity)
     {
         _activity = new WeakReference<Activity>(activity);
         var wanted = new List<string>();
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) wanted.Add(Manifest.Permission.PostNotifications);
-        // Direct connections (Wi-Fi Direct): "Nearby devices" on Android 13+, location before (Android 10-12).
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) wanted.Add(Manifest.Permission.NearbyWifiDevices);
-        else if (Build.VERSION.SdkInt >= BuildVersionCodes.Q) wanted.Add(Manifest.Permission.AccessFineLocation);
         if (Build.VERSION.SdkInt <= BuildVersionCodes.Q) wanted.Add(Manifest.Permission.WriteExternalStorage);
         var missing = wanted.Where(p => activity.CheckSelfPermission(p) != Permission.Granted).ToArray();
         if (missing.Length > 0) activity.RequestPermissions(missing, 1);

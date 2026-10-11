@@ -3,6 +3,19 @@ namespace Beam.App.Platform;
 /// <summary>A folder the user picked for received files: the local path to use, or why it can't be used.</summary>
 public sealed record ReceiveFolderChoice(string? Path, string? Problem = null);
 
+/// <summary>A button on a notification (e.g. Accept / Decline on incoming files).</summary>
+public sealed record NotificationButton(string Label, Action OnClick);
+
+/// <summary>Permissions a phone asks the user for, with Beam's explanation first.</summary>
+public enum AppPermission
+{
+    /// <summary>Notifications: incoming files and finished transfers (Android 13+).</summary>
+    Notifications,
+
+    /// <summary>Direct connections and finding paired computers without Wi-Fi (Android: Nearby devices, or Location before 13).</summary>
+    NearbyDevices,
+}
+
 /// <summary>Operating-system integration. Everything OS-specific in the app goes through here.</summary>
 public interface IPlatformServices
 {
@@ -28,6 +41,27 @@ public interface IPlatformServices
 
     /// <summary>Shows a system notification. <paramref name="onActivated"/> runs (on any thread) when it is clicked.</summary>
     void ShowNotification(string title, string message, Action? onActivated = null);
+
+    /// <summary>
+    /// A notification that asks something (incoming files): with buttons where the system supports them, replaced or
+    /// removed by <paramref name="tag"/>. Callbacks run on any thread.
+    /// </summary>
+    void ShowQuestionNotification(string tag, string title, string message, Action onActivated, IReadOnlyList<NotificationButton> buttons) =>
+        ShowNotification(title, message, onActivated);
+
+    /// <summary>Removes the notification shown with <paramref name="tag"/> (answered, or no longer relevant).</summary>
+    void CancelNotification(string tag)
+    {
+    }
+
+    /// <summary>True when the permission is granted (or not needed on this system).</summary>
+    bool HasPermission(AppPermission permission) => true;
+
+    /// <summary>Asks the system for the permission; true when granted.</summary>
+    Task<bool> RequestPermissionAsync(AppPermission permission) => Task.FromResult(true);
+
+    /// <summary>Android names Nearby devices "Location" before Android 13: the explanation says so.</summary>
+    bool NearbyDevicesIsLocation => false;
 
     /// <summary>Where received files go by default; null means the Downloads folder.</summary>
     string? DefaultReceiveFolder => null;

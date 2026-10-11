@@ -30,8 +30,33 @@ internal sealed class AndroidPlatformServices : IPlatformServices
     {
     }
 
-    /// <summary>Shows the Downloads screen (where Downloads/Beam is).</summary>
-    public void OpenFolder(string path) => Start(new Intent(DownloadManager.ActionViewDownloads));
+    /// <summary>
+    /// Opens the folder in the phone's Files app. Android has no standard way to do that for every folder: the
+    /// Files app's own address works on most phones, else the Downloads screen.
+    /// </summary>
+    public void OpenFolder(string path)
+    {
+        var storage = AndroidEnvironment.ExternalStorageDirectory?.AbsolutePath?.TrimEnd('/');
+        if (storage != null && path.StartsWith(storage + "/", StringComparison.Ordinal))
+        {
+            var relative = path[(storage.Length + 1)..].TrimEnd('/');
+            var folder = DocumentsContract.BuildDocumentUri("com.android.externalstorage.documents", "primary:" + relative);
+            var view = new Intent(Intent.ActionView);
+            view.SetDataAndType(folder, DocumentsContract.Document.MimeTypeDir);
+            view.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.NewTask);
+            try
+            {
+                Context.StartActivity(view);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"No app opens {path} directly ({ex.Message}); showing Downloads");
+            }
+        }
+
+        Start(new Intent(DownloadManager.ActionViewDownloads));
+    }
 
     public void RevealInFolder(string path) => OpenFolder(path);
 
@@ -56,28 +81,78 @@ internal sealed class AndroidPlatformServices : IPlatformServices
 
     public void OpenUrl(string url) => Start(new Intent(Intent.ActionView, AndroidUri.Parse(url)));
 
-    public void ShowNotification(string title, string message, Action? onActivated = null)
+    public void ShowNotification(string title, string message, Action? onActivated = null) =>
+        Post(null, title, message, onActivated, Array.Empty<NotificationButton>(), global::Android.Resource.Drawable.StatSysDownloadDone);
+
+    public void ShowQuestionNotification(string tag, string title, string message, Action onActivated, IReadOnlyList<NotificationButton> buttons) =>
+        Post(tag, title, message, onActivated, buttons, global::Android.Resource.Drawable.StatSysDownload);
+
+    public void CancelNotification(string tag)
+    {
+        try
+        {
+            ((NotificationManager?)Context.GetSystemService(Context.NotificationService))?.Cancel(tag, 1);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not remove a notification", ex);
+        }
+    }
+
+    public bool HasPermission(AppPermission permission) =>
+        AndroidPermissionFor(permission) is not { } name || Context.CheckSelfPermission(name) == global::Android.Content.PM.Permission.Granted;
+
+    public Task<bool> RequestPermissionAsync(AppPermission permission) =>
+        AndroidPermissionFor(permission) is { } name ? AndroidHost.RequestPermissionAsync(name) : Task.FromResult(true);
+
+    public bool NearbyDevicesIsLocation => !OperatingSystem.IsAndroidVersionAtLeast(33);
+
+    private static string? AndroidPermissionFor(AppPermission permission) => permission switch
+    {
+        AppPermission.Notifications => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.PostNotifications : null,
+        AppPermission.NearbyDevices => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.NearbyWifiDevices
+            : OperatingSystem.IsAndroidVersionAtLeast(29) ? global::Android.Manifest.Permission.AccessFineLocation : null,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Posts a notification. Tapping it opens Beam and runs <paramref name="onActivated"/> there (Android lets only the
+    /// app on screen open other apps, e.g. to show a received file); buttons run their action without opening Beam.
+    /// </summary>
+    private static void Post(string? tag, string title, string message, Action? onActivated, IReadOnlyList<NotificationButton> buttons, int icon)
     {
         try
         {
             var manager = (NotificationManager?)Context.GetSystemService(Context.NotificationService);
             if (manager == null) return;
             if (Build.VERSION.SdkInt >= BuildVersionCodes.O && manager.GetNotificationChannel(ChannelId) == null)
-                manager.CreateNotificationChannel(new NotificationChannel(ChannelId, "Transfers", NotificationImportance.High));
+                manager.CreateNotificationChannel(new NotificationChannel(ChannelId, L.T("Transfers"), NotificationImportance.High));
 
             var open = Context.PackageManager!.GetLaunchIntentForPackage(Context.PackageName!)!;
             open.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
-            var pending = PendingIntent.GetActivity(Context, 0, open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
+            if (onActivated != null) open.PutExtra(NotificationActions.Extra, NotificationActions.Register(onActivated));
+            var pending = PendingIntent.GetActivity(Context, NotificationActions.NextRequestCode(), open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
 #pragma warning disable CA1422 // Notification.Builder(Context) is only for Android 7 and older
             var builder = Build.VERSION.SdkInt >= BuildVersionCodes.O ? new Notification.Builder(Context, ChannelId) : new Notification.Builder(Context);
 #pragma warning restore CA1422
             builder.SetContentTitle(title)
                 .SetContentText(message)
                 .SetStyle(new Notification.BigTextStyle().BigText(message))
-                .SetSmallIcon(global::Android.Resource.Drawable.StatSysDownloadDone)
+                .SetSmallIcon(icon)
                 .SetContentIntent(pending)
                 .SetAutoCancel(true);
-            manager.Notify(Interlocked.Increment(ref _notificationId), builder.Build());
+            foreach (var button in buttons)
+            {
+                var click = new Intent(Context, typeof(NotificationActionReceiver));
+                click.PutExtra(NotificationActions.Extra, NotificationActions.Register(button.OnClick));
+                if (tag != null) click.PutExtra(NotificationActions.TagExtra, tag);
+                var action = PendingIntent.GetBroadcast(Context, NotificationActions.NextRequestCode(), click, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
+                builder.AddAction(new Notification.Action.Builder(
+                    global::Android.Graphics.Drawables.Icon.CreateWithResource(Context, global::Android.Resource.Drawable.IcMenuSend), button.Label, action).Build());
+            }
+
+            if (tag != null) manager.Notify(tag, 1, builder.Build());
+            else manager.Notify(Interlocked.Increment(ref _notificationId), builder.Build());
         }
         catch (Exception ex)
         {

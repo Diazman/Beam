@@ -66,6 +66,9 @@ public sealed class AppSettings
 
     public bool TrayHintShown { get; set; }
 
+    /// <summary>Phones: Beam explained why it wants notifications and asked once.</summary>
+    public bool NotificationPermissionAsked { get; set; }
+
     /// <summary>Completed transfers so far (decides when to ask for a rating).</summary>
     public int CompletedTransfers { get; set; }
 

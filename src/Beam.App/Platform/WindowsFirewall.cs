@@ -16,7 +16,6 @@ namespace Beam.App.Platform;
 internal static class WindowsFirewall
 {
     private const string DirectRuleName = "Beam (direct connection)";
-    private static bool _askedThisRun;
 
     /// <summary>True when Windows Firewall would stop phones on the direct network from reaching Beam.</summary>
     public static async Task<bool> BlocksDirectConnectionsAsync()
@@ -53,7 +52,6 @@ internal static class WindowsFirewall
     {
         var exe = Environment.ProcessPath;
         if (exe == null) return false;
-        _askedThisRun = true;
         var script = $$"""
             $p = '{{Escape(exe)}}'
             Get-NetFirewallApplicationFilter -Program $p -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue |
@@ -83,14 +81,6 @@ internal static class WindowsFirewall
             Log.Warn("Firewall: allowing direct connections failed", ex);
             return false;
         }
-    }
-
-    /// <summary>Before hosting a direct network: fix the firewall if needed (at most one prompt per run).</summary>
-    public static async Task EnsureForDirectAsync()
-    {
-        if (_askedThisRun) return;
-        if (await BlocksDirectConnectionsAsync().ConfigureAwait(false)) await AllowDirectConnectionsAsync().ConfigureAwait(false);
-        _askedThisRun = true;
     }
 
     private static string Escape(string value) => value.Replace("'", "''");

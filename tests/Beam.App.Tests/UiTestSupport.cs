@@ -120,33 +120,37 @@ public sealed class FakePlatform : IPlatformServices
     }
 
     public void ShowNotification(string title, string message, Action? onActivated = null) => Calls.Add($"notify:{title}|{message}");
+
+    /// <summary>Question notifications on screen, by tag, with their buttons.</summary>
+    public Dictionary<string, IReadOnlyList<NotificationButton>> Questions { get; } = new();
+
+    public void ShowQuestionNotification(string tag, string title, string message, Action onActivated, IReadOnlyList<NotificationButton> buttons)
+    {
+        Calls.Add($"question:{title}|{message}");
+        Questions[tag] = buttons;
+    }
+
+    public void CancelNotification(string tag) => Questions.Remove(tag);
+
+    /// <summary>Permissions the "user" has granted; others are asked for (and granted when <see cref="GrantWhenAsked"/>).</summary>
+    public HashSet<AppPermission> Granted { get; } = new() { AppPermission.Notifications, AppPermission.NearbyDevices };
+
+    public bool GrantWhenAsked { get; set; } = true;
+
+    public bool HasPermission(AppPermission permission) => Granted.Contains(permission);
+
+    public Task<bool> RequestPermissionAsync(AppPermission permission)
+    {
+        Calls.Add("permission:" + permission);
+        if (GrantWhenAsked) Granted.Add(permission);
+        return Task.FromResult(GrantWhenAsked);
+    }
 }
 
 /// <summary>Stands in for the Microsoft Store.</summary>
 public sealed class FakeStore : IStoreService
 {
-    public bool CanPurchase { get; set; } = true;
-
-    public bool Owns { get; set; }
-
-    public PurchaseOutcome NextOutcome { get; set; } = PurchaseOutcome.Purchased;
-
-    public int Purchases { get; private set; }
-
-    public event Action? LicenseChanged;
-
-    public Task<bool?> OwnsProAsync() => Task.FromResult<bool?>(Owns);
-
-    public string Price { get; set; } = "$4.99";
-
-    public Task<string?> GetProPriceAsync() => Task.FromResult<string?>(CanPurchase ? Price : null);
-
-    public Task<PurchaseOutcome> PurchaseProAsync()
-    {
-        Purchases++;
-        if (NextOutcome == PurchaseOutcome.Purchased) Owns = true;
-        return Task.FromResult(NextOutcome);
-    }
+    public bool CanRequestReview { get; set; } = true;
 
     public int ReviewRequests { get; private set; }
 
@@ -155,8 +159,6 @@ public sealed class FakeStore : IStoreService
         ReviewRequests++;
         return Task.CompletedTask;
     }
-
-    public void RaiseLicenseChanged() => LicenseChanged?.Invoke();
 }
 
 /// <summary>A Beam app (view model + real window + real node) running headless.</summary>
@@ -164,23 +166,23 @@ public sealed class UiHarness : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    /// <param name="pro">Most tests run as Pro so the free edition's limits don't get in the way.</param>
-    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760, bool pro = true, bool launchPeriod = false,
-        string language = L.English, bool phone = false, Beam.Core.Direct.IDirectLink? directLink = null)
+    public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760,
+        string language = L.English, bool phone = false, Beam.Core.Direct.IDirectLink? directLink = null,
+        Beam.Core.Files.IExternalFiles? externalFiles = null)
     {
         // Tests assert English text whatever the language of the machine running them.
         L.SetLanguage(language);
         L.IsPhone = phone;
-        Store = new FakeStore { Owns = pro };
+        Store = new FakeStore();
         ReceiveFolder = _dir.Combine("Downloads");
         Directory.CreateDirectory(ReceiveFolder);
         Node = BeamNode.Create(new BeamNodeOptions
         {
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
-            Edition = new Beam.Core.Licensing.Edition(pro, launchPeriod),
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
             DirectLink = directLink,
+            ExternalFiles = externalFiles,
         });
         Node.Settings.Update(s =>
         {

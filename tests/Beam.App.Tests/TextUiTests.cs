@@ -10,7 +10,7 @@ namespace Beam.App.Tests;
 public class TextUiTests
 {
     [AvaloniaFact]
-    public async Task SendTextPrefillsClipboardAndReceiverCanCopyOrOpenTheLink()
+    public async Task SendTextPastesOnRequestAndReceiverCanCopyOrOpenTheLink()
     {
         await using var sender = new UiHarness("Office PC");
         await using var receiver = new UiHarness("Laptop");
@@ -31,7 +31,9 @@ public class TextUiTests
         await UiHarness.WaitForAsync(() => sender.ViewModel.Dialog is SendTextViewModel, "compose dialog");
         var compose = (SendTextViewModel)sender.ViewModel.Dialog!;
         Assert.Equal("Send text to Laptop", compose.Title);
-        Assert.Equal("https://example.com/slides", compose.Text);
+        Assert.Equal("", compose.Text); // the clipboard is only read when asked (Paste)
+        compose.PasteCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => compose.Text == "https://example.com/slides", "pasted");
         sender.Screenshot("text-01-compose");
         compose.SendCommand.Execute(null);
 

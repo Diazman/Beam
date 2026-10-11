@@ -15,6 +15,10 @@
   <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
   <!-- "Files received" and incoming-request notifications (Android 13+ asks the user). -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Transfers keep running when Beam is in the background or the screen is off (ongoing notification). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
   <!-- Saving received files to Downloads/Beam: only needed up to Android 10; newer versions allow it without a permission. -->
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

@@ -6,7 +6,6 @@ using Beam.App.Services;
 using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
-using Beam.Core.Licensing;
 using Beam.Core.Localization;
 using Beam.Core.Util;
 
@@ -159,7 +158,6 @@ public sealed class HomeViewModel : ObservableObject
         ClearCommand = new RelayCommand(ClearItems, () => Items.Count > 0);
         ClearSharedTextCommand = new RelayCommand(() => SharedText = null);
         SendCommand = new AsyncCommand(SendAsync, () => CanSend);
-        UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
         SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
         RefreshCommand = new RelayCommand(Refresh);
         ScanCodeCommand = new AsyncCommand(ScanCodeAsync);
@@ -198,7 +196,7 @@ public sealed class HomeViewModel : ObservableObject
 
     public bool IsDiscoverable => _node.Settings.Current.Discoverable;
 
-    public string VisibilityText => IsDiscoverable ? L.T("Visible to nearby computers") : L.T("Hidden from nearby computers");
+    public string VisibilityText => IsDiscoverable ? L.T("Visible to nearby devices") : L.T("Hidden from nearby devices");
 
     public bool HasDevices => Devices.Count > 0;
 
@@ -214,41 +212,15 @@ public sealed class HomeViewModel : ObservableObject
         private set => SetProperty(ref _showSearchHint, value);
     }
 
-    /// <summary>The first chosen computer (the only one in the free edition).</summary>
+    /// <summary>The first chosen device.</summary>
     public DeviceViewModel? SelectedDevice => _selected.FirstOrDefault();
 
     /// <summary>The chosen computers, in the order they were picked.</summary>
     public IReadOnlyList<DeviceViewModel> SelectedDevices => _selected;
 
-    public bool IsPro => _node.Edition.IsPro;
-
-    public bool IsFree => !IsPro;
-
-    /// <summary>The free edition's limits apply (not Pro, and not during the free launch period).</summary>
-    public bool ShowFreeLimits => !_node.Edition.IsEnabled(Feature.UnlimitedSends);
-
-    public bool CanSelectSeveral => _node.Edition.IsEnabled(Feature.SendToSeveralDevices);
-
-    /// <summary>Free edition with several computers around: mention that Pro can send to all of them.</summary>
-    public bool ShowMultiSendUpsell => !CanSelectSeveral && Devices.Count > 1;
-
-    public string DeviceHint => CanSelectSeveral && Devices.Count > 1 ? L.T("Choose one or more computers.") : "";
+    public string DeviceHint => Devices.Count > 1 ? L.T("Choose one or more devices.") : "";
 
     public bool HasDeviceHint => DeviceHint.Length > 0;
-
-    /// <summary>The free edition's limits, shown next to the Send button.</summary>
-    public string PlanText
-    {
-        get
-        {
-            var left = _node.Quota.RemainingToday ?? 0;
-            var speed = Format.Bytes(FreeLimits.MaxSendBytesPerSecond);
-            var limit = _node.Quota.Limit;
-            return left == 0
-                ? L.T("Free · up to {0}/s · no free sends left today", speed)
-                : L.Plural(limit, "Free · up to {1}/s · {2} of {0} free send left today", "Free · up to {1}/s · {2} of {0} free sends left today", speed, left);
-        }
-    }
 
     public bool HasItems => Items.Count > 0;
 
@@ -308,13 +280,13 @@ public sealed class HomeViewModel : ObservableObject
         {
             if (Items.Count == 0 && _sharedText != null)
             {
-                if (_selected.Count == 0) return L.T("Choose a computer to send to.");
+                if (_selected.Count == 0) return L.T("Choose a device to send to.");
                 return SharedTextIsLink ? L.T("Send the link to {0}", TargetsText) : L.T("Send the text to {0}", TargetsText);
             }
 
-            if (Items.Count == 0 && _selected.Count == 0) return L.T("Choose a computer and add files to send.");
+            if (Items.Count == 0 && _selected.Count == 0) return L.T("Choose a device and add files to send.");
             if (Items.Count == 0) return L.T("Add files or folders to send to {0}.", TargetsText);
-            if (_selected.Count == 0) return L.T("Choose a computer to send to.");
+            if (_selected.Count == 0) return L.T("Choose a device to send to.");
             if (Items.Count == 1)
             {
                 return IsMeasuring
@@ -332,7 +304,7 @@ public sealed class HomeViewModel : ObservableObject
     {
         1 => _selected[0].Name,
         2 => L.T("{0} and {1}", _selected[0].Name, _selected[1].Name),
-        _ => L.Plural(_selected.Count, "{0} computer", "{0} computers"),
+        _ => L.Plural(_selected.Count, "{0} device", "{0} devices"),
     };
 
     public AsyncCommand ChooseFilesCommand { get; }
@@ -342,8 +314,6 @@ public sealed class HomeViewModel : ObservableObject
     public RelayCommand ClearCommand { get; }
 
     public AsyncCommand SendCommand { get; }
-
-    public AsyncCommand UpgradeCommand { get; }
 
     /// <summary>Opens the "send text" box for the chosen computers (pre-filled with copied text, if any).</summary>
     public AsyncCommand SendTextCommand { get; }
@@ -417,7 +387,7 @@ public sealed class HomeViewModel : ObservableObject
         }
     }
 
-    /// <summary>Clicking a computer toggles it. In the free edition, picking another one replaces the choice.</summary>
+    /// <summary>Clicking a device toggles it; several can be chosen and get the same files.</summary>
     public void SelectDevice(DeviceViewModel device)
     {
         _selectionIsAutomatic = false;
@@ -427,22 +397,9 @@ public sealed class HomeViewModel : ObservableObject
             return;
         }
 
-        if (!CanSelectSeveral) ClearSelection();
         device.IsSelected = true;
         _selected.Add(device);
         OnSelectionChanged();
-    }
-
-    /// <summary>Called when the edition or the daily count changes.</summary>
-    internal void OnEditionChanged()
-    {
-        if (!CanSelectSeveral)
-        {
-            foreach (var extra in _selected.Skip(1).ToList()) Deselect(extra);
-        }
-
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(ShowFreeLimits), nameof(CanSelectSeveral), nameof(ShowMultiSendUpsell), nameof(DeviceHint), nameof(HasDeviceHint), nameof(PlanText) })
-            OnPropertyChanged(name);
     }
 
     private void SelectOnly(DeviceViewModel? device)
@@ -522,7 +479,6 @@ public sealed class HomeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasDevices));
         OnPropertyChanged(nameof(HasNoDevices));
-        OnPropertyChanged(nameof(ShowMultiSendUpsell));
         OnPropertyChanged(nameof(DeviceHint));
         OnPropertyChanged(nameof(HasDeviceHint));
         if (Devices.Count > 0) ShowSearchHint = false;
@@ -670,7 +626,8 @@ public sealed class HomeViewModel : ObservableObject
         var device = _node.Pair(code);
         Log.Info($"Paired with {device.Name} by scanning its code");
         // Not on the same Wi-Fi? Join the computer's own network now: one scan pairs and connects.
-        _ = _node.Direct.ConnectAfterPairingAsync(device, code.ConnectDirectly, CancellationToken.None);
+        if (code.Network != null && await _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices))
+            _ = _node.Direct.ConnectAfterPairingAsync(device, code.ConnectDirectly, CancellationToken.None);
         await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Paired with {0}", device.Name),
             code.Network != null
                 ? L.T("{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.", device.Name)
@@ -682,14 +639,8 @@ public sealed class HomeViewModel : ObservableObject
     {
         if (_selected.Count == 0) return;
         var targets = _selected.Select(d => d.Device).ToList();
-        var clip = await _ui.GetClipboardTextAsync();
-        var initial = clip is { Length: > 0 and <= 2000 } ? clip : "";
-        if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, initial, _ui)) is not string text) return;
-        if (!_node.Quota.CanSend(targets.Count))
-        {
-            if (!await _main.ShowUpgradeAsync(L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade for unlimited sends, or send again tomorrow."))) return;
-        }
-
+        // Starts empty: reading the clipboard unasked could show a copied password (and Android announces every read).
+        if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, "", _ui)) is not string text) return;
         foreach (var target in targets) await _main.StartSendTextAsync(target, text);
     }
 
@@ -698,16 +649,6 @@ public sealed class HomeViewModel : ObservableObject
         if (!CanSend) return;
         var targets = _selected.Select(d => d.Device).ToList();
         var paths = Items.Select(i => i.Path).ToList();
-        if (!_node.Quota.CanSend(targets.Count))
-        {
-            var left = _node.Quota.RemainingToday ?? 0;
-            var reason = left == 0
-                ? L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade for unlimited sends, or send again tomorrow.")
-                : L.Plural(left, "You have {0} free send left today, which isn't enough for {1} computers.", "You have {0} free sends left today, which isn't enough for {1} computers.", targets.Count);
-
-            if (!await _main.ShowUpgradeAsync(reason)) return;
-        }
-
         var text = _sharedText;
         if (paths.Count > 0)
         {

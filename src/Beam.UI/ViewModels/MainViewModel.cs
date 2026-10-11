@@ -7,7 +7,6 @@ using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Diagnostics;
 using Beam.Core.Discovery;
-using Beam.Core.Licensing;
 using Beam.Core.Localization;
 using Beam.Core.Settings;
 using Beam.Core.Transfer;
@@ -39,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private readonly DispatcherTimer _progressTimer;
     private readonly DateTime _startedAt = DateTime.UtcNow;
     private Page _page = Page.Home;
+    private TransfersPage? _transfersPage;
     private DialogViewModel? _dialog;
     private bool _isDragOver;
 
@@ -47,7 +47,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         Node = node;
         _platform = platform;
         _ui = ui;
-        Pro = new ProService(node, store ?? new UnavailableStoreService());
+        Rating = new RatingService(node, store ?? new UnavailableStoreService());
         node.IncomingHandler = this;
 
         Home = new HomeViewModel(node, ui, this);
@@ -65,8 +65,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
         foreach (var session in node.Transfers.Sessions) AddTransfer(session);
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
-        node.Edition.Changed += () => Dispatcher.UIThread.Post(OnEditionChanged);
-        node.Quota.Changed += () => Dispatcher.UIThread.Post(Home.OnEditionChanged);
+        node.Direct.BeforeHosting = () => Dispatcher.UIThread.InvokeAsync(EnsureFirewallForDirectAsync);
         node.Direct.Problem += message => Dispatcher.UIThread.Post(() => ShowDirectProblem(message));
     }
 
@@ -90,9 +89,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     public BeamNode Node { get; }
 
-    public ProService Pro { get; }
-
-    public bool IsPro => Node.Edition.IsPro;
+    public RatingService Rating { get; }
 
     /// <summary>Running on a phone or tablet (see <see cref="IPlatformServices.IsPhone"/>).</summary>
     public bool IsPhone => _platform.IsPhone;
@@ -112,7 +109,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         Page.Phone => Phone,
         Page.History => History,
         Page.Settings => Settings,
-        Page.Transfers => new TransfersPage(this),
+        Page.Transfers => _transfersPage ??= new TransfersPage(this),
         _ => Home,
     };
 
@@ -231,41 +228,62 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         HandleCommandLine(commandLine);
-        await OfferFirewallPermissionAsync();
-        await Pro.RefreshAsync();
+
+        // Phones: notifications are how people learn that files are coming. Asked once, with the reason first.
+        if (!Node.Settings.Current.NotificationPermissionAsked && !_platform.HasPermission(AppPermission.Notifications))
+        {
+            Node.Settings.Update(s => s.NotificationPermissionAsked = true);
+            await EnsurePermissionAsync(AppPermission.Notifications);
+        }
     }
 
     /// <summary>
-    /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
-    /// couldn't reach it. Ask once when the app opens; direct connections ask again when they're used.
+    /// Explains why Beam needs a permission, then lets the system ask. Asked when the feature is used, not all at
+    /// once when the app opens. True when it is granted.
     /// </summary>
-    private async Task OfferFirewallPermissionAsync()
+    internal async Task<bool> EnsurePermissionAsync(AppPermission permission)
     {
-        if (!Node.Direct.CanHost || Node.Settings.Current.FirewallPromptDeclined) return;
-        if (!await _platform.FirewallBlocksDirectAsync()) return;
-        var allow = await ShowDialogAsync(new ConfirmViewModel(
-            L.T("Allow direct connections?"),
-            L.T("Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked."),
-            L.T("Allow"), L.T("Not now")));
-        if (allow is true)
+        if (_platform.HasPermission(permission)) return true;
+        var (title, text) = permission switch
         {
-            if (!await _platform.AllowDirectThroughFirewallAsync())
+            AppPermission.Notifications => (L.T("Get notified about incoming files"),
+                L.T("Beam shows a notification when someone sends you files, so you can accept them even when Beam isn't open. The phone will ask you to allow notifications.")),
+            _ when _platform.NearbyDevicesIsLocation => (L.T("Allow direct connections"),
+                L.T("To connect to a computer directly, even without Wi-Fi, Android needs Beam to have the Location permission. Beam doesn't use or keep your location.")),
+            _ => (L.T("Allow direct connections"),
+                L.T("To connect to a computer directly, even without Wi-Fi, and to notice paired computers nearby, Android needs the “Nearby devices” permission.")),
+        };
+        if (await ShowDialogAsync(new ConfirmViewModel(title, text, L.T("Continue"), L.T("Not now"))) is not true) return false;
+        return await _platform.RequestPermissionAsync(permission);
+    }
+
+    private readonly SemaphoreSlim _firewallGate = new(1, 1);
+    private bool _firewallAskedThisRun;
+
+    /// <summary>
+    /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
+    /// couldn't reach it. Asked right before this PC first starts its network in a run, never at startup.
+    /// </summary>
+    internal async Task EnsureFirewallForDirectAsync()
+    {
+        await _firewallGate.WaitAsync();
+        try
+        {
+            if (_firewallAskedThisRun || !Node.Direct.CanHost) return;
+            _firewallAskedThisRun = true;
+            if (!await _platform.FirewallBlocksDirectAsync()) return;
+            var allow = await ShowDialogAsync(new ConfirmViewModel(
+                L.T("Allow direct connections?"),
+                L.T("Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked."),
+                L.T("Allow"), L.T("Not now")));
+            if (allow is true && !await _platform.AllowDirectThroughFirewallAsync())
                 await ShowDialogAsync(new ConfirmViewModel(L.T("Direct connections are still blocked"),
                     L.T("Windows didn't allow the change. Beam will ask again the next time you connect directly."), L.T("OK"), ""));
         }
-        else
+        finally
         {
-            Node.Settings.Update(s => s.FirewallPromptDeclined = true);
+            _firewallGate.Release();
         }
-    }
-
-    /// <summary>Shows what Pro offers and lets the user buy it. True when the user has Pro afterwards.</summary>
-    public async Task<bool> ShowUpgradeAsync(string? reason = null)
-    {
-        if (IsPro) return true;
-        await Pro.RefreshAsync();
-        if (IsPro) return true;
-        return await ShowDialogAsync(new UpgradeViewModel(Pro, _platform, reason)) is true && IsPro;
     }
 
     public void HandleCommandLine(CommandLine commandLine)
@@ -276,11 +294,30 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         if (!string.IsNullOrWhiteSpace(commandLine.SendText)) Home.SharedText = commandLine.SendText.Trim();
     }
 
+    /// <summary>
+    /// The phone's Back button: closes a dialog that can be closed, else goes back to Send. False on Send (the system
+    /// then leaves the app as usual).
+    /// </summary>
+    public bool GoBack()
+    {
+        if (Dialog is { } dialog)
+        {
+            dialog.Dismiss();
+            return true; // a dialog that must be answered stays, and Back doesn't leave the app under it
+        }
+
+        if (_page == Page.Home) return false;
+        Navigate(Page.Home);
+        return true;
+    }
+
     public void Navigate(Page page)
     {
         if (_page == Page.Settings && page != Page.Settings) Settings.SaveName();
         if (_page == page) return;
+        if (_page == Page.Phone) Phone.OnHidden();
         _page = page;
+        if (page == Page.Phone) Phone.OnShown();
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageKind));
         OnPropertyChanged(nameof(IsHomePage));
@@ -298,14 +335,12 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
             Node.Send(device, paths);
             return true;
         }
-        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
-        {
-            if (!await ShowUpgradeAsync(ex.Error.Message)) return false;
-            return await StartSendAsync(device, paths);
-        }
         catch (Exception ex)
         {
             Log.Error("Could not start transfer", ex);
+            await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't send to {0}", device.Name),
+                ex is TransferException te ? te.Error.Message : L.T("Something went wrong while starting the transfer. Try again; if it keeps happening, send the log from Settings."),
+                L.T("OK"), ""));
             return false;
         }
     }
@@ -319,11 +354,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         {
             Node.SendText(device, text);
             return true;
-        }
-        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
-        {
-            if (!await ShowUpgradeAsync(ex.Error.Message)) return false;
-            return await StartSendTextAsync(device, text);
         }
         catch (TransferException ex)
         {
@@ -396,20 +426,13 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         {
             await Task.Delay(RatingPromptDelay);
             if (HasActiveTransfers || HasDialog || !_ui.IsWindowActive) continue;
-            await Pro.MaybeAskForRatingAsync();
+            await Rating.MaybeAskForRatingAsync();
             return;
         }
     }
 
     /// <summary>Delay between a finished transfer and the rating prompt (shortened in tests).</summary>
     internal static TimeSpan RatingPromptDelay { get; set; } = TimeSpan.FromSeconds(2);
-
-    private void OnEditionChanged()
-    {
-        OnPropertyChanged(nameof(IsPro));
-        Home.OnEditionChanged();
-        Settings.OnEditionChanged();
-    }
 
     // ----- IIncomingTransferHandler (called by the engine on background threads) -----
 
@@ -440,15 +463,37 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var canTrust = Node.Edition.IsEnabled(Feature.TrustedDevices) && request.SenderFingerprint.Length > 0;
+            var canTrust = request.SenderFingerprint.Length > 0;
             var dialog = new IncomingRequestViewModel(request, _ui, canTrust);
-            if (!_ui.IsWindowActive)
+            var tag = "request-" + session.Id;
+            var settings = Node.Settings.Current;
+            if (!_ui.IsWindowActive && settings.NotificationsEnabled && settings.NotifyOnIncomingRequest)
             {
-                Notify(s => s.NotifyOnIncomingRequest, L.T("Incoming files"), dialog.Title, bringToFront: false);
+                // Answer right from the notification (phones), or open Beam to see the details.
+                _platform.ShowQuestionNotification(tag, L.T("Incoming files"), dialog.Title,
+                    () => Dispatcher.UIThread.Post(_ui.BringToFront),
+                    new[]
+                    {
+                        new NotificationButton(L.T("Accept"), () => Dispatcher.UIThread.Post(() =>
+                        {
+                            if (dialog.AcceptCommand.CanExecute(null)) dialog.AcceptCommand.Execute(null);
+                            else _ui.BringToFront(); // e.g. not enough space: the dialog explains
+                        })),
+                        new NotificationButton(L.T("Decline"), () => Dispatcher.UIThread.Post(() => dialog.DeclineCommand.Execute(null))),
+                    });
                 _ui.BringToFront();
             }
 
-            var accepted = await ShowDialogAsync(dialog, cancellationToken) is true;
+            bool accepted;
+            try
+            {
+                accepted = await ShowDialogAsync(dialog, cancellationToken) is true;
+            }
+            finally
+            {
+                _platform.CancelNotification(tag);
+            }
+
             if (!accepted) return IncomingDecision.Decline();
 
             if (dialog.TrustDevice)
@@ -614,5 +659,17 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     }
 }
 
-/// <summary>The phone layout's Transfers tab (shows <see cref="MainViewModel.Transfers"/>).</summary>
-public sealed record TransfersPage(MainViewModel Main);
+/// <summary>Phones: running transfers and the history in one tab.</summary>
+public sealed class TransfersPage : ObservableObject
+{
+    public TransfersPage(MainViewModel main)
+    {
+        Main = main;
+        main.Transfers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
+        main.History.Items.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    public MainViewModel Main { get; }
+
+    public bool IsEmpty => Main.Transfers.Count == 0 && Main.History.Items.Count == 0;
+}

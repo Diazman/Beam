@@ -31,7 +31,7 @@ public class StoredZipTests
             using var output = new MemoryStream();
             var progress = 0L;
             var done = new List<string>();
-            await StoredZip.WriteAsync(output, items, _ => Task.CompletedTask, (_, n) => progress += n, i => done.Add(i.Name), CancellationToken.None);
+            await StoredZip.WriteAsync(output, items, (_, n) => progress += n, i => done.Add(i.Name), CancellationToken.None);
 
             Assert.Equal(StoredZip.Length(items), output.Length);
             if (Environment.GetEnvironmentVariable("BEAM_ZIP_OUT") is { } outDir)

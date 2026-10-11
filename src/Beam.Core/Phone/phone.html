@@ -50,6 +50,12 @@
     <div><h1 id="title">Beam</h1><div class="sub" data-t>Connected over your Wi-Fi. Nothing goes through the internet.</div></div>
   </header>
 
+  <section id="getApp" hidden>
+    <h2 data-t>Get the Beam app</h2>
+    <div class="sub" data-t>Faster, works even without Wi-Fi, and finds this computer by itself.</div>
+    <div style="margin-top:12px"><a class="button" href="{{ANDROID_APP_URL}}" data-t>Download Beam for Android</a></div>
+  </section>
+
   <section>
     <h2 data-t>Send to this computer</h2>
     <div class="sub" id="sendHint" data-t>Pick photos, videos or any files. The computer will ask before saving them.</div>
@@ -63,7 +69,7 @@
     <h2 data-t>From the computer</h2>
     <div class="sub" data-t>Files shared with this phone appear here.</div>
     <ul id="files"></ul>
-    <div class="empty" id="noFiles" data-t>Nothing shared yet. On the computer, add files and choose “Share with phone”.</div>
+    <div class="empty" id="noFiles" data-t>Nothing shared yet. On the computer, choose “Share files” on the Phone page.</div>
   </section>
 
   <footer data-t>Keep this page open until transfers finish.</footer>
@@ -83,7 +89,10 @@
       "Choose files": "Dosya seç",
       "From the computer": "Bilgisayardan",
       "Files shared with this phone appear here.": "Bu telefonla paylaşılan dosyalar burada görünür.",
-      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Henüz paylaşılan bir şey yok. Bilgisayarda dosya ekleyip “Telefonla paylaş”ı seçin.",
+      "Nothing shared yet. On the computer, choose “Share files” on the Phone page.": "Henüz paylaşılan bir şey yok. Bilgisayarda Telefon sayfasında “Dosya paylaş”ı seçin.",
+      "Get the Beam app": "Beam uygulamasını edinin",
+      "Faster, works even without Wi-Fi, and finds this computer by itself.": "Daha hızlıdır, Wi-Fi olmadan da çalışır ve bu bilgisayarı kendisi bulur.",
+      "Download Beam for Android": "Android için Beam'i indirin",
       "Keep this page open until transfers finish.": "Aktarımlar bitene kadar bu sayfayı açık tutun.",
       "the computer": "bilgisayar",
       "Choose files to send to {0}": "{0} adlı bilgisayara gönderilecek dosyaları seçin",
@@ -109,7 +118,10 @@
       "Choose files": "Выбрать файлы",
       "From the computer": "С компьютера",
       "Files shared with this phone appear here.": "Здесь появятся файлы, которыми поделились с этим телефоном.",
-      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Пока ничего нет. На компьютере добавьте файлы и выберите «Поделиться с телефоном».",
+      "Nothing shared yet. On the computer, choose “Share files” on the Phone page.": "Пока ничего нет. На компьютере на странице «Телефон» выберите «Поделиться файлами».",
+      "Get the Beam app": "Установите приложение Beam",
+      "Faster, works even without Wi-Fi, and finds this computer by itself.": "Быстрее, работает даже без Wi-Fi и само находит этот компьютер.",
+      "Download Beam for Android": "Скачать Beam для Android",
       "Keep this page open until transfers finish.": "Не закрывайте страницу, пока передача не завершится.",
       "the computer": "компьютер",
       "Choose files to send to {0}": "Выберите файлы для отправки на {0}",
@@ -135,7 +147,10 @@
       "Choose files": "Fayllarni tanlash",
       "From the computer": "Kompyuterdan",
       "Files shared with this phone appear here.": "Shu telefonga ulashilgan fayllar shu yerda chiqadi.",
-      "Nothing shared yet. On the computer, add files and choose “Share with phone”.": "Hozircha hech narsa ulashilmagan. Kompyuterda fayllarni qoʻshib, “Telefonga ulashish”ni tanlang.",
+      "Nothing shared yet. On the computer, choose “Share files” on the Phone page.": "Hozircha hech narsa ulashilmagan. Kompyuterda Telefon sahifasida “Fayl ulashish”ni tanlang.",
+      "Get the Beam app": "Beam ilovasini oling",
+      "Faster, works even without Wi-Fi, and finds this computer by itself.": "Tezroq, Wi-Fi'siz ham ishlaydi va bu kompyuterni oʻzi topadi.",
+      "Download Beam for Android": "Android uchun Beam'ni yuklab olish",
       "Keep this page open until transfers finish.": "Oʻtkazish tugaguncha bu sahifani yopmang.",
       "the computer": "kompyuter",
       "Choose files to send to {0}": "{0} kompyuteriga yuboriladigan fayllarni tanlang",
@@ -174,6 +189,7 @@
   }
   document.documentElement.lang = STRINGS[lang] ? lang : "en";
   Array.prototype.forEach.call(document.querySelectorAll("[data-t]"), function (el) { el.textContent = t(el.textContent); });
+  if (/Android/i.test(navigator.userAgent)) $("getApp").hidden = false;
 
   var device = t("the computer");
 

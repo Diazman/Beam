@@ -36,10 +36,8 @@ public sealed class TransferService : IAsyncDisposable
         IIncomingTransferHandler handler,
         Func<IncomingPolicy> policy,
         Func<string> deviceName,
-        Func<string>? deviceKind = null,
-        Func<long>? sendBytesPerSecond = null)
+        Func<string>? deviceKind = null)
     {
-        SendLimiter = new RateLimiter(sendBytesPerSecond ?? (() => 0));
         Identity = identity;
         ResumeStore = resumeStore;
         Handler = handler;
@@ -84,7 +82,6 @@ public sealed class TransferService : IAsyncDisposable
         _sessions.Values.Where(s => s.PeerId == peerId && !s.IsFinished).Count(s => s.InterruptConnection(switchingPath: true));
 
     /// <summary>Shared pacing of everything this device sends (the free edition's speed limit).</summary>
-    internal RateLimiter SendLimiter { get; }
 
     public int Port { get; private set; }
 

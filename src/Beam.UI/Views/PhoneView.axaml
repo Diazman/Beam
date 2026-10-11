@@ -9,81 +9,36 @@
       <StackPanel Spacing="4">
         <TextBlock Classes="h1" Text="{l:T 'Phone'}" />
         <TextBlock Classes="secondary" TextWrapping="Wrap"
-                   Text="{l:T 'Send files between this computer and any phone or tablet — iPhone or Android. No app to install: the phone uses its web browser.'}" />
+                   Text="{l:T 'Send files between this computer and a phone: with the Beam app, or with any phone\'s web browser.'}" />
       </StackPanel>
 
       <Border Classes="notice error" IsVisible="{Binding HasProblem}">
         <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" />
       </Border>
 
-      <!-- Off -->
-      <Border Classes="card" IsVisible="{Binding IsOff}" Padding="24">
-        <Grid ColumnDefinitions="Auto,*">
-          <Border Classes="iconBadge" Width="56" Height="56" CornerRadius="28" VerticalAlignment="Top">
-            <PathIcon Data="{StaticResource IconPhone}" Width="24" Height="24" />
-          </Border>
-          <StackPanel Grid.Column="1" Margin="18,0,0,0" Spacing="8">
-            <TextBlock Classes="h3" Text="{l:T 'Connect a phone'}" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Make sure the phone is on the same Wi-Fi as this computer. Beam will show a code to scan with the phone\'s camera.'}" />
-            <Button Classes="accent large" Content="{l:T 'Show the code'}" Command="{Binding TurnOnCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
-          </StackPanel>
-        </Grid>
-      </Border>
-
-      <Border Classes="card" IsVisible="{Binding IsDirectStarting}" Padding="20">
-        <TextBlock Text="{l:T 'Starting the direct connection…'}" />
-      </Border>
-      <!-- Connecting directly with the Beam app: one code pairs and joins this computer's Wi-Fi -->
+      <!-- The Beam app: one code pairs and connects (also without a shared Wi-Fi) -->
       <Border Classes="card" IsVisible="{Binding ShowsAppCode}" Padding="24">
         <Grid ColumnDefinitions="Auto,*">
+          <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
           <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
             <Path Data="{Binding AppQr}" Fill="Black" Stretch="Uniform" Width="240" Height="240" />
           </Border>
           <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="10">
-            <TextBlock Classes="h3" Text="{l:T 'Scan this code in the Beam app'}" TextWrapping="Wrap" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'On the phone, open Beam and tap the scan button (the code icon next to Nearby computers). The app joins this computer\'s Wi-Fi and pairs by itself, then you can send files both ways.'}" />
-            <TextBlock Classes="caption" TextWrapping="Wrap"
+            <TextBlock Classes="h3" Text="{l:T 'Scan this code with the Beam app'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding AppCodeText}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsHostingStarting}"
+                       Text="{l:T 'Getting this computer\'s own Wi-Fi ready…'}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding AppCodeConnectsDirectly}"
                        Text="{l:T 'The phone has no internet while it\'s connected to this computer\'s Wi-Fi.'}" />
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
-              <Button Classes="accent" Content="{l:T 'No Beam app? Connect with the browser'}" Command="{Binding ShowBrowserStepsCommand}" />
-              <Button Content="{l:T 'Use the normal Wi-Fi instead'}" Command="{Binding StopDirectCommand}" />
-            </StackPanel>
+            <Button Classes="accent" Content="{l:T 'Don\'t have the Beam app? Connect with the browser'}" Command="{Binding ShowBrowserCommand}"
+                    HorizontalAlignment="Left" Margin="0,6,0,0" />
           </StackPanel>
         </Grid>
       </Border>
 
-      <!-- Without the app, step 1: a camera can't join a Wi-Fi and open a link from one code -->
-      <Border Classes="card" IsVisible="{Binding ShowsBrowserSteps}" Padding="24">
+      <!-- Any phone: Beam's page in the browser, over the shared Wi-Fi -->
+      <Border Classes="card" IsVisible="{Binding ShowsBrowserCode}" Padding="24">
         <Grid ColumnDefinitions="Auto,*">
-          <Border Background="White" CornerRadius="12" Padding="14" VerticalAlignment="Top">
-            <Path Data="{Binding WifiQr}" Fill="Black" Stretch="Uniform" Width="168" Height="168" />
-          </Border>
-          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="8">
-            <TextBlock Classes="h3" Text="{l:T 'Step 1: join this computer\'s Wi-Fi'}" TextWrapping="Wrap" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Scan this code with the phone\'s camera and tap Join. Then scan the code below to open Beam in the browser.'}" />
-            <TextBlock Classes="caption" Text="{l:T 'Or join it in the phone\'s Wi-Fi settings:'}" Margin="0,4,0,0" />
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Classes="caption" Text="{l:T 'Network:'}" VerticalAlignment="Center" />
-              <SelectableTextBlock Text="{Binding DirectNetworkName}" FontWeight="SemiBold" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Classes="caption" Text="{l:T 'Password:'}" VerticalAlignment="Center" />
-              <SelectableTextBlock Text="{Binding DirectPassword}" FontWeight="SemiBold" />
-            </StackPanel>
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsWaitingForDirectAddress}"
-                       Text="{l:T 'Getting the address on this computer\'s Wi-Fi ready…'}" />
-            <Button Content="{l:T 'Back to the Beam app code'}" Command="{Binding HideBrowserStepsCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
-          </StackPanel>
-        </Grid>
-      </Border>
-
-      <!-- On -->
-      <Border Classes="card" IsVisible="{Binding ShowsPageCode}" Padding="24">
-        <Grid ColumnDefinitions="Auto,*">
-          <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
           <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
             <Path Data="{Binding Qr}" Fill="Black" Stretch="Uniform" Width="240" Height="240" />
           </Border>
@@ -94,43 +49,29 @@
               <LineBreak />
               <Run Text="{l:T '2. On the page that opens, choose files to send here, or download what you share below.'}" />
             </TextBlock>
-            <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding !IsDirect}"
-                       Text="{l:T 'Have the Beam app on your phone? Scan this code in the app (Scan code) to pair them: then they find each other by themselves, even without Wi-Fi.'}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{l:T 'The phone needs to be on the same Wi-Fi as this computer.'}" />
             <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
               <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
                        Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding IsConnected}" />
               <TextBlock Grid.Column="1" Text="{Binding ConnectionText}" TextWrapping="Wrap" VerticalAlignment="Center" />
             </Grid>
             <TextBlock Classes="caption" Text="{l:T 'Or type this address in the phone\'s browser:'}" Margin="0,6,0,0" />
+            <SelectableTextBlock Text="{Binding Link}" FontWeight="SemiBold" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8">
-              <SelectableTextBlock Text="{Binding Link}" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" />
-              <Button Classes="link" Content="{l:T 'Copy'}" Command="{Binding CopyLinkCommand}" VerticalAlignment="Center" />
+              <Button Classes="link" Content="{l:T 'Copy'}" Command="{Binding CopyLinkCommand}" Padding="0" />
               <TextBlock Classes="caption success" Text="{Binding CopyStatus}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="caption" Text="{Binding OtherLinks}" IsVisible="{Binding HasOtherLinks}" TextWrapping="Wrap" />
             <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"
-                       Text="{l:T 'Only someone with this code can connect, and files from the phone still need your OK. The code changes every time and stops working when you turn it off. Use it on networks you trust: unlike transfers between computers, phone transfers aren\'t encrypted.'}" />
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-              <Button Content="{l:T 'Turn off'}" Command="{Binding TurnOffCommand}" />
-              <Button Content="{l:T 'Use the normal Wi-Fi instead'}" Command="{Binding StopDirectCommand}" IsVisible="{Binding IsDirect}" />
-            </StackPanel>
+                       Text="{l:T 'Only someone with this code can connect, and files from the phone still need your OK. The code changes every time and stops working when you turn it off. Use it on networks you trust: unlike transfers between Beam apps, browser transfers aren\'t encrypted.'}" />
+            <Button Content="{l:T 'Back to the Beam app code'}" Command="{Binding ShowAppCodeCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
           </StackPanel>
         </Grid>
       </Border>
 
-      <!-- No shared Wi-Fi (or an iPhone): this computer makes its own Wi-Fi with Wi-Fi Direct -->
-      <Border Classes="card" IsVisible="{Binding OffersDirect}" Padding="20">
-        <Grid ColumnDefinitions="*,Auto">
-          <StackPanel Spacing="4" VerticalAlignment="Center">
-            <TextBlock Classes="h3" Text="{l:T 'No Wi-Fi network? Connect directly'}" TextWrapping="Wrap" />
-            <TextBlock Classes="caption" TextWrapping="Wrap"
-                       Text="{l:T 'This computer makes its own Wi-Fi for the phone: works with iPhone and Android, anywhere. The phone has no internet while it\'s connected to it.'}" />
-          </StackPanel>
-          <Button Grid.Column="1" Content="{l:T 'Connect directly'}" Command="{Binding ConnectDirectlyCommand}" Margin="16,0,0,0" VerticalAlignment="Center" />
-        </Grid>
-      </Border>
-      <!-- Share -->
-      <StackPanel Spacing="10">
+      <!-- Share with the phone's browser -->
+      <StackPanel Spacing="10" IsVisible="{Binding ShowsBrowserCode}">
         <TextBlock Classes="h2" Text="{l:T 'Send to your phone'}" />
         <Border Classes="card">
           <StackPanel Spacing="12">
@@ -151,7 +92,7 @@
               <Button Classes="link" Content="{l:T 'Stop sharing'}" Command="{Binding StopSharingCommand}" IsVisible="{Binding IsSharing}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="caption" TextWrapping="Wrap"
-                       Text="{l:T 'Files from the phone are saved to the same folder as files from other computers (see Settings).'}" />
+                       Text="{l:T 'Files from the phone are saved to the same folder as files from other devices (see Settings).'}" />
           </StackPanel>
         </Border>
       </StackPanel>

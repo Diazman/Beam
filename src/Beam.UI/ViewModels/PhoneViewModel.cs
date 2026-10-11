@@ -4,7 +4,6 @@ using Beam.App.Infrastructure;
 using Beam.App.Services;
 using Beam.Core;
 using Beam.Core.Diagnostics;
-using Beam.Core.Direct;
 using Beam.Core.Localization;
 using Beam.Core.Phone;
 using Beam.Core.Transfer;
@@ -13,12 +12,13 @@ using Beam.Core.Util;
 namespace Beam.App.ViewModels;
 
 /// <summary>
-/// The Phone page: shows a QR code that opens Beam's page in a phone's browser, so files can go
-/// both ways with any phone — no app to install.
+/// The Phone page. By default it shows one code for the Beam app on a phone: scanning it pairs the two and, when this
+/// computer can, joins its own Wi-Fi (no shared network needed). Phones without the app use "Connect with the
+/// browser": a code that opens Beam's page in the phone's browser over the shared Wi-Fi.
 /// </summary>
 public sealed class PhoneViewModel : ObservableObject
 {
-    /// <summary>The link stops working after this long without any phone activity.</summary>
+    /// <summary>The browser link stops working after this long without any phone activity.</summary>
     private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(30);
 
     private readonly BeamNode _node;
@@ -28,35 +28,26 @@ public sealed class PhoneViewModel : ObservableObject
     private DateTime _lastActivity = DateTime.UtcNow;
     private Geometry? _qr;
     private Geometry? _appQr;
-    private string? _appQrLink;
-    private bool _showBrowserSteps;
+    private bool _appQrConnectsDirectly;
+    private bool _browserMode;
+    private bool _shown;
+    private bool _hosting;
+    private bool _hostingStarting;
     private string _link = "";
     private string _problem = "";
     private string _copyStatus = "";
-    private DirectNetwork? _directNetwork;
-    private bool _directStarting;
-    private Geometry? _wifiQr;
-    private DateTime _directStartedAt;
-    private bool _usingAssumedDirectAddress;
-    private readonly DispatcherTimer _directTimer;
 
     public PhoneViewModel(BeamNode node, IUiServices ui, MainViewModel main)
     {
         _node = node;
         _ui = ui;
         _main = main;
-        TurnOnCommand = new RelayCommand(TurnOn);
-        TurnOffCommand = new AsyncCommand(TurnOffAsync);
+        ShowBrowserCommand = new RelayCommand(ShowBrowser);
+        ShowAppCodeCommand = new AsyncCommand(ShowAppCodeAsync);
         CopyLinkCommand = new AsyncCommand(CopyLinkAsync);
         ShareFilesCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFilesAsync()));
         ShareFolderCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFoldersAsync()));
         StopSharingCommand = new RelayCommand(() => _node.PhoneLink.StopSharing());
-        ConnectDirectlyCommand = new AsyncCommand(ConnectDirectlyAsync);
-        StopDirectCommand = new RelayCommand(StopDirect);
-        ShowBrowserStepsCommand = new RelayCommand(() => SetBrowserSteps(true));
-        HideBrowserStepsCommand = new RelayCommand(() => SetBrowserSteps(false));
-        // The computer's direct-network address appears a moment after the network starts.
-        _directTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh());
 
         _node.PhoneLink.Activity += () => Dispatcher.UIThread.Post(() =>
         {
@@ -65,14 +56,36 @@ public sealed class PhoneViewModel : ObservableObject
         });
         _idleTimer = new DispatcherTimer(TimeSpan.FromMinutes(1), DispatcherPriority.Background, async (_, _) =>
         {
-            if (IsOn && DateTime.UtcNow - _lastActivity > IdleTimeout && !HasActivePhoneTransfers) await TurnOffAsync();
+            if (IsOn && DateTime.UtcNow - _lastActivity > IdleTimeout && !HasActivePhoneTransfers) await StopBrowserLinkAsync();
         });
     }
 
+    /// <summary>Beam's page for phone browsers is running.</summary>
     public bool IsOn => _node.PhoneLink.IsRunning;
 
-    public bool IsOff => !IsOn;
+    /// <summary>Showing the code for the Beam app (the default).</summary>
+    public bool ShowsAppCode => !_browserMode;
 
+    /// <summary>Showing the code that opens Beam's page in a phone's browser.</summary>
+    public bool ShowsBrowserCode => _browserMode;
+
+    /// <summary>The Beam app's code: pairs, and joins this computer's own Wi-Fi when it is on.</summary>
+    public Geometry? AppQr
+    {
+        get => _appQr;
+        private set => SetProperty(ref _appQr, value);
+    }
+
+    /// <summary>The app's code also brings the phone onto this computer's own Wi-Fi.</summary>
+    public bool AppCodeConnectsDirectly => _appQrConnectsDirectly;
+
+    public string AppCodeText => _appQrConnectsDirectly
+        ? L.T("On the phone, open Beam and tap the scan button (the code icon next to Nearby devices). The phone connects to this computer by itself, with or without Wi-Fi, and stays paired.")
+        : L.T("On the phone, open Beam and tap the scan button (the code icon next to Nearby devices). Both need to be on the same Wi-Fi; after that they find each other by themselves.");
+
+    public bool IsHostingStarting => _hostingStarting;
+
+    /// <summary>The browser page's code (also pairs the Beam app, over the shared Wi-Fi).</summary>
     public Geometry? Qr
     {
         get => _qr;
@@ -127,57 +140,9 @@ public sealed class PhoneViewModel : ObservableObject
         private set => SetProperty(ref _copyStatus, value);
     }
 
-    /// <summary>This computer can create its own Wi-Fi for a phone (Wi-Fi Direct): for iPhones, or when there is no shared Wi-Fi.</summary>
-    public bool CanConnectDirectly => _node.Direct.CanHost;
+    public RelayCommand ShowBrowserCommand { get; }
 
-    public bool OffersDirect => IsOn && CanConnectDirectly && !IsDirect && !_directStarting;
-
-    /// <summary>Phones join this computer's own Wi-Fi network instead of a shared one.</summary>
-    public bool IsDirect => _directNetwork != null;
-
-    public bool IsDirectStarting => _directStarting;
-
-    /// <summary>Connecting directly, for the Beam app: one code that pairs and joins this computer's Wi-Fi.</summary>
-    public bool ShowsAppCode => IsDirect && !_showBrowserSteps;
-
-    /// <summary>Connecting directly without the app: join this computer's Wi-Fi with the camera, then open the page.</summary>
-    public bool ShowsBrowserSteps => IsDirect && _showBrowserSteps;
-
-    /// <summary>The page's code (camera opens the link; the app pairs). Over the shared Wi-Fi, or step 2 without the app.</summary>
-    public bool ShowsPageCode => IsOn && (!IsDirect || _showBrowserSteps);
-
-    /// <summary>The Beam app's code while connecting directly: works before the page's address on that network is known.</summary>
-    public Geometry? AppQr
-    {
-        get => _appQr;
-        private set => SetProperty(ref _appQr, value);
-    }
-
-    public RelayCommand ShowBrowserStepsCommand { get; }
-
-    public RelayCommand HideBrowserStepsCommand { get; }
-
-    /// <summary>"Join this Wi-Fi" code for the phone's camera.</summary>
-    public Geometry? WifiQr
-    {
-        get => _wifiQr;
-        private set => SetProperty(ref _wifiQr, value);
-    }
-
-    public string DirectNetworkName => _directNetwork?.Ssid ?? "";
-
-    public string DirectPassword => _directNetwork?.Passphrase ?? "";
-
-    /// <summary>The page's address on the direct network isn't known yet.</summary>
-    public bool IsWaitingForDirectAddress => IsDirect && Link.Length == 0;
-
-    public AsyncCommand ConnectDirectlyCommand { get; }
-
-    public RelayCommand StopDirectCommand { get; }
-
-    public RelayCommand TurnOnCommand { get; }
-
-    public AsyncCommand TurnOffCommand { get; }
+    public AsyncCommand ShowAppCodeCommand { get; }
 
     public AsyncCommand CopyLinkCommand { get; }
 
@@ -189,34 +154,79 @@ public sealed class PhoneViewModel : ObservableObject
 
     private bool HasActivePhoneTransfers => _node.Transfers.Sessions.Any(s => s.PeerId == PhoneLinkServer.PhonePeerId && !s.IsFinished && s.State != TransferState.WaitingForAcceptance);
 
-    /// <summary>Shares paths with the phone (used by the page's buttons and by drag and drop).</summary>
+    /// <summary>The page became visible: show the app's code and, where possible, open this computer's own Wi-Fi.</summary>
+    internal void OnShown()
+    {
+        _shown = true;
+        Refresh();
+        if (!_browserMode) _ = StartHostingAsync();
+    }
+
+    /// <summary>The page was left: this computer's own Wi-Fi stops, unless a phone connected over it.</summary>
+    internal void OnHidden()
+    {
+        _shown = false;
+        StopHosting();
+    }
+
+    /// <summary>Shares paths with the phone's browser (the page's buttons and drag and drop).</summary>
     public async Task ShareAsync(IReadOnlyList<string> paths)
     {
         if (paths.Count == 0) return;
-        if (!IsOn) TurnOn();
+        if (!_browserMode) ShowBrowser();
         if (!IsOn) return;
         try
         {
             _node.PhoneLink.Share(paths);
             Problem = "";
         }
-        catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.SendLimitReached)
-        {
-            if (await _main.ShowUpgradeAsync(ex.Error.Message)) await ShareAsync(paths);
-        }
         catch (TransferException ex)
         {
             Problem = ex.Error.Message;
         }
 
+        await Task.CompletedTask;
         Refresh();
     }
 
-    private void TurnOn()
+    private async Task StartHostingAsync()
     {
+        if (_hosting || _hostingStarting || !_node.Direct.CanHost) return;
+        _hostingStarting = true;
+        Refresh();
         try
         {
-            _node.PhoneLink.Start();
+            await _node.Direct.HostForBrowserAsync(CancellationToken.None);
+            _hosting = true;
+            if (!_shown || _browserMode) StopHosting(); // left meanwhile
+        }
+        catch (Exception ex)
+        {
+            // The code still pairs over the shared Wi-Fi.
+            Log.Warn("This computer's own Wi-Fi for the phone didn't start", ex);
+        }
+        finally
+        {
+            _hostingStarting = false;
+            Refresh();
+        }
+    }
+
+    private void StopHosting()
+    {
+        if (!_hosting) return;
+        _hosting = false;
+        _node.Direct.StopForBrowser();
+        Refresh();
+    }
+
+    private void ShowBrowser()
+    {
+        _browserMode = true;
+        StopHosting();
+        try
+        {
+            if (!IsOn) _node.PhoneLink.Start();
             _lastActivity = DateTime.UtcNow;
             Problem = "";
             _idleTimer.Start();
@@ -230,57 +240,19 @@ public sealed class PhoneViewModel : ObservableObject
         Refresh();
     }
 
-    private async Task ConnectDirectlyAsync()
+    private async Task ShowAppCodeAsync()
     {
-        if (!IsOn || IsDirect || _directStarting) return;
-        _directStarting = true;
+        _browserMode = false;
+        if (!HasActivePhoneTransfers && !IsSharing) await StopBrowserLinkAsync();
         Problem = "";
         Refresh();
-        try
-        {
-            var network = await _node.Direct.HostForBrowserAsync(CancellationToken.None);
-            _directNetwork = network;
-            _directStartedAt = DateTime.UtcNow;
-            _usingAssumedDirectAddress = false;
-            WifiQr = QrCode.Create(network.ToWifiQrText()).Geometry;
-            _directTimer.Start();
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Direct network for the phone failed", ex);
-            Problem = ex is DirectLinkException ? ex.Message : L.T("Couldn't connect directly. Beam continues over the network.");
-        }
-        finally
-        {
-            _directStarting = false;
-            Refresh();
-        }
+        if (_shown) _ = StartHostingAsync();
     }
 
-    private void SetBrowserSteps(bool show)
+    private async Task StopBrowserLinkAsync()
     {
-        _showBrowserSteps = show;
-        Refresh();
-    }
-
-    private void StopDirect()
-    {
-        if (_directNetwork == null) return;
-        _directNetwork = null;
-        _showBrowserSteps = false;
-        AppQr = null;
-        _appQrLink = null;
-        WifiQr = null;
-        _directTimer.Stop();
-        _node.Direct.StopForBrowser();
-        Refresh();
-    }
-
-    private async Task TurnOffAsync()
-    {
-        StopDirect();
         _idleTimer.Stop();
-        await _node.PhoneLink.StopAsync();
+        if (IsOn) await _node.PhoneLink.StopAsync();
         Refresh();
     }
 
@@ -293,51 +265,29 @@ public sealed class PhoneViewModel : ObservableObject
 
     private void Refresh()
     {
+        // The app's code: who this computer is, where, and (once it's on) its own Wi-Fi to join right away.
+        var direct = _hosting;
+        if (AppQr == null || direct != _appQrConnectsDirectly)
+        {
+            _appQrConnectsDirectly = direct;
+            AppQr = QrCode.Create(_node.CreatePairingCode(connectDirectly: direct).AppendTo(null)).Geometry;
+        }
+
         if (IsOn)
         {
-            var links = _node.PhoneLink.GetLinks(_node.GetLocalAddresses());
-            if (IsDirect)
-            {
-                // Only the address on this computer's own Wi-Fi: the phone has no other network then.
-                links = links.Where(l => System.Net.IPAddress.TryParse(new Uri(l).Host, out var ip) && _node.Transfers.IsDirectAddress(ip)).ToList();
-                if (links.Count == 0 && DateTime.UtcNow - _directStartedAt > TimeSpan.FromSeconds(5))
-                {
-                    // Some PCs don't show the direct network's adapter: Windows always takes 192.168.137.1 on it.
-                    if (!_usingAssumedDirectAddress)
-                    {
-                        _usingAssumedDirectAddress = true;
-                        Log.Warn($"Direct network address not found; using 192.168.137.1. Adapters: {DirectAddresses.Describe()}");
-                    }
-
-                    links = new List<string> { $"http://192.168.137.1:{_node.PhoneLink.Port}/{_node.PhoneLink.Token}/" };
-                }
-
-                if (links.Count > 0 && !_usingAssumedDirectAddress) _directTimer.Stop();
-            }
-
+            var links = _node.PhoneLink.GetLinks(_node.GetLocalAddresses())
+                .Where(l => !(System.Net.IPAddress.TryParse(new Uri(l).Host, out var ip) && _node.Transfers.IsDirectAddress(ip))).ToList();
             var link = links.FirstOrDefault() ?? "";
             if (link != Link)
             {
                 Link = link;
                 CopyStatus = "";
-                if (link.Length > 0)
-                {
-                    // The phone's camera opens the link; the Beam app's scanner also reads the pairing part after "#beam=".
-                    Qr = QrCode.Create(_node.CreatePairingCode(connectDirectly: IsDirect).AppendTo(link)).Geometry;
-                }
-                else
-                {
-                    Qr = null;
-                    if (!IsDirect) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
-                }
+                // The phone's camera opens the link; the Beam app's scanner also reads the pairing part after "#beam=".
+                Qr = link.Length > 0 ? QrCode.Create(_node.CreatePairingCode().AppendTo(link)).Geometry : null;
             }
 
+            if (link.Length == 0 && _browserMode) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
             OtherLinks = links.Count > 1 ? L.T("Other networks: {0}", string.Join("  ·  ", links.Skip(1))) : "";
-            if (IsDirect && (AppQr == null || _appQrLink != Link))
-            {
-                _appQrLink = Link;
-                AppQr = QrCode.Create(_node.CreatePairingCode(connectDirectly: true).AppendTo(Link.Length > 0 ? Link : null)).Geometry;
-            }
         }
         else
         {
@@ -348,11 +298,9 @@ public sealed class PhoneViewModel : ObservableObject
 
         foreach (var name in new[]
                  {
-                     nameof(IsOn), nameof(IsOff), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText),
-                     nameof(IsConnected), nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
-                     nameof(CanConnectDirectly), nameof(OffersDirect), nameof(IsDirect), nameof(IsDirectStarting),
-                     nameof(DirectNetworkName), nameof(DirectPassword), nameof(IsWaitingForDirectAddress),
-                     nameof(ShowsAppCode), nameof(ShowsBrowserSteps), nameof(ShowsPageCode),
+                     nameof(IsOn), nameof(ShowsAppCode), nameof(ShowsBrowserCode), nameof(AppCodeConnectsDirectly), nameof(AppCodeText),
+                     nameof(IsHostingStarting), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText), nameof(IsConnected),
+                     nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
                  })
         {
             OnPropertyChanged(name);

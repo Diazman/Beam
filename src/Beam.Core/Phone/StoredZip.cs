@@ -32,10 +32,9 @@ internal static class StoredZip
     public static long Length(IReadOnlyList<Item> items) => Plan(items).Length;
 
     /// <summary>
-    /// Writes the archive. <paramref name="beforeWrite"/> runs before each block of file data (rate limiting);
-    /// <paramref name="fileDone"/> runs after each file's data was written.
+    /// Writes the archive. <paramref name="fileDone"/> runs after each file's data was written.
     /// </summary>
-    public static async Task WriteAsync(Stream output, IReadOnlyList<Item> items, Func<int, Task> beforeWrite, Action<Item, long> progress,
+    public static async Task WriteAsync(Stream output, IReadOnlyList<Item> items, Action<Item, long> progress,
         Action<Item> fileDone, CancellationToken token)
     {
         var layout = Plan(items);
@@ -53,7 +52,6 @@ internal static class StoredZip
             {
                 var read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), token).ConfigureAwait(false);
                 if (read == 0) throw new IOException($"{entry.Item.Name} got smaller while it was being sent.");
-                await beforeWrite(read).ConfigureAwait(false);
                 await output.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
                 remaining -= read;
                 progress(entry.Item, read);

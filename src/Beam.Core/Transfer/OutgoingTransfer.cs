@@ -360,7 +360,6 @@ internal sealed class OutgoingTransfer
 
                     var chunk = current;
                     var length = read;
-                    await _service.SendLimiter.WaitAsync(length, token).ConfigureAwait(false);
                     await WriteAsync(io, t => connection.Channel.SendDataAsync(chunk, length, t), token).ConfigureAwait(false);
                     sent += read;
                     _session.AddTransferred(read);
@@ -469,7 +468,6 @@ internal sealed class OutgoingTransfer
         footer.CopyTo(frames, position);
 
         _session.SetCurrentFile(_manifest!.Entries[index].RelativePath);
-        if (data.Length > 0) await _service.SendLimiter.WaitAsync(data.Length, token).ConfigureAwait(false);
         await WriteAsync(io, t => connection.Channel.SendFramesAsync(frames, t), token).ConfigureAwait(false);
         _session.AddTransferred(data.Length);
         if (state.RemoteCancel != null) ThrowIfRemoteCancelled(state);

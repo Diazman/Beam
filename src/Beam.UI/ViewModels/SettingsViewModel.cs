@@ -6,7 +6,6 @@ using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Identity;
-using Beam.Core.Licensing;
 using Beam.Core.Localization;
 using Beam.Core.Util;
 using Beam.Core.Settings;
@@ -63,7 +62,6 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly MainViewModel _main;
     private string _deviceName;
     private string _nameStatus = "";
-    private string _proStatus = "";
     private bool _suppress;
 
     public SettingsViewModel(BeamNode node, IPlatformServices platform, IUiServices ui, MainViewModel main)
@@ -84,8 +82,7 @@ public sealed class SettingsViewModel : ObservableObject
         ResetFolderCommand = new RelayCommand(() => _node.Settings.Update(s => s.ReceiveFolder = _platform.DefaultReceiveFolder), () => !UsesDefaultFolder);
         OpenLogsCommand = new RelayCommand(() => _platform.ShareLog(_node.Paths.LogDirectory));
         CopyAddressCommand = new AsyncCommand(() => _ui.CopyToClipboardAsync(LocalAddresses));
-        UpgradeCommand = new AsyncCommand(() => _main.ShowUpgradeAsync());
-        RestorePurchaseCommand = new AsyncCommand(RestorePurchaseAsync);
+        OpenPrivacyCommand = new RelayCommand(() => _main.Platform.OpenUrl(AppInfo.PrivacyPolicyUrl));
 
         ThemeOptions = new[]
         {
@@ -190,7 +187,9 @@ public sealed class SettingsViewModel : ObservableObject
         get => _node.Settings.Current.Connection == ConnectionMethod.Direct;
         set
         {
-            if (value) Apply(s => s.Connection = ConnectionMethod.Direct);
+            if (!value) return;
+            Apply(s => s.Connection = ConnectionMethod.Direct);
+            if (_main.IsPhone) _ = _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices);
         }
     }
 
@@ -242,40 +241,11 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string SecurityCode => DeviceIdentity.ShortCode(_node.Identity.Fingerprint);
 
-    public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version} · {_node.Edition.EditionName}";
+    public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version}";
 
     public string DataFolder => _node.Paths.Root;
 
-    public bool IsPro => _node.Edition.IsPro;
-
-    public bool IsFree => !IsPro;
-
-    public bool IsLaunchPeriod => _node.Edition.IsLaunchPeriod;
-
-    public string PlanTitle => IsPro ? "Beam Pro" : IsLaunchPeriod ? L.T("Beam Pro is free while Beam is new") : "Beam Free";
-
-    public string UpgradeButtonText => IsLaunchPeriod ? L.T("Claim Beam Pro free") : L.T("Upgrade to Pro");
-
-    public string PlanDescription => IsPro
-        ? L.T("Thank you for supporting Beam! You can send to several computers at once, at full speed, as often as you like.")
-        : IsLaunchPeriod
-            ? _main.Pro.CanPurchase
-                ? L.T("Right now everything in Beam is free and unlimited. Claim Beam Pro and it stays yours for good, even after the launch period ends.")
-                : L.T("Right now everything in Beam is free and unlimited. Claim Beam Pro and it stays yours for good, even after the launch period ends. Claiming works in the Microsoft Store version of Beam.")
-        : L.T("Send to one computer at a time, at up to {0}/s, {1} times a day. Today you've used {2} of {1}. Receiving files is always free and unlimited.",
-            Format.Bytes(FreeLimits.MaxSendBytesPerSecond), FreeLimits.SendsPerDay, _node.Quota.UsedToday);
-
-    public bool CanRestorePurchase => _main.Pro.CanPurchase && IsFree;
-
-    public string ProStatus
-    {
-        get => _proStatus;
-        private set => SetProperty(ref _proStatus, value);
-    }
-
-    public AsyncCommand UpgradeCommand { get; }
-
-    public AsyncCommand RestorePurchaseCommand { get; }
+    public RelayCommand OpenPrivacyCommand { get; }
 
     public RelayCommand SaveNameCommand { get; }
 
@@ -296,23 +266,10 @@ public sealed class SettingsViewModel : ObservableObject
         if (normalized != _node.Settings.Current.DeviceName)
         {
             _node.Settings.Update(s => s.DeviceName = normalized);
-            NameStatus = L.T("Saved. Nearby computers will see the new name.");
+            NameStatus = L.T("Saved. Nearby devices will see the new name.");
         }
 
         if (DeviceName != normalized) DeviceName = normalized;
-    }
-
-    internal void OnEditionChanged()
-    {
-        foreach (var name in new[] { nameof(IsPro), nameof(IsFree), nameof(PlanTitle), nameof(PlanDescription), nameof(UpgradeButtonText), nameof(CanRestorePurchase), nameof(VersionText) })
-            OnPropertyChanged(name);
-    }
-
-    private async Task RestorePurchaseAsync()
-    {
-        ProStatus = L.T("Checking…");
-        await _main.Pro.RefreshAsync();
-        ProStatus = IsPro ? "" : L.T("No Beam Pro purchase was found for the Microsoft account signed in to the Store.");
     }
 
     private void Apply(Action<AppSettings> change, Action? sideEffect = null)
@@ -334,7 +291,6 @@ public sealed class SettingsViewModel : ObservableObject
                          nameof(Discoverable), nameof(NotificationsEnabled), nameof(NotifyOnIncomingRequest),
                          nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(SelectedLanguage),
                          nameof(LanguageNeedsRestart), nameof(LocalAddresses), nameof(UseSameNetwork), nameof(UseDirect),
-                         nameof(PlanDescription),
                      })
             {
                 OnPropertyChanged(name);

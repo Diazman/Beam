@@ -42,7 +42,7 @@ FAST AND RELIABLE
 
 PRIVATE AND SECURE
 • Files never leave your network and never touch a server — Beam has no servers.
-• Every transfer is encrypted, and nothing is received without your permission.
+• Transfers between Beam apps are encrypted, and nothing is received without your permission.
 • No account, no sign-up, no ads, no tracking.
 
 SIMPLE
@@ -52,28 +52,21 @@ SIMPLE
 • Runs quietly in the notification area so others can send you files any time.
 • Light and dark themes.
 
-PHONES TOO — NO APP NEEDED
-• Send photos and videos from any iPhone or Android phone to your PC, and files from your PC to the phone.
-• Just scan the code Beam shows with the phone's camera. The phone uses its web browser; nothing to install.
+PHONES TOO
+• With the Beam app for Android, scan the code on Beam's Phone page once. From then on the phone and
+  your PC find each other by themselves, and can even connect directly without a Wi-Fi network.
+• Any other phone, including iPhone, can use its web browser: on the same Wi-Fi, scan the code with
+  the phone's camera. No app needed.
 
 Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks automatic discovery,
 connect using the address Beam shows on the other computer.
 
-FREE WHILE BEAM IS NEW
-Right now everything in Beam is free and unlimited. Claim Beam Pro in the app at no cost and keep it
-for good — even after the launch period ends. Beam Pro includes:
-• Send to several computers at once
-• Full speed — as fast as your network allows
-• Unlimited sends
-• Every future Pro feature in Beam for Windows
-
 ## What's new in this version
-Version 1.2
-• Beam Pro is free during the launch period — claim it in the app and keep it for good.
-• "Send with Beam": right-click files or folders in File Explorer, or use the Windows Share dialog.
-• Send text and links between computers. If the other computer trusts yours, they go straight to its clipboard.
-• Beam now speaks Turkish, Russian and Uzbek.
-• The phone page now opens in your phone's language.
+Version 1.4
+• Beam is now completely free: no limits on speed or the number of sends.
+• New Phone page: one code for the Beam app for Android (pairs once, then they find each other, even without Wi-Fi), or connect any phone with its browser.
+• Direct connection (beta): computer and phone connect to each other without a router.
+• Many fixes and smaller improvements.
 
 ## Product features (up to 20, one per line)
 Send to and from any phone by scanning a code (no app needed)
@@ -82,14 +75,13 @@ Drag and drop files and whole folders
 "Send with Beam" from the File Explorer right-click menu and the Windows Share dialog
 Send text and links — straight to the clipboard on computers that trust you
 You approve incoming files, or trust your own computers to skip asking
-Encrypted, direct computer-to-computer transfers
+Encrypted, direct transfers between Beam apps
 Resumes interrupted transfers
 Verifies every file after transfer
 Keeps folder structure and file dates
 Replace, keep both or skip existing files
 Live progress, speed and time remaining
-Send to several computers at once (Pro)
-Full-speed, unlimited sending (Pro)
+Send to several computers at once
 Multiple transfers at once
 Transfer history
 Works without internet
@@ -106,22 +98,13 @@ Productivity (subcategory: none) — alternatively Utilities & tools.
 ## Other listing fields
 | Field | Value |
 |---|---|
-| Privacy policy URL | A public URL of `PRIVACY.md` (see docs/STORE-SUBMISSION.md, step 6) |
+| Privacy policy URL | https://gist.github.com/Diazman/270d981925698b36032600fbd8b58ddb |
 | Website | https://github.com/Diazman (or your own site) |
 | Support contact | Your support e-mail address |
 | Copyright | © 2026 Diazman |
 | System requirements | Windows 10 version 1809 or later; a local network |
-| Pricing | Free |
-| Age rating questionnaire | No user-generated content shared publicly, no purchases, no location, no personal data collection → typically rated 3+ / Everyone |
+| Pricing | Free (no in-app purchases) |
+| Age rating questionnaire | No user-generated content shared publicly, no purchases (no in-app purchases or add-ons), no location, no personal data collection → typically rated 3+ / Everyone |
 
-## Add-on: Beam Pro
-Create it in Partner Center > your app > **Add-ons > Create a new add-on**:
-
-| Field | Value |
-|---|---|
-| Product type | **Durable**, product lifetime **Forever** |
-| Product ID | `BeamPro` (must be exactly this — the app looks for it) |
-| Title | Beam Pro |
-| Description | Send to several computers at once, at full speed, as often as you like. Includes sending to phones and tablets when Beam for Android and iPhone arrives. |
-| Price | **Free during the launch period** (founding users claim it and keep it). When switching to freemium (docs/PLAN.md step 6.7), change it to a paid tier (e.g. USD 4.99); the Store converts it to local prices, including Turkish lira. People who claimed it free keep it. |
-| Store listing image (300×300 PNG) | `packaging/store/logos/BeamPro-AddOn-300.png` — the same image for every language |
+## Beam Pro add-on
+Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.
