@@ -460,13 +460,23 @@ public sealed class DirectManager
             IPAddress? host = null;
             var known = Roles.HasFlag(DirectRoles.Join) ? KnownNetworkFor(peer.Id) : null;
             var plan = PlanFor(peer);
-            if (known != null && (viaKnownNetwork || current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
+            // Join the PC's known network straight away when there's no shared network to ask over, and when the direct
+            // link was just lost (the phone usually fell back to its normal Wi-Fi, where asking the PC fails or is slow).
+            var rejoining = _linkedPeers.ContainsKey(peer.Id);
+            if (known != null && (viaKnownNetwork || rejoining || current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
             {
-                // No shared network to ask over, but this phone knows the PC's network (paired): join it directly.
-                Log.Info($"Direct: joining {peer.Name}'s known network {known.Ssid}");
-                host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase) { HostIsComputer = IsComputer(known.Kind, current.Platform) }, token)
-                    .ConfigureAwait(false);
-                plan = Plan.None;
+                Log.Info($"Direct: {(rejoining ? "rejoining" : "joining")} {peer.Name}'s known network {known.Ssid}");
+                try
+                {
+                    host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase) { HostIsComputer = IsComputer(known.Kind, current.Platform) }, token)
+                        .ConfigureAwait(false);
+                    plan = Plan.None;
+                }
+                catch (DirectLinkException ex) when (rejoining && !viaKnownNetwork && plan == Plan.JoinPeer && current.Endpoints.Count > 0 && !token.IsCancellationRequested)
+                {
+                    // Its network may have changed (new password): ask it over the shared network instead.
+                    Log.Warn($"Direct: rejoining {known.Ssid} failed ({ex.Message}); asking {peer.Name} instead");
+                }
             }
 
             switch (plan)

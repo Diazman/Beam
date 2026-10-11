@@ -345,6 +345,26 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task ReconnectTakesOverWhenTheReceiverHasNotNoticedTheOldConnectionDied()
+    {
+        // The phone dropped off the computer's network and came back: the computer's side of the old connection
+        // is still open and silent, and used to refuse the reconnect with "Transfer is already in progress".
+        await using var sender = new TestNode("Phone");
+        await using var receiver = new TestNode("PC");
+        var file = sender.CreateFile("video.mp4", 40L * 1024 * 1024, 11);
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
+
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { file });
+        await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 8L * 1024 * 1024, because: "transferring");
+        proxy.CutClientsOnly();
+
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+        Assert.Single(receiver.Handler.Requests); // resumed, not asked again
+    }
+
+    [Fact]
     public async Task CorruptedPartialFileIsDetectedAndResent()
     {
         await using var sender = new TestNode("Sender");

@@ -202,6 +202,8 @@ public sealed class FlakyProxy : IDisposable
     private readonly IPEndPoint _target;
     private readonly CancellationTokenSource _cts = new();
     private readonly List<Socket> _sockets = new();
+    private readonly Dictionary<Socket, Socket> _clients = new();
+    private readonly HashSet<Socket> _silenced = new();
 
     public FlakyProxy(IPEndPoint target)
     {
@@ -234,6 +236,24 @@ public sealed class FlakyProxy : IDisposable
         {
             foreach (var socket in _sockets) socket.Dispose();
             _sockets.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Drops only the sender's side: the receiver's connection stays open and silent, like a phone that left the
+    /// network without the computer noticing yet.
+    /// </summary>
+    public void CutClientsOnly()
+    {
+        lock (_sockets)
+        {
+            foreach (var (client, server) in _clients)
+            {
+                _silenced.Add(server);
+                client.Dispose();
+            }
+
+            _clients.Clear();
         }
     }
 
@@ -281,6 +301,7 @@ public sealed class FlakyProxy : IDisposable
             {
                 _sockets.Add(client);
                 _sockets.Add(server);
+                _clients[client] = server;
             }
 
             var cut = CutAfterBytes;
@@ -322,6 +343,11 @@ public sealed class FlakyProxy : IDisposable
         catch
         {
             // connection torn down
+        }
+
+        lock (_sockets)
+        {
+            if (_silenced.Contains(to) || _silenced.Contains(from)) return;
         }
 
         try { to.Shutdown(SocketShutdown.Send); } catch { /* ignore */ }

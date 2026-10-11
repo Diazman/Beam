@@ -223,6 +223,23 @@ public sealed class TransferService : IAsyncDisposable
 
     internal void ReleasePrompt(string fingerprint) => _promptingFingerprints.TryRemove(fingerprint, out _);
 
+    /// <summary>
+    /// The sender reconnected to resume <paramref name="transferId"/> while this device still thinks the old connection is
+    /// alive (a dropped Wi-Fi often isn't noticed here for a while): drop the old connection and wait until it has saved
+    /// its progress, so the new one can take over instead of being refused.
+    /// </summary>
+    internal async Task TakeOverStaleTransferAsync(string transferId, string fingerprint, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(transferId + TransferDirection.Receive, out var existing) || existing.IsFinished
+            || existing.State is TransferState.Interrupted
+            || !string.Equals(existing.PeerFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)) return;
+        if (!existing.InterruptConnection(switchingPath: false)) return;
+        Log.Info($"{existing.PeerName} reconnected for {transferId}; dropping the old connection");
+        var deadline = Environment.TickCount64 + 10_000;
+        while (!existing.IsFinished && existing.State is not TransferState.Interrupted && Environment.TickCount64 < deadline)
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+    }
+
     internal TransferSession CreateIncomingSession(string transferId, PeerConnection connection, bool reuseInterrupted = false)
     {
         var key = transferId + TransferDirection.Receive;

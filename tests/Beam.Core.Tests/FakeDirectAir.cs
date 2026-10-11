@@ -21,7 +21,24 @@ public sealed class FakeDirectAir
 
     public int Stopped => Volatile.Read(ref _stopped);
 
-    public IDirectLink Link(DirectRoles roles) => new FakeLink(this, roles);
+    private readonly List<FakeLink> _links = new();
+
+    public IDirectLink Link(DirectRoles roles)
+    {
+        var link = new FakeLink(this, roles);
+        _links.Add(link);
+        return link;
+    }
+
+    /// <summary>Whether a joiner is on the host's network right now.</summary>
+    public bool LinkUp { get; private set; }
+
+    /// <summary>The joiner fell off the host's network (e.g. the phone went back to its normal Wi-Fi).</summary>
+    public void LoseLink()
+    {
+        LinkUp = false;
+        foreach (var link in _links.Where(l => l.Roles.HasFlag(DirectRoles.Join))) link.RaiseLost();
+    }
 
     /// <summary>Whether the host's direct network shows up in Wi-Fi scans (phones notice paired PCs this way).</summary>
     /// <summary>The network details the last join was given (including how to join it).</summary>
@@ -57,7 +74,7 @@ public sealed class FakeDirectAir
         };
     }
 
-    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner
+    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents
     {
         private readonly FakeDirectAir _air;
 
@@ -82,9 +99,14 @@ public sealed class FakeDirectAir
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
             _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);
+            _air.LinkUp = true;
             _air._onJoined?.Invoke();
             return DirectAddress;
         }
+
+        public event Action? Lost;
+
+        public void RaiseLost() => Lost?.Invoke();
 
         public IReadOnlyCollection<string> VisibleNetworks() =>
             _air.InRange && _air._network != null ? new[] { _air._network.Ssid } : Array.Empty<string>();
