@@ -281,4 +281,24 @@ public class PairingTests
         Assert.Equal(ConnectionMethod.Direct, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
         await Wait.UntilAsync(() => pc.Node.Direct.MethodFor(phone.Node.Identity.DeviceId) == ConnectionMethod.Direct, because: "the PC was told");
     }
+
+    [Fact]
+    public async Task AfterTheDirectNetworkIsLostThePhoneRejoinsItWithoutAskingThePcFirst()
+    {
+        // The phone fell back to its normal Wi-Fi mid-transfer: asking the PC over that network fails or is slow,
+        // while the PC's network is still there to rejoin.
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        phone.Node.Transfers.IsDirectAddress = a => a.Equals(FakeDirectAir.DirectAddress) && air.LinkUp; // like a real adapter
+        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        Assert.Equal(1, air.Hosted);
+        Assert.Equal(1, air.Joined);
+
+        air.LoseLink();
+        await phone.Node.Direct.ConnectAsync(pc.AsDevice(), CancellationToken.None);
+        Assert.Equal(2, air.Joined);
+        Assert.Equal(1, air.Hosted); // rejoined its known network; didn't ask the PC to start one
+    }
 }

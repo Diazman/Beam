@@ -49,6 +49,7 @@ internal sealed class IncomingTransfer
         var manifestHash = ResumeStore.ComputeManifestHash(offer.Entries);
         if (offer.Resume)
         {
+            await _service.TakeOverStaleTransferAsync(offer.TransferId, Fingerprint, serviceToken).ConfigureAwait(false);
             var record = _service.ResumeStore.TryLoad(offer.TransferId);
             if (record != null && string.Equals(record.SenderFingerprint, Fingerprint, StringComparison.OrdinalIgnoreCase)
                 && record.ManifestHash == manifestHash)

@@ -42,6 +42,7 @@ public sealed class DiscoveryService : IDisposable
     private readonly ConcurrentDictionary<string, Entry> _devices = new();
     private readonly ConcurrentDictionary<string, long> _lastReplyTo = new();
     private readonly ConcurrentDictionary<IPEndPoint, byte> _unicastTargets = new();
+    private readonly ConcurrentDictionary<IPEndPoint, string> _failingTargets = new();
     private readonly object _sendGate = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _wake = new(0);
@@ -94,18 +95,7 @@ public sealed class DiscoveryService : IDisposable
     {
         try
         {
-            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            socket.EnableBroadcast = true;
-            socket.MulticastLoopback = true;
-            if (OperatingSystem.IsWindows())
-            {
-                // Stop ICMP "port unreachable" replies from surfacing as receive errors.
-                const int SioUdpConnReset = unchecked((int)0x9800000C);
-                socket.IOControl(SioUdpConnReset, new byte[] { 0, 0, 0, 0 }, null);
-            }
-
-            socket.Bind(new IPEndPoint(IPAddress.Any, _options.Port));
+            var socket = OpenSocket(_options.Port);
             _socket = socket;
             LocalPort = ((IPEndPoint)socket.LocalEndPoint!).Port;
             IsRunning = true;
@@ -129,6 +119,56 @@ public sealed class DiscoveryService : IDisposable
         Log.Info($"Discovery started on UDP {_options.Port} ({_interfaces.Count} network adapters)");
     }
 
+    private static Socket OpenSocket(int port)
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        try
+        {
+            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            socket.EnableBroadcast = true;
+            socket.MulticastLoopback = true;
+            if (OperatingSystem.IsWindows())
+            {
+                // Stop ICMP "port unreachable" replies from surfacing as receive errors.
+                const int SioUdpConnReset = unchecked((int)0x9800000C);
+                socket.IOControl(SioUdpConnReset, new byte[] { 0, 0, 0, 0 }, null);
+            }
+
+            socket.Bind(new IPEndPoint(IPAddress.Any, port));
+            return socket;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// On Android a socket stays on the network Beam used when it was opened, so after joining or leaving a direct
+    /// network every send failed with "Network is unreachable": open a new one on the network Beam uses now.
+    /// </summary>
+    private void ReopenSocket()
+    {
+        lock (_sendGate)
+        {
+            var old = _socket;
+            if (old == null || _cts.IsCancellationRequested) return;
+            old.Dispose();
+            try
+            {
+                _socket = OpenSocket(LocalPort);
+                _interfaces = new List<LocalInterface>(); // the new socket joins the multicast group on each one again
+            }
+            catch (Exception ex)
+            {
+                _socket = null;
+                IsRunning = false;
+                Log.Error($"Discovery could not reopen UDP port {LocalPort}", ex);
+            }
+        }
+    }
+
     /// <summary>Re-announce right away, e.g. after the device name changed.</summary>
     public void AnnounceNow() => Wake();
 
@@ -136,6 +176,7 @@ public sealed class DiscoveryService : IDisposable
     public void RescanNetworks()
     {
         if (_socket == null) return;
+        if (OperatingSystem.IsAndroid()) ReopenSocket();
         RefreshInterfaces();
         SendToAll(CreatePacket(DiscoveryPacket.TypeQuery));
     }
@@ -229,17 +270,21 @@ public sealed class DiscoveryService : IDisposable
         var buffer = new byte[DiscoveryPacket.MaxSize + 1];
         var token = _cts.Token;
         EndPoint any = new IPEndPoint(IPAddress.Any, 0);
-        while (!token.IsCancellationRequested && _socket != null)
+        while (!token.IsCancellationRequested && _socket is { } socket)
         {
             try
             {
-                var result = await _socket.ReceiveFromAsync(buffer, SocketFlags.None, any, token).ConfigureAwait(false);
+                var result = await socket.ReceiveFromAsync(buffer, SocketFlags.None, any, token).ConfigureAwait(false);
                 if (result.RemoteEndPoint is IPEndPoint remote)
                     Handle(buffer.AsSpan(0, result.ReceivedBytes), remote);
             }
             catch (OperationCanceledException)
             {
                 break;
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or SocketException && !ReferenceEquals(socket, _socket))
+            {
+                // Reopened on another network: listen on the new socket.
             }
             catch (ObjectDisposedException)
             {
@@ -427,10 +472,16 @@ public sealed class DiscoveryService : IDisposable
             try
             {
                 socket.SendTo(data, target);
+                _failingTargets.TryRemove(target, out _);
             }
             catch (Exception ex)
             {
-                Log.Warn($"Discovery unicast to {target} failed: {ex.Message}");
+                // Once per target and error: an address on another network fails every few seconds.
+                if (!_failingTargets.TryGetValue(target, out var known) || known != ex.Message)
+                {
+                    _failingTargets[target] = ex.Message;
+                    Log.Warn($"Discovery unicast to {target} failed: {ex.Message}");
+                }
             }
         }
     }

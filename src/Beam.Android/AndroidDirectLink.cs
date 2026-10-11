@@ -259,33 +259,44 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             .RemoveCapability(NetCapability.Internet)!
             .SetNetworkSpecifier(specifier)!
             .Build();
-        var callback = new WifiCallback(network.Ssid, OnNetworkLost);
-        Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
-        try
+        WifiCallback callback;
+        Android.Net.Network? joined = null;
+        for (var attempt = 1; ; attempt++)
         {
-            connectivity.RequestNetwork(request!, callback, (int)WifiJoinTimeout.TotalMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Wi-Fi: Android refused the network request", ex);
-            throw new DirectLinkException(L.T("This phone couldn't join the direct connection. Move the devices closer together and try again."), ex);
-        }
+            callback = new WifiCallback(network.Ssid, OnNetworkLost);
+            Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
+            var asked = System.Environment.TickCount64;
+            try
+            {
+                connectivity.RequestNetwork(request!, callback, (int)WifiJoinTimeout.TotalMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Wi-Fi: Android refused the network request", ex);
+                throw new DirectLinkException(L.T("This phone couldn't join the direct connection. Move the devices closer together and try again."), ex);
+            }
 
-        _wifiNetwork = callback; // registered: released by ReleaseWifiNetwork
+            _wifiNetwork = callback; // registered: released by ReleaseWifiNetwork
+            try
+            {
+                joined = await callback.Available.Task.WaitAsync(WifiJoinTimeout + TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                joined = null;
+            }
 
-        Android.Net.Network? joined;
-        try
-        {
-            joined = await callback.Available.Task.WaitAsync(WifiJoinTimeout + TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-        }
-        catch (TimeoutException)
-        {
-            joined = null;
+            if (joined != null) break;
+            ReleaseWifiNetwork();
+            // Android sometimes turns the first request down at once (it was still busy with the previous network):
+            // asking again a moment later usually works.
+            if (attempt >= 2 || System.Environment.TickCount64 - asked > 3000) break;
+            Log.Info($"Wi-Fi: Android turned {network.Ssid} down at once; asking again");
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
         }
 
         if (joined == null)
         {
-            ReleaseWifiNetwork();
             throw new DirectLinkException(L.T("This phone couldn't join the direct connection. When the phone asks to connect to the DIRECT-… network, tap Connect. Move the devices closer together and try again."));
         }
 
