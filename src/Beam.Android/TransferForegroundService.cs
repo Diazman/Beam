@@ -117,7 +117,7 @@ internal sealed class TransferKeepAlive
             if (_wifiLock == null && _context.GetSystemService(Context.WifiService) is WifiManager wifi)
             {
 #pragma warning disable CA1422 // the high-performance lock is the one that still works on older phones
-                _wifiLock = wifi.CreateWifiLock(OperatingSystem.IsAndroidVersionAtLeast(29) ? WifiMode.FullLowLatency : WifiMode.FullHighPerf, "Beam transfer");
+                _wifiLock = wifi.CreateWifiLock(OperatingSystem.IsAndroidVersionAtLeast(29) ? global::Android.Net.WifiMode.FullLowLatency : global::Android.Net.WifiMode.FullHighPerf, "Beam transfer");
 #pragma warning restore CA1422
                 _wifiLock?.SetReferenceCounted(false);
                 _wifiLock?.Acquire();
