@@ -22,6 +22,14 @@ public static class AppInfo
     /// <summary>Preferred TCP port for transfers. If it is busy, a nearby port is used and announced.</summary>
     public const int TransferPort = 47821;
 
+    public const string PrivacyPolicyUrl = "https://gist.github.com/Diazman/270d981925698b36032600fbd8b58ddb";
+
+    /// <summary>
+    /// Where phones get the Beam app (linked from the phone page in the browser). The test build until the
+    /// Google Play listing is live; then "https://play.google.com/store/apps/details?id=com.diazman.beam".
+    /// </summary>
+    public const string AndroidAppUrl = "https://github.com/Diazman/Beam/releases/download/android-test/Beam-android-test.apk";
+
     public static string Version { get; } =
         typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0]
         ?? typeof(AppInfo).Assembly.GetName().Version?.ToString(3)

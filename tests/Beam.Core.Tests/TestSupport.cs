@@ -86,11 +86,8 @@ public sealed class TestNode : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    /// <param name="pro">Most tests run as Pro so the free edition's speed and daily limits don't apply.</param>
-    public TestNode(string name, bool startDiscovery = false, bool pro = true, bool launchPeriod = false, Files.IExternalFiles? externalFiles = null,
-        Direct.IDirectLink? directLink = null)
+    public TestNode(string name, bool startDiscovery = false, Files.IExternalFiles? externalFiles = null, Direct.IDirectLink? directLink = null)
     {
-        Edition = new Licensing.Edition(pro, launchPeriod);
         Handler = new TestHandler();
         ReceiveFolder = _dir.Combine("received");
         Directory.CreateDirectory(ReceiveFolder);
@@ -99,7 +96,6 @@ public sealed class TestNode : IAsyncDisposable
             Paths = new AppDataPaths(_dir.Combine("data")),
             TransferPort = 0,
             Handler = Handler,
-            Edition = Edition,
             ExternalFiles = externalFiles,
             DirectLink = directLink,
             Discovery = new DiscoveryOptions
@@ -123,8 +119,6 @@ public sealed class TestNode : IAsyncDisposable
     public BeamNode Node { get; }
 
     public TestHandler Handler { get; }
-
-    public Licensing.Edition Edition { get; }
 
     public string ReceiveFolder { get; }
 
@@ -322,5 +316,68 @@ public sealed class FlakyProxy : IDisposable
         }
 
         try { to.Shutdown(SocketShutdown.Send); } catch { /* ignore */ }
+    }
+}
+
+/// <summary>
+/// Files sent from "content://slow/…" addresses are read slowly (about 10 MB/s), so a test can act while a transfer is
+/// still running. Beam itself never limits speed.
+/// </summary>
+public sealed class SlowFiles : Files.IExternalFiles
+{
+    private readonly Dictionary<string, string> _files = new();
+
+    public string Add(string path)
+    {
+        var address = "content://slow/" + Path.GetFileName(path);
+        _files[address] = path;
+        return address;
+    }
+
+    public bool TryGet(string address, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Files.ExternalFile? file)
+    {
+        file = null;
+        if (!_files.TryGetValue(address, out var path)) return false;
+        var info = new FileInfo(path);
+        file = new Files.ExternalFile(info.Name, info.Length, info.LastWriteTimeUtc, () => new SlowStream(File.OpenRead(path)));
+        return true;
+    }
+
+    private sealed class SlowStream : Stream
+    {
+        private readonly Stream _inner;
+
+        public SlowStream(Stream inner) => _inner = inner;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            Thread.Sleep(6);
+            return _inner.Read(buffer, offset, Math.Min(count, 64 * 1024));
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(6, cancellationToken);
+            return await _inner.ReadAsync(buffer[..Math.Min(buffer.Length, 64 * 1024)], cancellationToken);
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _inner.Dispose();
+            base.Dispose(disposing);
+        }
     }
 }

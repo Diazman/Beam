@@ -47,9 +47,6 @@ internal sealed class WindowsDirectLink : IDirectLink
             if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
                 && (preferred == null || preferred == _network)) return _network;
             StopPublisher();
-            // Phones on this network must be able to reach Beam: Windows treats it as a public network.
-            await WindowsFirewall.EnsureForDirectAsync().ConfigureAwait(false);
-
             var network = preferred ?? DirectNetwork.Create(_deviceName());
             var publisher = new WiFiDirectAdvertisementPublisher();
             var advertisement = publisher.Advertisement;

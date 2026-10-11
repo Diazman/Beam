@@ -12,8 +12,9 @@ public class DirectUiTests
     public async Task TransferCardSwitchesBetweenWiFiAndDirectConnection()
     {
         var air = new FakeDirectAir();
-        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true, pro: false,
-            directLink: air.Link(DirectRoles.Host | DirectRoles.Join)); // free edition: 5 MB/s keeps the transfer running
+        var slow = new Beam.Core.Tests.SlowFiles(); // keeps the transfer running
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true,
+            directLink: air.Link(DirectRoles.Host | DirectRoles.Join), externalFiles: slow);
         await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
         await phone.InitializeAsync();
         await laptop.InitializeAsync();
@@ -22,18 +23,19 @@ public class DirectUiTests
         var home = phone.ViewModel.Home;
         await UiHarness.WaitForAsync(() => home.SelectedDevice != null, "laptop selected");
 
-        home.AddPaths(new[] { phone.CreateFile("Holiday.mp4", 40L * 1024 * 1024, 3) });
+        home.AddPaths(new[] { slow.Add(phone.CreateFile("Holiday.mp4", 40L * 1024 * 1024, 3)) });
         home.SendCommand.Execute(null);
         await UiHarness.WaitForAsync(() => phone.ViewModel.Transfers.Count == 1 && phone.ViewModel.Transfers[0].State == TransferState.Transferring, "sending");
         var card = phone.ViewModel.Transfers[0];
         phone.ViewModel.IsTransfersPage = true;
         await UiHarness.WaitForAsync(() => card.PathText == "Over Wi-Fi", "path shown");
-        Assert.True(card.CanSwitchToDirect);
+        Assert.False(card.CanSwitchToDirect); // Direct connection is a beta people choose in Settings
         Assert.False(card.CanSwitchToNetwork);
-        Assert.Contains("Connect directly", phone.VisibleTexts());
+        Assert.DoesNotContain("Connect directly", phone.VisibleTexts());
         phone.Screenshot("direct-01-over-wifi");
 
-        card.SwitchToDirectCommand.Execute(null);
+        // Choosing Direct connection in Settings moves the running transfer onto a direct link.
+        phone.ViewModel.Settings.UseDirect = true;
         await UiHarness.WaitForAsync(() => card.PathText == "Direct connection", "switched to direct", 25000);
         Assert.True(card.IsDirectPath);
         Assert.False(card.CanSwitchToDirect);
@@ -82,78 +84,59 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task PhonePageCanMakeTheComputersOwnWiFiForAnIPhone()
+    public async Task PhonePageStartsThisComputersWiFiForTheAppCode()
     {
         var air = new FakeDirectAir();
         await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
         await app.InitializeAsync();
-        // Pretend this computer's network address is on its direct network once that is up.
-        app.Node.Transfers.IsDirectAddress = ip => air.Hosted > 0 && !System.Net.IPAddress.IsLoopback(ip);
         var phone = app.ViewModel.Phone;
-        app.ViewModel.IsPhonePage = true;
-        phone.TurnOnCommand.Execute(null);
-        await UiHarness.PumpAsync(100);
-        Assert.True(phone.OffersDirect);
-        Assert.Contains("No Wi-Fi network? Connect directly", app.VisibleTexts());
 
-        phone.ConnectDirectlyCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => phone.IsDirect, "direct network started");
+        // Opening the Phone page turns this computer's own Wi-Fi on; the app's code then says to join it.
+        app.ViewModel.IsPhonePage = true;
+        await UiHarness.WaitForAsync(() => phone.AppCodeConnectsDirectly, "own Wi-Fi on");
         Assert.Equal(1, air.Hosted);
-        Assert.NotNull(phone.WifiQr);
-        Assert.StartsWith("DIRECT-", phone.DirectNetworkName);
-        Assert.False(phone.OffersDirect);
-        await UiHarness.WaitForAsync(() => phone.Link.Length > 0, "page address on the direct network");
-        await UiHarness.PumpAsync(100);
-        // Only the Beam app's code: it pairs and joins this computer's network in one scan.
-        var texts = app.VisibleTexts();
-        Assert.Contains("Scan this code in the Beam app", texts);
-        Assert.DoesNotContain("Step 1: join this computer's Wi-Fi", texts);
-        Assert.DoesNotContain("Scan with your phone's camera", texts);
-        Assert.NotNull(phone.AppQr);
         Assert.True(app.Node.CreatePairingCode(connectDirectly: true).ConnectDirectly);
+        Assert.Contains("The phone has no internet while it's connected to this computer's Wi-Fi.", app.VisibleTexts());
         app.Screenshot("direct-04-app-code");
 
-        // No app (iPhone): join the Wi-Fi with the camera, then open the page.
-        phone.ShowBrowserStepsCommand.Execute(null);
+        // The browser code is for the shared Wi-Fi only: this computer's own Wi-Fi goes off.
+        phone.ShowBrowserCommand.Execute(null);
         await UiHarness.PumpAsync(100);
-        texts = app.VisibleTexts();
-        Assert.Contains("Step 1: join this computer's Wi-Fi", texts);
-        Assert.Contains("Scan with your phone's camera", texts);
-        Assert.DoesNotContain("Scan this code in the Beam app", texts);
-        app.Screenshot("direct-04b-browser-steps");
-        phone.HideBrowserStepsCommand.Execute(null);
-        Assert.True(phone.ShowsAppCode);
-
-        phone.StopDirectCommand.Execute(null);
-        Assert.False(phone.IsDirect);
         Assert.Equal(1, air.Stopped);
-        Assert.True(phone.OffersDirect);
-        phone.TurnOffCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => phone.IsOff, "turned off");
+        Assert.DoesNotContain("192.168.137.", phone.Link);
+
+        // Leaving the page turns it off too (unless a phone connected over it).
+        phone.ShowAppCodeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.AppCodeConnectsDirectly, "own Wi-Fi on again");
+        app.ViewModel.ShowHomeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => air.Stopped == 2, "own Wi-Fi off");
     }
 
     [AvaloniaFact]
-    public async Task StartupOffersToAllowDirectConnectionsThroughTheFirewall()
+    public async Task FirewallIsOnlyAskedAboutWhenThisComputerFirstConnectsDirectly()
     {
-        await using var app = new UiHarness("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
+        var air = new FakeDirectAir();
+        await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
         app.Platform.FirewallBlocks = true;
-        var init = app.InitializeAsync();
+        await app.InitializeAsync();
+        Assert.Null(app.ViewModel.Dialog); // nothing at startup
+
+        // Starting this computer's own network asks first, with the reason, then goes ahead.
+        var hosting = app.Node.Direct.HostForBrowserAsync(CancellationToken.None);
         await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
         var dialog = (ViewModels.Dialogs.ConfirmViewModel)app.ViewModel.Dialog!;
         Assert.Equal("Allow direct connections?", dialog.Title);
         app.Screenshot("direct-05-firewall");
         dialog.PrimaryCommand.Execute(null);
-        await init;
+        await hosting;
         Assert.Contains("allow-firewall", app.Platform.Calls);
+        Assert.Equal(1, air.Hosted);
 
-        // "Not now" is remembered: no question at the next start.
-        await using var other = new UiHarness("Desktop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
-        other.Platform.FirewallBlocks = true;
-        var second = other.InitializeAsync();
-        await UiHarness.WaitForAsync(() => other.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
-        ((ViewModels.Dialogs.ConfirmViewModel)other.ViewModel.Dialog!).SecondaryCommand.Execute(null);
-        await second;
-        Assert.True(other.Node.Settings.Current.FirewallPromptDeclined);
+        // Only once per run.
+        app.Platform.FirewallBlocks = true;
+        app.Node.Direct.StopForBrowser();
+        await app.Node.Direct.HostForBrowserAsync(CancellationToken.None);
+        Assert.Null(app.ViewModel.Dialog);
     }
 
     [AvaloniaFact]

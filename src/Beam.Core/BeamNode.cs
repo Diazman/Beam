@@ -6,7 +6,6 @@ using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.History;
 using Beam.Core.Identity;
-using Beam.Core.Licensing;
 using Beam.Core.Phone;
 using Beam.Core.Settings;
 using Beam.Core.Storage;
@@ -24,8 +23,6 @@ public sealed class BeamNodeOptions
     public DiscoveryOptions Discovery { get; init; } = new();
 
     public IIncomingTransferHandler? Handler { get; init; }
-
-    public IEditionPolicy Edition { get; init; } = new Edition();
 
     /// <summary>Opens files handed over as streams (Android content:// URIs). Null on desktop.</summary>
     public IExternalFiles? ExternalFiles { get; init; }
@@ -64,15 +61,13 @@ public sealed class BeamNode : IAsyncDisposable
         ResumeStore.CleanupExpired();
         _handler = new DelegatingHandler { Inner = options.Handler };
 
-        Quota = new SendQuota(options.Paths.UsageFile, options.Edition);
         Transfers = new TransferService(Identity, ResumeStore, _handler, CreatePolicy, () => Settings.Current.DeviceName,
-            deviceKind: options.DeviceKind is { } kind ? () => kind : null,
-            sendBytesPerSecond: () => options.Edition.IsEnabled(Feature.FullSpeed) ? 0 : FreeLimits.MaxSendBytesPerSecond)
+            deviceKind: options.DeviceKind is { } kind ? () => kind : null)
         {
             ExternalFiles = options.ExternalFiles,
         };
         Transfers.SessionFinished += RecordHistory;
-        PhoneLink = new PhoneLinkServer(Transfers, Quota, () => Settings.Current.DeviceName, CreatePolicy, _handler);
+        PhoneLink = new PhoneLinkServer(Transfers, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint,
                 options.DeviceKind ?? DeviceKinds.Desktop, Direct!.Roles));
@@ -97,13 +92,8 @@ public sealed class BeamNode : IAsyncDisposable
     /// <summary>Same network or direct Wi-Fi link, per device and switchable during transfers.</summary>
     public DirectManager Direct { get; }
 
-    public IEditionPolicy Edition => _options.Edition;
-
     /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
     public PhoneLinkServer PhoneLink { get; }
-
-    /// <summary>The free edition's daily send limit.</summary>
-    public SendQuota Quota { get; }
 
     public AppDataPaths Paths => _options.Paths;
 
@@ -128,16 +118,10 @@ public sealed class BeamNode : IAsyncDisposable
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
-    /// <summary>
-    /// Starts sending to one device. Each call counts as one send towards the free edition's daily
-    /// limit; throws <see cref="TransferException"/> (<see cref="TransferErrorKind.SendLimitReached"/>) when it is used up.
-    /// </summary>
+    /// <summary>Starts sending to one device.</summary>
     public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths)
     {
         if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
-        if (!Quota.TryUse())
-            throw new TransferException(TransferErrorKind.SendLimitReached,
-                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
         return Transfers.Send(device, paths, () => Direct.Order(Discovery.Find(device.Id) ?? device));
     }
 
@@ -177,13 +161,10 @@ public sealed class BeamNode : IAsyncDisposable
         return device;
     }
 
-    /// <summary>Sends a piece of text or a link (counts as a send for the free edition).</summary>
+    /// <summary>Sends a piece of text or a link.</summary>
     public TransferSession SendText(DeviceInfo device, string text)
     {
         if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Nothing to send.", nameof(text));
-        if (!Quota.TryUse())
-            throw new TransferException(TransferErrorKind.SendLimitReached,
-                L.Plural(FreeLimits.SendsPerDay, "You've used today's {0} free send. Upgrade to Beam Pro for unlimited sends, or send again tomorrow.", "You've used today's {0} free sends. Upgrade to Beam Pro for unlimited sends, or send again tomorrow."));
         return Transfers.SendText(device, text, () => Direct.Order(Discovery.Find(device.Id) ?? device));
     }
 
@@ -330,9 +311,7 @@ public sealed class BeamNode : IAsyncDisposable
         return new IncomingPolicy
         {
             DefaultFolder = settings.EffectiveReceiveFolder,
-            TrustedFingerprints = _options.Edition.IsEnabled(Feature.TrustedDevices)
-                ? settings.TrustedDevices.Select(t => t.Fingerprint).ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(),
+            TrustedFingerprints = settings.TrustedDevices.Select(t => t.Fingerprint).ToHashSet(StringComparer.OrdinalIgnoreCase),
         };
     }
 

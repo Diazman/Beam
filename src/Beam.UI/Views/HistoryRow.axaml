@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.HistoryRow"
+             x:DataType="vm:HistoryItemViewModel">
+  <!-- One finished transfer: the History page and, on phones, the Transfers tab. -->
+  <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+      <Border Classes="iconBadge" Width="36" Height="36" CornerRadius="18"
+              Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+              Classes.error="{Binding IsError}" Classes.neutral="{Binding IsNeutral}">
+        <PathIcon Data="{Binding Icon}" Width="15" Height="15" />
+      </Border>
+      <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock Classes="caption" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+      <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Right">
+        <TextBlock Text="{Binding StatusText}" FontSize="13" HorizontalAlignment="Right" ToolTip.Tip="{Binding Tooltip}"
+                   Classes.success="{Binding IsSuccess}" Classes.warning="{Binding IsWarning}"
+                   Classes.error="{Binding IsError}" Classes.secondary="{Binding IsNeutral}" />
+        <TextBlock Classes="caption" Text="{Binding When}" HorizontalAlignment="Right" />
+      </StackPanel>
+      <Button Grid.Column="3" Content="{l:T 'Show'}" VerticalAlignment="Center" MinWidth="72"
+              Command="{Binding ShowCommand}" IsVisible="{Binding CanShow}"
+              ToolTip.Tip="{l:T 'Show the received files in their folder'}" />
+      <Button Grid.Column="3" Content="{l:T 'Copy'}" VerticalAlignment="Center" MinWidth="72"
+              Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}"
+              ToolTip.Tip="{l:T 'Copy the text again'}" />
+    </Grid>
+  </Border>
+</UserControl>

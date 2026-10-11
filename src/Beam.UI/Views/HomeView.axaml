@@ -33,24 +33,20 @@
         <!-- Step 1: nearby computers -->
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-            <TextBlock Classes="h2" Text="{l:T 'Nearby computers'}" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a computer?'}"
+            <TextBlock Classes="h2" Text="{l:T 'Nearby devices'}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a device?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding ScanCodeCommand}" IsVisible="{Binding CanScanCodes}"
                     ToolTip.Tip="{l:T 'Scan a computer\'s code to pair with it'}" Margin="4,0,0,0">
               <PathIcon Data="{StaticResource IconQr}" />
             </Button>
             <Button Grid.Column="3" Classes="icon" Command="{Binding RefreshCommand}"
-                    ToolTip.Tip="{l:T 'Look for nearby computers again'}" Margin="4,0,0,0">
+                    ToolTip.Tip="{l:T 'Look for nearby devices again'}" Margin="4,0,0,0">
               <PathIcon Data="{StaticResource IconRefresh}" />
             </Button>
           </Grid>
 
           <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
-          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowMultiSendUpsell}" Margin="0,-4,0,0">
-            <TextBlock Classes="caption" Text="{l:T 'Want to send to several computers at once?'}" VerticalAlignment="Center" />
-            <Button Classes="link" Content="{l:T 'Get Beam Pro'}" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
-          </StackPanel>
 
           <Border Classes="notice warning" IsVisible="{Binding DiscoveryUnavailable}">
             <TextBlock Text="{Binding DiscoveryProblem}" TextWrapping="Wrap" />
@@ -98,7 +94,7 @@
                 </Border>
               </Panel>
               <StackPanel Grid.Column="1" Margin="16,2,0,0" Spacing="4">
-                <TextBlock Classes="h3" Text="{l:T 'Looking for nearby computers…'}" />
+                <TextBlock Classes="h3" Text="{l:T 'Looking for nearby devices…'}" />
                 <TextBlock Classes="secondary" TextWrapping="Wrap"
                            Text="{l:T 'Open Beam on the other computer. It will appear here automatically.'}" />
                 <StackPanel IsVisible="{Binding ShowSearchHint}" Spacing="8" Margin="0,10,0,0">
@@ -133,7 +129,7 @@
               <Button Classes="subtle" Content="{l:T 'Clear'}" Command="{Binding ClearCommand}" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowDropZone}">
-              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="{l:T 'Send a message or a link to the chosen computer'}">
+              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="{l:T 'Send a message or a link to the chosen device'}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{StaticResource IconEdit}" Width="12" Height="12" />
                   <TextBlock Text="{l:T 'Send text or link'}" />
@@ -228,10 +224,6 @@
         <StackPanel VerticalAlignment="Center" Margin="0,0,16,0" Spacing="2">
           <TextBlock Text="{Binding SendSummary}" TextTrimming="CharacterEllipsis"
                      Classes.secondary="{Binding !CanSend}" FontWeight="Normal" />
-          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowFreeLimits}">
-            <TextBlock Classes="caption" Text="{Binding PlanText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Classes="link" Content="{l:T 'Upgrade'}" Command="{Binding UpgradeCommand}" Padding="0" FontSize="12" VerticalAlignment="Center" />
-          </StackPanel>
         </StackPanel>
         <Button Grid.Column="1" Classes="accent large" Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}">
           <StackPanel Orientation="Horizontal" Spacing="8">

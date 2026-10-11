@@ -197,15 +197,4 @@ public class PhoneLinkTests
         using var client = new HttpClient();
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"http://127.0.0.1:{pc.Node.PhoneLink.Port}/{oldToken}/")).StatusCode);
     }
-
-    [Fact]
-    public async Task SharingCountsAsAFreeSend()
-    {
-        await using var pc = new TestNode("Office PC", pro: false);
-        pc.Node.PhoneLink.Start(0);
-        var file = pc.CreateFile("a.txt", 10);
-        for (var i = 0; i < Licensing.FreeLimits.SendsPerDay; i++) pc.Node.PhoneLink.Share(new[] { file });
-        var ex = Assert.Throws<TransferException>(() => pc.Node.PhoneLink.Share(new[] { file }));
-        Assert.Equal(TransferErrorKind.SendLimitReached, ex.Error.Kind);
-    }
 }

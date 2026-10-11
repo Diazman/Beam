@@ -30,7 +30,7 @@ TEZ VA ISHONCHLI
 
 MAXFIY VA XAVFSIZ
 • Fayllar tarmogʻingizdan tashqariga chiqmaydi va hech qanday serverga tushmaydi — Beamning serverlari yoʻq.
-• Har bir uzatish shifrlanadi, ruxsatingizsiz hech narsa qabul qilinmaydi.
+• Beam ilovalari oʻrtasidagi uzatishlar shifrlanadi, ruxsatingizsiz hech narsa qabul qilinmaydi.
 • Akkaunt yoʻq, roʻyxatdan oʻtish yoʻq, reklama yoʻq, kuzatuv yoʻq.
 
 ODDIY
@@ -41,30 +41,21 @@ ODDIY
 • Bildirishnomalar sohasida jimgina ishlab turadi — boshqalar sizga istalgan payt fayl yubora oladi.
 • Yorugʻ va qorongʻi mavzu.
 
-TELEFONLAR BILAN HAM — ILOVASIZ
-• Istalgan iPhone yoki Android telefondan kompyuteringizga foto va videolar, kompyuterdan telefonga
-  esa fayllar yuboring.
-• Beam koʻrsatgan kodni telefon kamerasi bilan skanerlang, xolos. Telefon oʻz brauzeridan foydalanadi —
-  hech narsa oʻrnatish shart emas.
+TELEFONLAR BILAN HAM
+• Android uchun Beam ilovasi bilan Beamdagi «Telefon» sahifasidagi kodni bir marta skanerlang. Shundan
+  soʻng telefon va kompyuter bir-birini oʻzi topadi, hatto Wi-Fi tarmogʻi boʻlmasa ham toʻgʻridan-toʻgʻri ulana oladi.
+• Boshqa har qanday telefon, jumladan iPhone ham, oʻz brauzeridan foydalanishi mumkin: bitta Wi-Fi
+  tarmogʻida kodni telefon kamerasi bilan skanerlang — ilova shart emas.
 
 Wi-Fi, simli tarmoq va Windows mobil hotspoti orqali ishlaydi. Agar tarmoq avtomatik qidiruvni
 bloklasa, Beam boshqa kompyuterda koʻrsatgan manzil orqali ulaning.
 
-BEAM YANGI EKAN — BEPUL
-Hozir Beamdagi barcha imkoniyatlar bepul va cheklovsiz. Ilovada Beam Pro versiyasini bepul oling —
-u ishga tushirish davri tugagach ham butunlay sizda qoladi. Beam Pro bilan:
-• Bir vaqtning oʻzida bir nechta kompyuterga yuborish
-• Toʻliq tezlik — tarmogʻingiz imkon bergancha tez
-• Cheklovsiz yuborish
-• Windows uchun Beamga keladigan barcha kelgusi Pro imkoniyatlari
-
 ## Ushbu versiyadagi yangiliklar (What's new in this version)
-Versiya 1.2
-• Beam Pro ishga tushirish davrida bepul — uni ilovada oling, u butunlay sizda qoladi.
-• «Send with Beam»: File Explorer (Provodnik) oynasida fayl yoki jildlarni oʻng tugma bilan bosing yoki Windows «Ulashish» oynasidan foydalaning.
-• Kompyuterlar oʻrtasida matn va havolalar yuboring. Agar boshqa kompyuter sizning kompyuteringizga ishonsa, ular toʻgʻridan-toʻgʻri uning almashinuv buferiga tushadi.
-• Beam endi turk, rus va oʻzbek tillarida gapiradi.
-• Telefon sahifasi endi telefoningiz tilida ochiladi.
+Versiya 1.4
+• Beam endi butunlay bepul: tezlik va yuborishlar soni boʻyicha hech qanday cheklov yoʻq.
+• Yangi «Telefon» sahifasi: Android uchun Beam ilovasiga bitta kod (bir marta juftlanadi, keyin Wi-Fi boʻlmasa ham bir-birini topadi) yoki istalgan telefonni brauzeri orqali ulang.
+• Toʻgʻridan-toʻgʻri ulanish (beta): kompyuter va telefon routersiz bir-biriga ulanadi.
+• Koʻplab tuzatishlar va kichik yaxshilanishlar.
 
 ## Mahsulot imkoniyatlari (Product features)
 Kodni skanerlab istalgan telefonga yuboring va undan qabul qiling (ilovasiz)
@@ -73,14 +64,13 @@ Fayllar va butun jildlarni sudrab tashlang
 File Explorer kontekst menyusi va Windows «Ulashish» oynasida «Send with Beam»
 Matn va havolalar yuborish — sizga ishonadigan kompyuterlarda toʻgʻridan-toʻgʻri buferga
 Kiruvchi fayllarni siz tasdiqlaysiz yoki oʻz kompyuterlaringizga ishonasiz
-Shifrlangan, toʻgʻridan-toʻgʻri kompyuterdan kompyuterga uzatish
+Beam ilovalari oʻrtasida shifrlangan, toʻgʻridan-toʻgʻri uzatish
 Uzilib qolgan uzatishlarni davom ettiradi
 Har bir faylni uzatishdan keyin tekshiradi
 Jildlar tuzilmasi va fayl sanalarini saqlaydi
 Mavjud fayllar uchun: almashtirish, ikkalasini saqlash yoki oʻtkazib yuborish
 Jarayon, tezlik va qolgan vaqt jonli koʻrinishda
-Bir vaqtda bir nechta kompyuterga yuborish (Pro)
-Toʻliq tezlikda, cheklovsiz yuborish (Pro)
+Bir vaqtda bir nechta kompyuterga yuborish
 Bir vaqtda bir nechta uzatish
 Uzatishlar tarixi
 Internetsiz ishlaydi
@@ -93,8 +83,4 @@ fayl almashish; fayl yuborish; fayl uzatish; wifi orqali fayl; kompyuterdan komp
 
 ## Qoʻshimcha: Beam Pro (Add-on: Beam Pro)
 
-### Nomi (Title)
-Beam Pro
-
-### Tavsif (Description)
-Bir vaqtning oʻzida bir nechta kompyuterga, toʻliq tezlikda va xohlagancha yuboring. Android va iPhone uchun Beam chiqqanda telefon va planshetlarga yuborish ham shunga kiradi.
+Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

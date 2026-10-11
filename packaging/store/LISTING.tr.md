@@ -30,7 +30,7 @@ HIZLI VE GÜVENİLİR
 
 GİZLİ VE GÜVENLİ
 • Dosyalarınız ağınızdan dışarı çıkmaz, hiçbir sunucuya uğramaz. Beam'in sunucusu yok.
-• Her aktarım şifrelenir ve izniniz olmadan hiçbir şey alınmaz.
+• Beam uygulamaları arasındaki aktarımlar şifrelenir ve izniniz olmadan hiçbir şey alınmaz.
 • Hesap yok, kayıt yok, reklam yok, takip yok.
 
 KULLANIMI KOLAY
@@ -40,30 +40,21 @@ KULLANIMI KOLAY
 • Bildirim alanında sessizce çalışır; başkaları size her an dosya gönderebilir.
 • Açık ve koyu tema.
 
-TELEFONLARLA DA ÇALIŞIR, UYGULAMA GEREKMEZ
-• Herhangi bir iPhone veya Android telefondan bilgisayarınıza fotoğraf ve video, bilgisayarınızdan
-  telefona da dosya gönderin.
-• Beam'in gösterdiği kodu telefonun kamerasıyla okutmanız yeterli. Telefon web tarayıcısını kullanır;
-  hiçbir şey yüklemeniz gerekmez.
+TELEFONLARLA DA ÇALIŞIR
+• Android için Beam uygulamasıyla, Beam'in Telefon sayfasındaki kodu bir kez okutun. Ardından telefon
+  ve bilgisayar birbirini kendiliğinden bulur, hatta Wi-Fi ağı olmadan doğrudan bağlanabilir.
+• iPhone dahil diğer tüm telefonlar web tarayıcısını kullanabilir: aynı Wi-Fi'dayken kodu telefonun
+  kamerasıyla okutun, uygulama gerekmez.
 
 Wi-Fi, kablolu ağ ve Windows Mobil Erişim Noktası ile çalışır. Ağ otomatik bulmayı engelliyorsa,
 diğer bilgisayarda Beam'in gösterdiği adresle bağlanın.
 
-BEAM YENİYKEN ÜCRETSİZ
-Şu anda Beam'in tüm özellikleri ücretsiz ve sınırsız. Beam Pro'yu uygulamadan ücretsiz alın, lansman
-dönemi bittikten sonra bile sizde kalsın. Beam Pro ile:
-• Aynı anda birden fazla bilgisayara gönderin
-• Tam hız: ağınız ne kadar hızlıysa o kadar
-• Sınırsız gönderim
-• Windows için Beam'e gelecek tüm Pro özellikleri
-
 ## Bu sürümdeki yenilikler (What's new in this version)
-Sürüm 1.2
-• Beam Pro lansman döneminde ücretsiz: uygulamadan alın, sonsuza dek sizde kalsın.
-• "Send with Beam": Dosya Gezgini'nde dosya veya klasörlere sağ tıklayın ya da Windows Paylaş penceresini kullanın.
-• Bilgisayarlar arasında metin ve bağlantı gönderin. Karşı bilgisayar sizinkine güveniyorsa doğrudan panosuna gider.
-• Beam artık Türkçe, Rusça ve Özbekçe konuşuyor.
-• Telefon sayfası artık telefonunuzun dilinde açılıyor.
+Sürüm 1.4
+• Beam artık tamamen ücretsiz: hızda da gönderim sayısında da sınır yok.
+• Yeni Telefon sayfası: Android için Beam uygulamasına tek bir kod (bir kez eşleşir, sonra Wi-Fi olmadan bile birbirlerini bulurlar) ya da herhangi bir telefonu tarayıcısıyla bağlayın.
+• Doğrudan bağlantı (beta): bilgisayar ve telefon, modem olmadan birbirine bağlanır.
+• Birçok düzeltme ve küçük iyileştirme.
 
 ## Ürün özellikleri (Product features)
 Kod okutarak her telefona gönderin ve telefondan alın (uygulama gerekmez)
@@ -72,14 +63,13 @@ Dosyaları ve klasörlerin tamamını sürükleyip bırakın
 Dosya Gezgini sağ tık menüsünden ve Windows Paylaş penceresinden "Send with Beam"
 Metin ve bağlantı gönderin; size güvenen bilgisayarlarda doğrudan panoya düşer
 Gelen dosyaları siz onaylarsınız ya da kendi bilgisayarlarınıza güvenirsiniz
-Şifreli, doğrudan bilgisayardan bilgisayara aktarım
+Beam uygulamaları arasında şifreli, doğrudan aktarım
 Yarıda kalan aktarımları sürdürür
 Her dosyayı aktarımdan sonra doğrular
 Klasör yapısını ve dosya tarihlerini korur
 Var olan dosyalar için: üzerine yaz, ikisini de tut veya atla
 Canlı ilerleme, hız ve kalan süre
-Aynı anda birden fazla bilgisayara gönderim (Pro)
-Tam hızda, sınırsız gönderim (Pro)
+Aynı anda birden fazla bilgisayara gönderim
 Aynı anda birden fazla aktarım
 Aktarım geçmişi
 İnternetsiz çalışır
@@ -92,8 +82,4 @@ dosya aktarımı; dosya gönderme; dosya paylaşımı; wifi dosya aktarımı; bi
 
 ## Eklenti: Beam Pro (Add-on: Beam Pro)
 
-### Başlık (Title)
-Beam Pro
-
-### Açıklama (Description)
-Aynı anda birden fazla bilgisayara, tam hızda ve dilediğiniz kadar gönderin. Android ve iPhone için Beam çıktığında telefonlara ve tabletlere gönderim de dahil.
+Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

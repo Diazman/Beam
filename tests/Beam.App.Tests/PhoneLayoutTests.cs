@@ -25,12 +25,9 @@ public class PhoneLayoutTests
 
         app.ViewModel.IsTransfersPage = true;
         await UiHarness.PumpAsync(100);
-        Assert.Contains("Nothing being sent or received", app.VisibleTexts());
+        Assert.Contains("No transfers yet", app.VisibleTexts());
+        Assert.DoesNotContain("History", app.VisibleTexts()); // one tab for running and past transfers
         app.Screenshot("phone-2-transfers-empty");
-
-        app.ViewModel.IsHistoryPage = true;
-        await UiHarness.PumpAsync(100);
-        app.Screenshot("phone-3-history");
 
         app.ViewModel.IsSettingsPage = true;
         await UiHarness.PumpAsync(100);
@@ -49,6 +46,9 @@ public class PhoneLayoutTests
         app.ViewModel.IsTransfersPage = true;
         await UiHarness.PumpAsync(100);
         Assert.Equal(TransferState.Completed, app.ViewModel.Transfers[0].State);
+        await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 1, "in the history");
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("History", app.VisibleTexts());
         Assert.Contains("Diaz's Laptop", string.Join(" ", app.VisibleTexts()));
         app.Screenshot("phone-5-transfers");
     }
@@ -77,8 +77,7 @@ public class PhoneLayoutTests
             app.ViewModel.IsSettingsPage = true;
             await UiHarness.PumpAsync(100);
             var texts = app.VisibleTexts();
-            Assert.Contains(Core.Localization.L.T("Let nearby computers find this phone"), texts);
-            Assert.DoesNotContain(Core.Localization.L.T("Your plan"), texts); // Microsoft Store purchase: desktop only
+            Assert.Contains(Core.Localization.L.T("Let nearby devices find this phone"), texts);
             Assert.Empty(app.TextOutsideWindow());
             app.Screenshot("phone-uz-settings");
 
@@ -92,5 +91,61 @@ public class PhoneLayoutTests
         {
             Core.Localization.L.IsPhone = false;
         }
+    }
+}
+
+public class PhoneBehaviourTests
+{
+    [AvaloniaFact]
+    public async Task BackGoesToSendThenLeavesAndClosesDialogsFirst()
+    {
+        await using var app = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        await app.InitializeAsync();
+        app.ViewModel.IsSettingsPage = true;
+        Assert.True(app.ViewModel.GoBack());
+        Assert.True(app.ViewModel.IsHomePage);
+
+        app.ViewModel.Home.ConnectByAddressCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.ViewModel.HasDialog, "dialog");
+        Assert.True(app.ViewModel.GoBack());
+        await UiHarness.WaitForAsync(() => !app.ViewModel.HasDialog, "dialog closed");
+
+        Assert.False(app.ViewModel.GoBack()); // on Send: the phone leaves Beam as usual
+    }
+
+    [AvaloniaFact]
+    public async Task NotificationsAreExplainedBeforeAndroidAsks()
+    {
+        await using var app = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        app.Platform.Granted.Clear();
+        var init = app.InitializeAsync();
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "explanation");
+        var dialog = (ViewModels.Dialogs.ConfirmViewModel)app.ViewModel.Dialog!;
+        Assert.Equal("Get notified about incoming files", dialog.Title);
+        Assert.DoesNotContain("permission:Notifications", app.Platform.Calls); // not asked before the explanation
+        app.Screenshot("phone-6-permission");
+        dialog.PrimaryCommand.Execute(null);
+        await init;
+        Assert.Contains("permission:Notifications", app.Platform.Calls);
+        Assert.DoesNotContain("permission:NearbyDevices", app.Platform.Calls); // asked when connecting directly, not at start
+    }
+
+    [AvaloniaFact]
+    public async Task IncomingFilesCanBeAcceptedFromTheNotification()
+    {
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        await using var laptop = new UiHarness("Laptop");
+        await phone.InitializeAsync();
+        await laptop.InitializeAsync();
+        phone.Ui.IsWindowActive = false; // Beam is in the background
+        var file = laptop.CreateFile("Slides.pdf", 50_000);
+        await laptop.ViewModel.StartSendAsync(phone.AsDevice(), new[] { file });
+
+        await UiHarness.WaitForAsync(() => phone.Platform.Questions.Count == 1, "notification with buttons");
+        var buttons = phone.Platform.Questions.Values.Single();
+        Assert.Equal(new[] { "Accept", "Decline" }, buttons.Select(b => b.Label));
+        buttons[0].OnClick();
+        await UiHarness.WaitForAsync(() => File.Exists(Path.Combine(phone.ReceiveFolder, "Slides.pdf")), "received");
+        Assert.Empty(phone.Platform.Questions); // answered: the notification is gone
     }
 }

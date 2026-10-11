@@ -4,7 +4,7 @@ using Beam.Core.Localization;
 namespace Beam.App.Localization;
 
 /// <summary>
-/// Translated text in XAML: <c>Text="{l:T 'Nearby computers'}"</c> (the English text is the key). Texts about this
+/// Translated text in XAML: <c>Text="{l:T 'Nearby devices'}"</c> (the English text is the key). Texts about this
 /// device can give a phone wording: <c>{l:T 'Name this computer', Phone='Name this phone'}</c>.
 /// </summary>
 public sealed class TExtension : MarkupExtension

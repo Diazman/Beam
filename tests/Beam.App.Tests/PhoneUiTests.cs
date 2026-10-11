@@ -19,12 +19,19 @@ public class PhoneUiTests
         app.ViewModel.IsPhonePage = true;
         await UiHarness.PumpAsync();
         var phone = app.ViewModel.Phone;
-        Assert.True(phone.IsOff);
-        app.Screenshot("phone-01-off");
+        // First the Beam app's code; the browser page isn't running.
+        Assert.True(phone.ShowsAppCode);
+        Assert.NotNull(phone.AppQr);
+        Assert.False(phone.IsOn);
+        Assert.Contains("Don't have the Beam app? Connect with the browser", app.VisibleTexts());
+        Assert.DoesNotContain("Send to your phone", app.VisibleTexts());
+        app.Screenshot("phone-01-app-code");
 
-        phone.TurnOnCommand.Execute(null);
+        phone.ShowBrowserCommand.Execute(null);
         await UiHarness.PumpAsync();
         Assert.True(phone.IsOn);
+        Assert.True(phone.ShowsBrowserCode);
+        Assert.Contains("Send to your phone", app.VisibleTexts());
         Assert.NotNull(phone.Qr);
         Assert.Contains(app.Node.PhoneLink.Token, phone.Link);
         Assert.Equal("Waiting for a phone to open the link…", phone.ConnectionText);
@@ -38,10 +45,13 @@ public class PhoneUiTests
         // A phone opens the page and sends a photo.
         using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{app.Node.PhoneLink.Port}/{app.Node.PhoneLink.Token}/") };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile");
-        Assert.Contains("Send to this computer", await client.GetStringAsync(""));
+        var page = await client.GetStringAsync("");
+        Assert.Contains("Send to this computer", page);
+        Assert.Contains(Beam.Core.AppInfo.AndroidAppUrl, page); // "Get the Beam app" on Android
         await UiHarness.WaitForAsync(() => phone.IsConnected, "phone connected");
         Assert.StartsWith("Connected: Android phone", phone.ConnectionText);
-        app.Screenshot("phone-02-on");
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-02-browser");
 
         var photo = new byte[400_000];
         Random.Shared.NextBytes(photo);
@@ -66,8 +76,9 @@ public class PhoneUiTests
         app.Screenshot("phone-04-dark");
         Avalonia.Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
 
-        phone.TurnOffCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => phone.IsOff, "turned off");
-        Assert.False(phone.IsSharing);
+        phone.StopSharingCommand.Execute(null);
+        phone.ShowAppCodeCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => !phone.IsOn, "browser page off");
+        Assert.True(phone.ShowsAppCode);
     }
 }

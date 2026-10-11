@@ -63,6 +63,12 @@ public sealed class DirectManager
     /// <summary>The preferred method or the direct link changed (raised on a background thread).</summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Runs before this device starts its own network (e.g. so the PC can ask to let phones through Windows Firewall,
+    /// right when a direct connection is first used rather than at startup).
+    /// </summary>
+    public Func<Task>? BeforeHosting { get; set; }
+
     /// <summary>Setting up a direct link failed; the message is for the user (raised on a background thread).</summary>
     public event Action<string>? Problem;
 
@@ -223,7 +229,7 @@ public sealed class DirectManager
                 {
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
                     timeout.CancelAfter(TimeSpan.FromSeconds(30));
-                    var network = await _link!.HostAsync(OwnNetwork(), timeout.Token).ConfigureAwait(false);
+                    var network = await HostOwnNetworkAsync(timeout.Token).ConfigureAwait(false);
                     if (_linkedPeers.TryAdd(AvailableUser, 0))
                     {
                         Log.Info($"Direct: {network.Ssid} is on for paired phones");
@@ -337,7 +343,7 @@ public sealed class DirectManager
     public async Task<DirectNetwork> HostForBrowserAsync(CancellationToken cancellationToken)
     {
         if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't connect directly."));
-        var network = await _link.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
+        var network = await HostOwnNetworkAsync(cancellationToken).ConfigureAwait(false);
         _linkedPeers[BrowserUser] = 0;
         _ = Task.Delay(3000).ContinueWith(_ => Log.Info($"Direct network {network.Ssid} for a phone's browser. Adapters: {DirectAddresses.Describe()}"), TaskScheduler.Default);
         DirectAddresses.Invalidate();
@@ -481,7 +487,7 @@ public sealed class DirectManager
 
                 case Plan.HostForPeer:
                 {
-                    var network = await link.HostAsync(OwnNetwork(), token).ConfigureAwait(false);
+                    var network = await HostOwnNetworkAsync(token).ConfigureAwait(false);
                     Log.Info($"Direct: started {network.Ssid}; asking {peer.Name} to join");
                     try
                     {
@@ -595,7 +601,7 @@ public sealed class DirectManager
             case DirectActions.Host:
             {
                 if (_link == null || !Roles.HasFlag(DirectRoles.Host)) throw new DirectLinkException(L.T("This device can't connect directly."));
-                var network = await _link.HostAsync(OwnNetwork(), token).ConfigureAwait(false);
+                var network = await HostOwnNetworkAsync(token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 Log.Info($"Direct: started {network.Ssid} for {peerName}");
@@ -619,6 +625,8 @@ public sealed class DirectManager
             }
 
             case DirectActions.Prefer:
+                // A phone that joined this device's own network (e.g. after scanning its code) keeps it on.
+                if (Decode(request.Method) == ConnectionMethod.Direct && Roles.HasFlag(DirectRoles.Host)) _linkedPeers[peerId] = 0;
                 SetPeerMethod(peerId, Decode(request.Method));
                 return new DirectResponseMessage { Ok = true };
 
@@ -631,6 +639,23 @@ public sealed class DirectManager
             default:
                 return new DirectResponseMessage { Ok = false, Message = "Unknown request." };
         }
+    }
+
+    private async Task<DirectNetwork> HostOwnNetworkAsync(CancellationToken cancellationToken)
+    {
+        if (BeforeHosting is { } before)
+        {
+            try
+            {
+                await before().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Direct: preparing to host failed", ex);
+            }
+        }
+
+        return await _link!.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsComputer(string? kind, string? platform) =>

@@ -29,7 +29,7 @@
             <Separator />
             <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
               <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock Classes="h3" Text="{l:T 'Let nearby computers find this one', Phone='Let nearby computers find this phone'}" />
+                <TextBlock Classes="h3" Text="{l:T 'Let nearby devices find this computer', Phone='Let nearby devices find this phone'}" />
                 <TextBlock Classes="caption" TextWrapping="Wrap"
                            Text="{l:T 'When off, this computer doesn\'t appear for others. You can still send files to them.', Phone='When off, this phone doesn\'t appear for others. You can still send files to them.'}" />
               </StackPanel>
@@ -62,10 +62,10 @@
             </StackPanel>
             <Separator />
             <StackPanel Spacing="8">
-              <TextBlock Classes="h3" Text="{l:T 'Trusted computers'}" />
+              <TextBlock Classes="h3" Text="{l:T 'Trusted devices'}" />
               <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="{l:T 'Files from these computers are accepted without asking. Add one by ticking “Always accept” when it sends you files.'}" />
-              <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'No trusted computers. Beam always asks before receiving files.'}" IsVisible="{Binding !HasTrustedDevices}" />
+                         Text="{l:T 'Files from these devices are accepted without asking. Add one by ticking “Always accept” when it sends you files.'}" />
+              <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'No trusted devices. Beam always asks before receiving files.'}" IsVisible="{Binding !HasTrustedDevices}" />
               <ItemsControl ItemsSource="{Binding TrustedDevices}" IsVisible="{Binding HasTrustedDevices}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:TrustedDeviceViewModel">
@@ -143,7 +143,7 @@
             <StackPanel Spacing="4" Margin="2,0,0,0" IsEnabled="{Binding NotificationsEnabled}">
               <CheckBox Content="{l:T 'When someone wants to send me files'}" IsChecked="{Binding NotifyOnIncomingRequest}" />
               <CheckBox Content="{l:T 'When a transfer finishes or fails'}" IsChecked="{Binding NotifyOnTransferFinished}" />
-              <CheckBox Content="{l:T 'When a nearby computer appears'}" IsChecked="{Binding NotifyOnDeviceFound}" />
+              <CheckBox Content="{l:T 'When a nearby device appears'}" IsChecked="{Binding NotifyOnDeviceFound}" />
             </StackPanel>
           </StackPanel>
         </Border>
@@ -180,7 +180,7 @@
             <StackPanel Spacing="4">
               <TextBlock Classes="h3" Text="{l:T 'This computer\'s address', Phone='This phone\'s address'}" />
               <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="{l:T 'If another computer can\'t find this one automatically, type this address there using “Can\'t find a computer?”.', Phone='If a computer can\'t find this phone automatically, type this address there using “Can\'t find a computer?”.'}" />
+                         Text="{l:T 'If another device can\'t find this computer automatically, type this address there using “Can\'t find a device?”.', Phone='If a computer can\'t find this phone automatically, type this address there using “Can\'t find a device?”.'}" />
               <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
                 <SelectableTextBlock Text="{Binding LocalAddresses}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="{l:T 'Copy'}" Command="{Binding CopyAddressCommand}" />
@@ -188,7 +188,7 @@
             </StackPanel>
             <StackPanel Spacing="6" IsVisible="{Binding HasManualAddresses}">
               <Separator />
-              <TextBlock Classes="h3" Text="{l:T 'Computers added by address'}" Margin="0,6,0,0" />
+              <TextBlock Classes="h3" Text="{l:T 'Devices added by address'}" Margin="0,6,0,0" />
               <ItemsControl ItemsSource="{Binding ManualAddresses}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ManualAddressViewModel">
@@ -204,29 +204,6 @@
         </Border>
       </StackPanel>
 
-      <!-- Beam Pro (sold in the Microsoft Store version; phones get their own store later) -->
-      <StackPanel Spacing="10" IsVisible="{Binding IsDesktop}">
-        <TextBlock Classes="h2" Text="{l:T 'Your plan'}" />
-        <Border Classes="card">
-          <Grid ColumnDefinitions="Auto,*">
-            <Border Classes="iconBadge" Width="40" Height="40" CornerRadius="20" VerticalAlignment="Top">
-              <PathIcon Data="{StaticResource IconCheckCircle}" Width="18" Height="18" />
-            </Border>
-            <StackPanel Grid.Column="1" Margin="14,0,0,0" Spacing="6">
-              <TextBlock Classes="h3" Text="{Binding PlanTitle}" />
-              <TextBlock Classes="caption" Text="{Binding PlanDescription}" TextWrapping="Wrap" />
-              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" IsVisible="{Binding IsFree}">
-                <Button Classes="accent" Content="{Binding UpgradeButtonText}" Command="{Binding UpgradeCommand}" />
-                <Button Classes="link" Content="{l:T 'Restore purchase'}" Command="{Binding RestorePurchaseCommand}"
-                        IsVisible="{Binding CanRestorePurchase}" VerticalAlignment="Center" />
-              </StackPanel>
-              <TextBlock Classes="caption" Text="{Binding ProStatus}" TextWrapping="Wrap"
-                         IsVisible="{Binding ProStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            </StackPanel>
-          </Grid>
-        </Border>
-      </StackPanel>
-
       <!-- About -->
       <StackPanel Spacing="10">
         <TextBlock Classes="h2" Text="{l:T 'About'}" />
@@ -239,10 +216,11 @@
               <Run Text="{l:T ' — shown to others when you send them files, so they can check it\'s really you.'}" />
             </TextBlock>
             <TextBlock Classes="caption" TextWrapping="Wrap"
-                       Text="{l:T 'Transfers go directly between computers on your network, are encrypted, and every file is checked after it arrives.', Phone='Transfers go directly between your devices on your network, are encrypted, and every file is checked after it arrives.'}" />
+                       Text="{l:T 'Transfers between devices with the Beam app go directly between them, are encrypted, and every file is checked after it arrives. Nothing goes through the internet.'}" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="{l:T 'Open log folder', Phone='Send log'}" Command="{Binding OpenLogsCommand}"
                       ToolTip.Tip="{l:T 'Technical details that help when troubleshooting'}" />
+              <Button Classes="link" Content="{l:T 'Privacy policy'}" Command="{Binding OpenPrivacyCommand}" VerticalAlignment="Center" />
             </StackPanel>
           </StackPanel>
         </Border>

@@ -17,8 +17,6 @@
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
           <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Transfers'}"
                        Tag="{StaticResource IconUpload}" IsChecked="{Binding IsTransfersPage}" />
-          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'History'}"
-                       Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
           <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Settings'}"
                        Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
         </UniformGrid>

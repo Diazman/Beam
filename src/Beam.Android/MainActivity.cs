@@ -26,7 +26,11 @@ public class MainActivity : AvaloniaMainActivity<App>
     {
         base.OnCreate(savedInstanceState);
         AndroidHost.RequestPermissions(this);
-        if (savedInstanceState == null) AndroidHost.Share(SharedItems.From(Intent));
+        if (savedInstanceState == null)
+        {
+            AndroidHost.Share(SharedItems.From(Intent));
+            NotificationActions.Run(Intent);
+        }
     }
 
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
@@ -40,6 +44,7 @@ public class MainActivity : AvaloniaMainActivity<App>
     {
         base.OnNewIntent(intent);
         AndroidHost.Share(SharedItems.From(intent));
+        NotificationActions.Run(intent); // a notification was tapped
     }
 
     protected override void OnResume()
