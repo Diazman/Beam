@@ -265,7 +265,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         {
             callback = new WifiCallback(network.Ssid, OnNetworkLost);
             Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
-            var asked = Environment.TickCount64;
+            var asked = System.Environment.TickCount64;
             try
             {
                 connectivity.RequestNetwork(request!, callback, (int)WifiJoinTimeout.TotalMilliseconds);
@@ -290,7 +290,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             ReleaseWifiNetwork();
             // Android sometimes turns the first request down at once (it was still busy with the previous network):
             // asking again a moment later usually works.
-            if (attempt >= 2 || Environment.TickCount64 - asked > 3000) break;
+            if (attempt >= 2 || System.Environment.TickCount64 - asked > 3000) break;
             Log.Info($"Wi-Fi: Android turned {network.Ssid} down at once; asking again");
             await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
         }
