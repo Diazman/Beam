@@ -88,6 +88,22 @@ public sealed class DirectManager
 
     public DirectRoles Roles => _link?.Roles ?? DirectRoles.None;
 
+    /// <summary>What this device announces: its roles plus, for computers, the facts that decide which of two hosts.</summary>
+    public DirectRoles AnnouncedRoles => Roles == DirectRoles.None ? DirectRoles.None : Roles | Traits();
+
+    /// <summary>Whether this computer has internet over a cable (replaceable in tests).</summary>
+    internal Func<bool> HasWiredInternet { get; set; } = NetworkFacts.HasWiredInternet;
+
+    private DirectRoles Traits()
+    {
+        if (!_selfIsComputer) return DirectRoles.None;
+        var traits = DirectRoles.None;
+        if (_settings.Current.Connection == ConnectionMethod.Direct) traits |= DirectRoles.PrefersDirect;
+        if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
+        if (HostedNetwork?.SharesInternet == true || _link is IInternetSharing { CanShareInternet: true }) traits |= DirectRoles.SharesInternet;
+        return traits;
+    }
+
     /// <summary>This device can make direct links at all (Wi-Fi Direct hardware and OS support).</summary>
     public bool IsSupported => Roles != DirectRoles.None;
 
@@ -785,6 +801,12 @@ public sealed class DirectManager
                 if (_link == null || !CanJoin(IsComputer(peerKind, _discovery.Find(peerId)?.Platform)))
                     throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
+                if (_selfIsComputer && IsComputer(peerKind, _discovery.Find(peerId)?.Platform) && !WillingToLeaveWiFi(peerId))
+                {
+                    Log.Info($"Direct: not joining {request.Ssid} for {peerName}: set to Same Wi-Fi");
+                    throw new DirectLinkException(L.T("{0} is set to “Same Wi-Fi network”, so it doesn't leave its Wi-Fi to connect directly. Choose “Direct connection” in its Settings, or send over Wi-Fi.", _settings.Current.DeviceName));
+                }
+
                 if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
                 Log.Info($"Direct: joining {request.Ssid} for {peerName}");
                 var joining = new DirectNetwork(request.Ssid, request.Passphrase) { HostIsComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform) };
@@ -913,6 +935,32 @@ public sealed class DirectManager
         Problem?.Invoke(message);
     }
 
+    /// <summary>
+    /// Which of two computers hosts. Both decide from the same announced facts, so they agree whoever starts:
+    /// 1. Joining takes a computer off its own Wi-Fi, so only one set to Direct (or with internet over a cable, which
+    ///    loses nothing) joins; one set to Same Wi-Fi only hosts, which doesn't disturb its Wi-Fi.
+    /// 2. Both willing: the one with a cable joins (it keeps its internet; the other keeps its Wi-Fi while hosting).
+    /// 3. Then the one whose network shares its internet hosts, so the other keeps internet through it.
+    /// 4. Then a fixed order of the two device ids.
+    /// Neither willing (only this side asked for it, for this one transfer): this side joins.
+    /// </summary>
+    private Plan ChooseBetweenComputers(DirectRoles mine, DirectRoles theirs, string peerId)
+    {
+        static bool Willing(DirectRoles r) => r.HasFlag(DirectRoles.PrefersDirect) || r.HasFlag(DirectRoles.Wired);
+        bool Has(DirectRoles r, DirectRoles trait) => r.HasFlag(trait);
+
+        if (Willing(mine) != Willing(theirs)) return Willing(mine) ? Plan.JoinPeer : Plan.HostForPeer;
+        if (!Willing(mine)) return Plan.JoinPeer;
+        if (Has(mine, DirectRoles.Wired) != Has(theirs, DirectRoles.Wired)) return Has(mine, DirectRoles.Wired) ? Plan.JoinPeer : Plan.HostForPeer;
+        if (Has(mine, DirectRoles.SharesInternet) != Has(theirs, DirectRoles.SharesInternet))
+            return Has(mine, DirectRoles.SharesInternet) ? Plan.HostForPeer : Plan.JoinPeer;
+        return string.CompareOrdinal(_selfId(), peerId) < 0 ? Plan.HostForPeer : Plan.JoinPeer;
+    }
+
+    /// <summary>This computer may leave its Wi-Fi to join <paramref name="peerId"/>'s network.</summary>
+    private bool WillingToLeaveWiFi(string peerId) =>
+        _settings.Current.Connection == ConnectionMethod.Direct || MethodFor(peerId) == ConnectionMethod.Direct || HasWiredInternet();
+
     /// <summary>This device can join the direct network of a computer (<paramref name="hostIsComputer"/>) or a phone.</summary>
     private bool CanJoin(bool hostIsComputer) =>
         Roles.HasFlag(DirectRoles.Join) || (hostIsComputer && Roles.HasFlag(DirectRoles.JoinComputers));
@@ -927,13 +975,9 @@ public sealed class DirectManager
                              && (theirs.HasFlag(DirectRoles.Join) || (_selfIsComputer && theirs.HasFlag(DirectRoles.JoinComputers)));
         if (canJoinPeer && canHostForPeer)
         {
-            // A computer hosts for a phone (a phone's own network costs its battery and takes the computer off its Wi-Fi);
-            // between two of a kind, both sides pick the same one.
+            // A computer hosts for a phone (a phone's own network costs its battery and takes the computer off its Wi-Fi).
             if (_selfIsComputer != peerIsComputer) return _selfIsComputer ? Plan.HostForPeer : Plan.JoinPeer;
-            // Two computers: this one's network is already on (Direct setting) → the other joins it; else both sides
-            // would pick the same one.
-            if (HostedNetwork != null) return Plan.HostForPeer;
-            return string.CompareOrdinal(_selfId(), peer.Id) < 0 ? Plan.HostForPeer : Plan.JoinPeer;
+            return ChooseBetweenComputers(Traits(), theirs, peer.Id);
         }
 
         return canJoinPeer ? Plan.JoinPeer : canHostForPeer ? Plan.HostForPeer : Plan.None;

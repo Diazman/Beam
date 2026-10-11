@@ -70,7 +70,7 @@ public sealed class BeamNode : IAsyncDisposable
         PhoneLink = new PhoneLinkServer(Transfers, () => Settings.Current.DeviceName, CreatePolicy, _handler);
         Discovery = new DiscoveryService(options.Discovery,
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint,
-                options.DeviceKind ?? DeviceKinds.Desktop, Direct!.Roles));
+                options.DeviceKind ?? DeviceKinds.Desktop, Direct!.AnnouncedRoles));
         Discovery.Discoverable = Settings.Current.Discoverable;
         var selfKind = options.DeviceKind ?? DeviceKinds.Desktop;
         Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink,

@@ -22,7 +22,7 @@ namespace Beam.App.Platform;
 /// To reach another computer directly, this PC's Wi-Fi can also join that computer's network (never a phone's: phones
 /// join the PC), and goes back to the Wi-Fi it was on when the link stops.
 /// </summary>
-internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents
+internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInternetSharing
 {
     private readonly Func<string> _deviceName;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -39,6 +39,40 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents
     private WindowsDirectLink(Func<string> deviceName) => _deviceName = deviceName;
 
     public DirectRoles Roles => DirectRoles.Host | DirectRoles.JoinComputers;
+
+    private bool _canShare;
+    private long _canShareCheckedAt = long.MinValue / 2;
+
+    /// <summary>
+    /// This PC's network would share its internet: it is online and Windows can run its Mobile hotspot from here (and the
+    /// user's own hotspot isn't on). Checked at most every 30 seconds; announced so two PCs agree which one hosts.
+    /// </summary>
+    public bool CanShareInternet
+    {
+        get
+        {
+#if WINDOWS_WINRT
+            if (_hotspot != null) return true;
+            if (Environment.TickCount64 - Volatile.Read(ref _canShareCheckedAt) < 30_000) return _canShare;
+            _canShareCheckedAt = Environment.TickCount64;
+            try
+            {
+                var profile = NetworkInformation.GetInternetConnectionProfile();
+                _canShare = profile != null && profile.GetNetworkConnectivityLevel() == NetworkConnectivityLevel.InternetAccess
+                            && NetworkOperatorTetheringManager.GetTetheringCapabilityFromConnectionProfile(profile) == TetheringCapability.Enabled
+                            && NetworkOperatorTetheringManager.CreateFromConnectionProfile(profile).TetheringOperationalState == TetheringOperationalState.Off;
+            }
+            catch
+            {
+                _canShare = false;
+            }
+
+            return _canShare;
+#else
+            return false;
+#endif
+        }
+    }
 
 #pragma warning disable CS0067 // raised only in the Windows build
     public event Action? Lost;

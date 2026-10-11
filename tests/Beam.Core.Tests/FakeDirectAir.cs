@@ -23,9 +23,9 @@ public sealed class FakeDirectAir
 
     private readonly List<FakeLink> _links = new();
 
-    public IDirectLink Link(DirectRoles roles)
+    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false)
     {
-        var link = new FakeLink(this, roles);
+        var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet };
         _links.Add(link);
         return link;
     }
@@ -86,8 +86,10 @@ public sealed class FakeDirectAir
         };
     }
 
-    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents
+    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
     {
+        public bool CanShareInternet { get; init; }
+
         private readonly FakeDirectAir _air;
 
         public FakeLink(FakeDirectAir air, DirectRoles roles)

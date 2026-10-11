@@ -19,16 +19,37 @@ public enum DirectRoles
     /// Announced as its own word, so older Beam versions on phones see only "host" and keep joining the PC.
     /// </summary>
     JoinComputers = 4,
+
+    // What the device tells others about its situation (announced with the roles; computers use them to agree on
+    // which of two computers hosts — see DirectManager.PlanFor):
+
+    /// <summary>Has internet over a cable: its Wi-Fi can join another network without losing internet.</summary>
+    Wired = 8,
+
+    /// <summary>Its network shares its internet (Windows' Mobile hotspot): whoever joins it keeps internet.</summary>
+    SharesInternet = 16,
+
+    /// <summary>Its Connection setting is Direct: it accepts leaving its Wi-Fi to join another computer's network.</summary>
+    PrefersDirect = 32,
+}
+
+/// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
+public interface IInternetSharing
+{
+    bool CanShareInternet { get; }
 }
 
 public static class DirectRolesText
 {
     public static string Format(DirectRoles roles)
     {
-        var parts = new List<string>(3);
+        var parts = new List<string>(6);
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
+        if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
+        if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
+        if (roles.HasFlag(DirectRoles.PrefersDirect)) parts.Add("direct");
         return string.Join(",", parts);
     }
 
@@ -40,6 +61,9 @@ public static class DirectRolesText
             if (part == "host") roles |= DirectRoles.Host;
             else if (part == "join") roles |= DirectRoles.Join;
             else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
+            else if (part == "wired") roles |= DirectRoles.Wired;
+            else if (part == "share") roles |= DirectRoles.SharesInternet;
+            else if (part == "direct") roles |= DirectRoles.PrefersDirect;
         }
 
         return roles;

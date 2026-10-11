@@ -117,11 +117,15 @@ public sealed class TestNode : IAsyncDisposable
             s.ReceiveFolder = ReceiveFolder;
             s.FirstRunCompleted = true;
         });
+        Node.Direct.HasWiredInternet = () => Wired; // not the test machine's own cable
         Node.Transfers.Start(0);
         if (startDiscovery) Node.Discovery.Start();
     }
 
     public BeamNode Node { get; }
+
+    /// <summary>Acts as if this computer had internet over a cable.</summary>
+    public bool Wired { get; set; }
 
     public TestHandler Handler { get; }
 
@@ -135,7 +139,7 @@ public sealed class TestNode : IAsyncDisposable
         Id = Node.Identity.DeviceId,
         Name = Node.Settings.Current.DeviceName,
         Fingerprint = Node.Identity.Fingerprint,
-        DirectRoles = Node.Direct.Roles,
+        DirectRoles = Node.Direct.AnnouncedRoles, // as discovery announces it
         Kind = _kind,
         Endpoints = new[] { new IPEndPoint(IPAddress.Loopback, viaPort ?? Node.Transfers.Port) },
     };
