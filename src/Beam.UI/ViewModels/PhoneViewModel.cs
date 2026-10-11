@@ -282,8 +282,9 @@ public sealed class PhoneViewModel : ObservableObject
             {
                 Link = link;
                 CopyStatus = "";
-                // The phone's camera opens the link; the Beam app's scanner also reads the pairing part after "#beam=".
-                Qr = link.Length > 0 ? QrCode.Create(_node.CreatePairingCode().AppendTo(link)).Geometry : null;
+                // Just the link: short codes scan with any camera app (some, e.g. Xiaomi's, gave up on the longer code
+                // that also carried the app's pairing details). The app has its own code.
+                Qr = link.Length > 0 ? QrCode.Create(link).Geometry : null;
             }
 
             if (link.Length == 0 && _browserMode) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");

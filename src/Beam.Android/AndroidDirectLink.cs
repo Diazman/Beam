@@ -285,6 +285,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             {
                 joined = null;
             }
+            catch (OperationCanceledException)
+            {
+                // Gave up (e.g. sending over Wi-Fi instead): withdraw the request, or Android may still switch to the
+                // network later and pull the phone off its Wi-Fi.
+                ReleaseWifiNetwork();
+                throw;
+            }
 
             if (joined != null) break;
             ReleaseWifiNetwork();

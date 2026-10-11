@@ -49,6 +49,7 @@ public sealed class DiscoveryService : IDisposable
     private Socket? _socket;
     private List<LocalInterface> _interfaces = new();
     private long _interfacesRefreshedAt;
+    private long _reopenedAt;
     private bool _discoverable = true;
     private Task? _receiveTask;
     private Task? _timerTask;
@@ -152,6 +153,7 @@ public sealed class DiscoveryService : IDisposable
     {
         lock (_sendGate)
         {
+            _reopenedAt = Environment.TickCount64;
             var old = _socket;
             if (old == null || _cts.IsCancellationRequested) return;
             old.Dispose();
@@ -429,6 +431,7 @@ public sealed class DiscoveryService : IDisposable
         var socket = _socket;
         if (socket == null) return;
         var data = packet.Serialize();
+        var reopen = false;
 
         if (_options.UseMulticastAndBroadcast)
         {
@@ -453,12 +456,20 @@ public sealed class DiscoveryService : IDisposable
                     catch (Exception ex)
                     {
                         Log.Warn($"Broadcast on {nic.Address} failed: {ex.Message}");
+                        // The phone's own network is "unreachable": the socket is stuck on a network Beam left.
+                        if (ex is SocketException { SocketErrorCode: SocketError.NetworkUnreachable } && OperatingSystem.IsAndroid()) reopen = true;
                     }
                 }
             }
         }
 
         foreach (var target in _unicastTargets.Keys) SendTo(data, target);
+        if (reopen && Environment.TickCount64 - _reopenedAt > 30_000)
+        {
+            Log.Info("Discovery: reopening on the current network");
+            ReopenSocket();
+            _interfacesRefreshedAt = 0; // join the multicast group again on the next tick
+        }
     }
 
     private void SendTo(DiscoveryPacket packet, IPEndPoint target) => SendTo(packet.Serialize(), target);

@@ -211,7 +211,14 @@ public class PairingTests
         Assert.Contains(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == pc.Node.Identity.DeviceId);
         Assert.Equal(own.Ssid, phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Ssid);
 
-        // No shared network: the phone notices the PC's network in a Wi-Fi scan and lists the PC.
+        // With Same Wi-Fi chosen on the phone, the PC's own network is never used: not listed, not joined.
+        phone.Node.Direct.CheckKnownNetworks((IDirectNetworkScanner)phoneLink);
+        Assert.Null(phone.Node.Discovery.Find(pc.Node.Identity.DeviceId));
+        Assert.False(phone.Node.Direct.IsNearbyOnlyDirectly(pc.Node.Identity.DeviceId));
+        Assert.Equal(0, air.Joined);
+
+        // Direct chosen, no shared network: the phone notices the PC's network in a Wi-Fi scan and lists the PC.
+        phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         phone.Node.Direct.CheckKnownNetworks((IDirectNetworkScanner)phoneLink);
         var listed = phone.Node.Discovery.Find(pc.Node.Identity.DeviceId)!;
         Assert.Empty(listed.Endpoints);
@@ -280,6 +287,64 @@ public class PairingTests
         Assert.Equal(1, air.Joined);
         Assert.Equal(ConnectionMethod.Direct, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
         await Wait.UntilAsync(() => pc.Node.Direct.MethodFor(phone.Node.Identity.DeviceId) == ConnectionMethod.Direct, because: "the PC was told");
+    }
+
+    [Fact]
+    public async Task WithSameWiFiChosenSendingNeverJoinsThePcsNetwork()
+    {
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pc.Node.Direct.Start();
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
+        phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!); // the phone knows the PC's network
+        Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
+
+        var session = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("photo.jpg", 400_000) });
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(0, air.Joined);
+    }
+
+    [Fact]
+    public async Task WithDirectChosenButThePcsNetworkOutOfRangeItSendsOverWiFiAndSwitchesWhenItAppears()
+    {
+        var (quick, retry, check) = (DirectManager.QuickDirectAttempt, DirectManager.RetryDirectAfter, DirectManager.UpgradeCheckInterval);
+        DirectManager.RetryDirectAfter = TimeSpan.FromMilliseconds(500);
+        DirectManager.UpgradeCheckInterval = TimeSpan.FromMilliseconds(200);
+        try
+        {
+            var air = new FakeDirectAir();
+            await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
+            var slow = new SlowFiles();
+            await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+            air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+            pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+            pc.Node.Direct.Start();
+            await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
+            phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
+            phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+            air.InRange = false;
+
+            var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 5);
+            var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
+            await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "sending over Wi-Fi without waiting", timeout: TimeSpan.FromSeconds(5));
+            Assert.Equal(TransferPath.Network, session.Path);
+            Assert.Equal(0, air.Joined);
+
+            air.InRange = true;
+            await Wait.UntilAsync(() => session.Path == TransferPath.Direct, because: "moved to the direct link once it was in range", timeout: TimeSpan.FromSeconds(20));
+            Assert.Equal(1, air.Joined);
+            await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+            Assert.Equal(TransferState.Completed, session.State);
+            Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "video.mp4")));
+        }
+        finally
+        {
+            (DirectManager.QuickDirectAttempt, DirectManager.RetryDirectAfter, DirectManager.UpgradeCheckInterval) = (quick, retry, check);
+        }
     }
 
     [Fact]

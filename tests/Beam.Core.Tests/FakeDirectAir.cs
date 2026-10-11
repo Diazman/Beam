@@ -109,7 +109,7 @@ public sealed class FakeDirectAir
         public void RaiseLost() => Lost?.Invoke();
 
         public IReadOnlyCollection<string> VisibleNetworks() =>
-            _air.InRange && _air._network != null ? new[] { _air._network.Ssid } : Array.Empty<string>();
+            _air.InRange && _air._network != null ? new[] { "Home Wi-Fi", _air._network.Ssid } : new[] { "Home Wi-Fi" };
 
         public void Stop()
         {
