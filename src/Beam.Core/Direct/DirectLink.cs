@@ -20,8 +20,7 @@ public enum DirectRoles
     /// </summary>
     JoinComputers = 4,
 
-    // What the device tells others about its situation (announced with the roles; computers use them to agree on
-    // which of two computers hosts — see DirectManager.PlanFor):
+    // What the device tells others about its situation (announced with the roles):
 
     /// <summary>Has internet over a cable: its Wi-Fi can join another network without losing internet.</summary>
     Wired = 8,
@@ -29,9 +28,13 @@ public enum DirectRoles
     /// <summary>Its network shares its internet (Windows' Mobile hotspot): whoever joins it keeps internet.</summary>
     SharesInternet = 16,
 
-    /// <summary>Its Connection setting is Direct: it accepts leaving its Wi-Fi to join another computer's network.</summary>
-    PrefersDirect = 32,
 }
+
+/// <summary>
+/// A request that needs this device's user to agree: another device asks this computer to start its own network for it,
+/// or (<see cref="LeavesWiFi"/>) to leave its Wi-Fi and join the other computer's network.
+/// </summary>
+public sealed record DirectApproval(string PeerName, bool LeavesWiFi, bool KeepsInternet);
 
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
 public interface IInternetSharing
@@ -49,7 +52,6 @@ public static class DirectRolesText
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
         if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
-        if (roles.HasFlag(DirectRoles.PrefersDirect)) parts.Add("direct");
         return string.Join(",", parts);
     }
 
@@ -63,7 +65,6 @@ public static class DirectRolesText
             else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
             else if (part == "wired") roles |= DirectRoles.Wired;
             else if (part == "share") roles |= DirectRoles.SharesInternet;
-            else if (part == "direct") roles |= DirectRoles.PrefersDirect;
         }
 
         return roles;
@@ -169,8 +170,12 @@ public interface IDirectNetworkScanner
 
 public sealed class DirectLinkException : Exception
 {
-    public DirectLinkException(string message, Exception? inner = null)
+    public DirectLinkException(string message, Exception? inner = null, bool declined = false)
         : base(message, inner)
     {
+        Declined = declined;
     }
+
+    /// <summary>The other device's user said no (so don't try another way that would ask again).</summary>
+    public bool Declined { get; }
 }

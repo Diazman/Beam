@@ -23,9 +23,9 @@ public sealed class FakeDirectAir
 
     private readonly List<FakeLink> _links = new();
 
-    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false)
+    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null)
     {
-        var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet };
+        var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet, JoinError = joinError };
         _links.Add(link);
         return link;
     }
@@ -90,6 +90,9 @@ public sealed class FakeDirectAir
     {
         public bool CanShareInternet { get; init; }
 
+        /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
+        public string? JoinError { get; init; }
+
         private readonly FakeDirectAir _air;
 
         public FakeLink(FakeDirectAir air, DirectRoles roles)
@@ -112,6 +115,7 @@ public sealed class FakeDirectAir
         public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
+            if (JoinError != null) throw new DirectLinkException(JoinError);
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
             _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);

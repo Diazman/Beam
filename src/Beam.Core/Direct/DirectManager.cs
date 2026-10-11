@@ -45,6 +45,11 @@ public sealed class DirectManager
     private readonly ConcurrentDictionary<string, (int Count, long At)> _directFailures = new();
     private readonly ConcurrentDictionary<string, byte> _upgrading = new();
     private readonly ConcurrentDictionary<string, byte> _linkedPeers = new();
+
+    // Two computers connect directly only when a user asks ("Connect directly"): which side hosts, per computer.
+    private readonly ConcurrentDictionary<string, Plan> _computerPlan = new();
+    private readonly ConcurrentDictionary<string, byte> _pressing = new(); // computers this one is connecting to right now
+    private readonly ConcurrentDictionary<string, long> _hostRequestedBy = new(); // when a computer last asked this one to host
     private readonly SemaphoreSlim _setup = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConcurrentDictionary<string, long> _nearbyOnlyDirect = new();
@@ -88,7 +93,7 @@ public sealed class DirectManager
 
     public DirectRoles Roles => _link?.Roles ?? DirectRoles.None;
 
-    /// <summary>What this device announces: its roles plus, for computers, the facts that decide which of two hosts.</summary>
+    /// <summary>What this device announces: its roles plus, for computers, whether joining them keeps internet.</summary>
     public DirectRoles AnnouncedRoles => Roles == DirectRoles.None ? DirectRoles.None : Roles | Traits();
 
     /// <summary>Whether this computer has internet over a cable (replaceable in tests).</summary>
@@ -98,7 +103,6 @@ public sealed class DirectManager
     {
         if (!_selfIsComputer) return DirectRoles.None;
         var traits = DirectRoles.None;
-        if (_settings.Current.Connection == ConnectionMethod.Direct) traits |= DirectRoles.PrefersDirect;
         if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
         if (HostedNetwork?.SharesInternet == true || _link is IInternetSharing { CanShareInternet: true }) traits |= DirectRoles.SharesInternet;
         return traits;
@@ -125,12 +129,212 @@ public sealed class DirectManager
     public bool HasDirectPath(DeviceInfo device) => device.Endpoints.Any(e => _transfers.IsDirectAddress(e.Address));
 
     /// <summary>
+    /// Asked before this device starts its network for another device that isn't trusted, or (computers) before it
+    /// leaves its Wi-Fi to join another computer's network. Null (tests): allowed.
+    /// </summary>
+    public Func<DirectApproval, Task<bool>>? Approve { get; set; }
+
+    /// <summary>How long an untouched "Connect directly" link stays up with nothing to transfer.</summary>
+    internal static TimeSpan ComputerLinkIdleTimeout { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long the other computer may be gone before this one drops its side of the link.</summary>
+    internal static TimeSpan ComputerLinkLostTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
+    /// <summary>Both are computers that can connect directly: show "Connect directly" for <paramref name="peer"/>.</summary>
+    public bool CanConnectComputer(DeviceInfo peer) =>
+        _selfIsComputer && IsComputer(peer.Kind, peer.Platform)
+                        && Roles.HasFlag(DirectRoles.Host) && Roles.HasFlag(DirectRoles.JoinComputers)
+                        && peer.DirectRoles.HasFlag(DirectRoles.Host);
+
+    /// <summary>Connected to <paramref name="peerId"/> through "Connect directly" (or connecting).</summary>
+    public bool IsComputerLinked(string peerId) => _computerPlan.ContainsKey(peerId);
+
+    /// <summary>Connecting to <paramref name="peerId"/> right now.</summary>
+    public bool IsConnectingComputer(string peerId) => _pressing.ContainsKey(peerId);
+
+    /// <summary>
+    /// Joining <paramref name="peer"/>'s network would leave this computer without internet: its internet comes over
+    /// Wi-Fi (no cable) and the other computer's network doesn't share internet.
+    /// </summary>
+    public bool JoinLeavesWithoutInternet(DeviceInfo peer) =>
+        !HasWiredInternet() && !peer.DirectRoles.HasFlag(DirectRoles.SharesInternet);
+
+    /// <summary>
+    /// "Connect directly" pressed for another computer on the same network: this computer joins the other's network
+    /// (the other only starts its network, which doesn't disturb its Wi-Fi). If this one can't join or the other can't
+    /// host, the roles swap, which the other computer's user has to allow (it would leave its Wi-Fi). Transfers running
+    /// with it move to the direct link. False (with <see cref="Problem"/> raised) when it couldn't be set up.
+    /// </summary>
+    public async Task<bool> ConnectComputerAsync(string peerId, CancellationToken cancellationToken = default)
+    {
+        if (_discovery.Find(peerId) is not { } peer || !CanConnectComputer(peer))
+        {
+            Problem?.Invoke(L.T("That device isn't nearby right now."));
+            return false;
+        }
+
+        if (!_pressing.TryAdd(peerId, 0)) return false;
+        Changed?.Invoke();
+        Exception? failure = null;
+        try
+        {
+            foreach (var plan in new[] { Plan.JoinPeer, Plan.HostForPeer })
+            {
+                if (plan == Plan.HostForPeer && !peer.DirectRoles.HasFlag(DirectRoles.JoinComputers)) break;
+                _computerPlan[peerId] = plan;
+                try
+                {
+                    Log.Info($"Direct: connecting to {peer.Name} ({(plan == Plan.JoinPeer ? "joining its network" : "it joins this computer's network")})");
+                    await ConnectAsync(peer, viaKnownNetwork: false, cancellationToken).ConfigureAwait(false);
+                    failure = null;
+                    break;
+                }
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested
+                                           && ex is DirectLinkException or TransferException or IOException or TimeoutException or OperationCanceledException)
+                {
+                    failure ??= ex;
+                    // Both pressed at the same moment and the other one won: it is joining this computer's network.
+                    if (plan == Plan.JoinPeer && await OtherSideIsConnectingAsync(peerId, cancellationToken).ConfigureAwait(false))
+                    {
+                        _computerPlan[peerId] = Plan.HostForPeer;
+                        failure = null;
+                        break;
+                    }
+
+                    if (ex is not DirectLinkException { Declined: false }) break; // unreachable, or its user said no: swapping roles won't help
+                    Log.Info($"Direct: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            _pressing.TryRemove(peerId, out _);
+        }
+
+        if (failure != null)
+        {
+            _computerPlan.TryRemove(peerId, out _);
+            Changed?.Invoke();
+            Report(failure);
+            return false;
+        }
+
+        _linkedPeers[peerId] = 0;
+        _peerMethod[peerId] = ConnectionMethod.Direct;
+        Changed?.Invoke();
+        await TellAsync(peer, new DirectRequestMessage { Action = DirectActions.Prefer, Method = Encode(ConnectionMethod.Direct) }).ConfigureAwait(false);
+        var moved = _transfers.InterruptConnections(peerId);
+        if (moved > 0) _ = CheckReconnectedDirectlyAsync(peerId, peer.Name);
+        _ = WatchComputerLinkAsync(peerId, pressedHere: true);
+        return true;
+    }
+
+    /// <summary>"Disconnect": back to the shared Wi-Fi; the joining computer returns to its own Wi-Fi.</summary>
+    public async Task DisconnectComputerAsync(string peerId)
+    {
+        _computerPlan.TryRemove(peerId, out _);
+        await SwitchAsync(peerId, ConnectionMethod.SameNetwork).ConfigureAwait(false);
+        _peerMethod.TryRemove(peerId, out _);
+        Changed?.Invoke();
+    }
+
+    /// <summary>After this side's join was turned down: did the other computer meanwhile ask this one to host (it won)?</summary>
+    private async Task<bool> OtherSideIsConnectingAsync(string peerId, CancellationToken token)
+    {
+        var deadline = Environment.TickCount64 + 3000;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (Environment.TickCount64 - _hostRequestedBy.GetValueOrDefault(peerId, long.MinValue / 2) < 30_000)
+            {
+                // Wait for its join to finish.
+                var until = Environment.TickCount64 + (long)FindTimeout.TotalMilliseconds + 30_000;
+                while (Environment.TickCount64 < until)
+                {
+                    if (_discovery.Find(peerId) is { } found && HasDirectPath(found)) return true;
+                    await Task.Delay(250, token).ConfigureAwait(false);
+                }
+
+                return false;
+            }
+
+            await Task.Delay(200, token).ConfigureAwait(false);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Keeps a "Connect directly" link tidy: the computer where it was pressed disconnects after a while with nothing
+    /// to transfer (the joining computer is off its Wi-Fi meanwhile); the other drops its side when that one is gone.
+    /// </summary>
+    private async Task WatchComputerLinkAsync(string peerId, bool pressedHere)
+    {
+        var idleSince = Environment.TickCount64;
+        var goneSince = 0L;
+        try
+        {
+            while (_computerPlan.ContainsKey(peerId) && !_stopping.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, ComputerLinkLostTimeout.TotalSeconds / 4)), _stopping.Token).ConfigureAwait(false);
+                if (_transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished)) idleSince = Environment.TickCount64;
+                var reachable = _discovery.Find(peerId) is { } found && HasDirectPath(found);
+                goneSince = reachable ? 0 : goneSince == 0 ? Environment.TickCount64 : goneSince;
+
+                if (pressedHere && Environment.TickCount64 - idleSince > ComputerLinkIdleTimeout.TotalMilliseconds)
+                {
+                    Log.Info($"Direct: nothing to transfer with {peerId} for a while; disconnecting");
+                    await DisconnectComputerAsync(peerId).ConfigureAwait(false);
+                    return;
+                }
+
+                if (!pressedHere && goneSince != 0 && Environment.TickCount64 - goneSince > ComputerLinkLostTimeout.TotalMilliseconds
+                    && !_transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished))
+                {
+                    Log.Info($"Direct: {peerId} is gone; dropping the direct link");
+                    _computerPlan.TryRemove(peerId, out _);
+                    _peerMethod.TryRemove(peerId, out _);
+                    if (_linkedPeers.TryRemove(peerId, out _)) StopLinkIfUnused();
+                    Changed?.Invoke();
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // stopping
+        }
+    }
+
+    /// <summary>The other side is trusted (paired, or "always accept" chosen for it).</summary>
+    private bool IsTrusted(string fingerprint) =>
+        !string.IsNullOrEmpty(fingerprint)
+        && _settings.Current.TrustedDevices.Any(t => string.Equals(t.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<bool> AskAsync(DirectApproval approval)
+    {
+        if (Approve is not { } approve) return true;
+        try
+        {
+            return await approve(approval).WaitAsync(TimeSpan.FromSeconds(90)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Direct: no answer to {approval.PeerName}'s request ({ex.Message})");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Switches how this device talks to <paramref name="peerId"/>, including transfers already running: they
     /// reconnect over the new method and continue where they stopped. False (with <see cref="Problem"/> raised)
     /// when a direct link couldn't be set up; the transfers then continue over the network.
     /// </summary>
     public async Task<bool> SwitchAsync(string peerId, ConnectionMethod method, CancellationToken cancellationToken = default)
     {
+        // Two computers: the one where Direct was chosen joins the other's network.
+        if (method == ConnectionMethod.Direct && _discovery.Find(peerId) is { } computer && CanConnectComputer(computer))
+            return IsComputerLinked(peerId) || await ConnectComputerAsync(peerId, cancellationToken).ConfigureAwait(false);
+        if (method == ConnectionMethod.SameNetwork) _computerPlan.TryRemove(peerId, out _);
         var peer = _discovery.Find(peerId);
         var previous = MethodFor(peerId);
         _peerMethod[peerId] = method;
@@ -412,13 +616,20 @@ public sealed class DirectManager
     /// <summary>The Connection setting changed: forget per-device choices and switch running transfers.</summary>
     internal void OnSettingChanged(ConnectionMethod method)
     {
-        var peers = _transfers.Sessions.Where(s => !s.IsFinished).Select(s => s.PeerId).Distinct().ToList();
-        _peerMethod.Clear();
+        // Computers connected with "Connect directly" stay connected: that was asked for them specifically.
+        var peers = _transfers.Sessions.Where(s => !s.IsFinished).Select(s => s.PeerId).Distinct().Where(p => !IsComputerLinked(p)).ToList();
+        foreach (var peer in _peerMethod.Keys.Where(p => !IsComputerLinked(p)).ToList()) _peerMethod.TryRemove(peer, out _);
         Changed?.Invoke();
-        foreach (var peer in peers) _ = SwitchAsync(peer, method);
+        foreach (var peer in peers)
+        {
+            // Between computers the setting doesn't start direct links; "Connect directly" does.
+            if (method == ConnectionMethod.Direct && _discovery.Find(peer) is { } computer && CanConnectComputer(computer)) continue;
+            _ = SwitchAsync(peer, method);
+        }
+
         if (method == ConnectionMethod.SameNetwork && peers.Count == 0)
         {
-            _linkedPeers.Clear();
+            foreach (var peer in _linkedPeers.Keys.Where(p => !IsComputerLinked(p)).ToList()) _linkedPeers.TryRemove(peer, out _);
             StopLinkIfUnused();
         }
 
@@ -521,7 +732,7 @@ public sealed class DirectManager
                     Log.Info($"Direct: asking {peer.Name} to start a direct network");
                     var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Host }, token).ConfigureAwait(false);
                     if (!reply.Ok || string.IsNullOrEmpty(reply.Ssid) || string.IsNullOrEmpty(reply.Passphrase))
-                        throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name));
+                        throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name), declined: reply.Declined);
                     var network = new DirectNetwork(reply.Ssid, reply.Passphrase) { HostIsComputer = IsComputer(current.Kind, current.Platform) };
                     Remember(peer.Id, peer.Name, peer.Fingerprint, peer.Kind, network);
                     if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
@@ -537,7 +748,7 @@ public sealed class DirectManager
                     {
                         var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Join, Ssid = network.Ssid, Passphrase = network.Passphrase }, token)
                             .ConfigureAwait(false);
-                        if (!reply.Ok) throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't join the direct connection.", peer.Name));
+                        if (!reply.Ok) throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't join the direct connection.", peer.Name), declined: reply.Declined);
                     }
                     catch (Exception ex) when (ex is IOException or TransferException { Error.Kind: TransferErrorKind.ConnectionLost })
                     {
@@ -772,7 +983,12 @@ public sealed class DirectManager
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
             Log.Warn($"Direct: {request.Action} for {peerName} failed: {ex.Message}");
-            response = new DirectResponseMessage { Ok = false, Message = ex is DirectLinkException ? ex.Message : L.T("Connecting directly took too long.") };
+            response = new DirectResponseMessage
+            {
+                Ok = false,
+                Message = ex is DirectLinkException ? ex.Message : L.T("Connecting directly took too long."),
+                Declined = ex is DirectLinkException { Declined: true },
+            };
         }
 
         await connection.Channel.SendAsync(FrameType.DirectResponse, response, token).ConfigureAwait(false);
@@ -789,8 +1005,21 @@ public sealed class DirectManager
             case DirectActions.Host:
             {
                 if (_link == null || !Roles.HasFlag(DirectRoles.Host)) throw new DirectLinkException(L.T("This device can't connect directly."));
+                var fromComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform);
+                if (fromComputer && _selfIsComputer)
+                {
+                    // Both pressed "Connect directly" at the same moment: the lower id joins, the other hosts.
+                    if (_pressing.ContainsKey(peerId) && string.CompareOrdinal(_selfId(), peerId) < 0)
+                        throw new DirectLinkException(L.T("{0} is connecting to you at the same time.", _settings.Current.DeviceName));
+                    _hostRequestedBy[peerId] = Environment.TickCount64;
+                }
+
+                if (!IsTrusted(peerFingerprint) && !await AskAsync(new DirectApproval(peerName, LeavesWiFi: false, KeepsInternet: true)).ConfigureAwait(false))
+                    throw new DirectLinkException(L.T("{0} didn't allow the direct connection.", _settings.Current.DeviceName), declined: true);
                 var network = await HostOwnNetworkAsync(token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
+                if (fromComputer && _selfIsComputer && _computerPlan.TryAdd(peerId, Plan.HostForPeer))
+                    _ = WatchComputerLinkAsync(peerId, pressedHere: false);
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 Log.Info($"Direct: started {network.Ssid} for {peerName}");
                 return new DirectResponseMessage { Ok = true, Ssid = network.Ssid, Passphrase = network.Passphrase };
@@ -801,10 +1030,13 @@ public sealed class DirectManager
                 if (_link == null || !CanJoin(IsComputer(peerKind, _discovery.Find(peerId)?.Platform)))
                     throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
-                if (_selfIsComputer && IsComputer(peerKind, _discovery.Find(peerId)?.Platform) && !WillingToLeaveWiFi(peerId))
+                var hostIsComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform);
+                if (_selfIsComputer && hostIsComputer)
                 {
-                    Log.Info($"Direct: not joining {request.Ssid} for {peerName}: set to Same Wi-Fi");
-                    throw new DirectLinkException(L.T("{0} is set to “Same Wi-Fi network”, so it doesn't leave its Wi-Fi to connect directly. Choose “Direct connection” in its Settings, or send over Wi-Fi.", _settings.Current.DeviceName));
+                    // Joining takes this computer off its Wi-Fi: its user decides (unless its internet comes over a cable).
+                    var keepsInternet = HasWiredInternet() || _discovery.Find(peerId)?.DirectRoles.HasFlag(DirectRoles.SharesInternet) == true;
+                    if (!HasWiredInternet() && !await AskAsync(new DirectApproval(peerName, LeavesWiFi: true, keepsInternet)).ConfigureAwait(false))
+                        throw new DirectLinkException(L.T("{0} didn't allow the direct connection.", _settings.Current.DeviceName), declined: true);
                 }
 
                 if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
@@ -813,6 +1045,8 @@ public sealed class DirectManager
                 Remember(peerId, peerName, peerFingerprint, peerKind, joining);
                 var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
+                if (_selfIsComputer && hostIsComputer && _computerPlan.TryAdd(peerId, Plan.JoinPeer))
+                    _ = WatchComputerLinkAsync(peerId, pressedHere: false);
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 DirectAddresses.Invalidate();
                 _discovery.RescanNetworks();
@@ -827,6 +1061,7 @@ public sealed class DirectManager
                 return new DirectResponseMessage { Ok = true };
 
             case DirectActions.Stop:
+                _computerPlan.TryRemove(peerId, out _);
                 SetPeerMethod(peerId, ConnectionMethod.SameNetwork);
                 _linkedPeers.TryRemove(peerId, out _);
                 StopLinkIfUnused();
@@ -935,32 +1170,6 @@ public sealed class DirectManager
         Problem?.Invoke(message);
     }
 
-    /// <summary>
-    /// Which of two computers hosts. Both decide from the same announced facts, so they agree whoever starts:
-    /// 1. Joining takes a computer off its own Wi-Fi, so only one set to Direct (or with internet over a cable, which
-    ///    loses nothing) joins; one set to Same Wi-Fi only hosts, which doesn't disturb its Wi-Fi.
-    /// 2. Both willing: the one with a cable joins (it keeps its internet; the other keeps its Wi-Fi while hosting).
-    /// 3. Then the one whose network shares its internet hosts, so the other keeps internet through it.
-    /// 4. Then a fixed order of the two device ids.
-    /// Neither willing (only this side asked for it, for this one transfer): this side joins.
-    /// </summary>
-    private Plan ChooseBetweenComputers(DirectRoles mine, DirectRoles theirs, string peerId)
-    {
-        static bool Willing(DirectRoles r) => r.HasFlag(DirectRoles.PrefersDirect) || r.HasFlag(DirectRoles.Wired);
-        bool Has(DirectRoles r, DirectRoles trait) => r.HasFlag(trait);
-
-        if (Willing(mine) != Willing(theirs)) return Willing(mine) ? Plan.JoinPeer : Plan.HostForPeer;
-        if (!Willing(mine)) return Plan.JoinPeer;
-        if (Has(mine, DirectRoles.Wired) != Has(theirs, DirectRoles.Wired)) return Has(mine, DirectRoles.Wired) ? Plan.JoinPeer : Plan.HostForPeer;
-        if (Has(mine, DirectRoles.SharesInternet) != Has(theirs, DirectRoles.SharesInternet))
-            return Has(mine, DirectRoles.SharesInternet) ? Plan.HostForPeer : Plan.JoinPeer;
-        return string.CompareOrdinal(_selfId(), peerId) < 0 ? Plan.HostForPeer : Plan.JoinPeer;
-    }
-
-    /// <summary>This computer may leave its Wi-Fi to join <paramref name="peerId"/>'s network.</summary>
-    private bool WillingToLeaveWiFi(string peerId) =>
-        _settings.Current.Connection == ConnectionMethod.Direct || MethodFor(peerId) == ConnectionMethod.Direct || HasWiredInternet();
-
     /// <summary>This device can join the direct network of a computer (<paramref name="hostIsComputer"/>) or a phone.</summary>
     private bool CanJoin(bool hostIsComputer) =>
         Roles.HasFlag(DirectRoles.Join) || (hostIsComputer && Roles.HasFlag(DirectRoles.JoinComputers));
@@ -970,6 +1179,8 @@ public sealed class DirectManager
         var mine = Roles;
         var theirs = peer.DirectRoles;
         var peerIsComputer = IsComputer(peer.Kind, peer.Platform);
+        // Two computers: only through "Connect directly" (where the computer it was pressed on joins), never by themselves.
+        if (_selfIsComputer && peerIsComputer) return _computerPlan.TryGetValue(peer.Id, out var asked) ? asked : Plan.None;
         var canJoinPeer = CanJoin(peerIsComputer) && theirs.HasFlag(DirectRoles.Host);
         var canHostForPeer = mine.HasFlag(DirectRoles.Host)
                              && (theirs.HasFlag(DirectRoles.Join) || (_selfIsComputer && theirs.HasFlag(DirectRoles.JoinComputers)));
@@ -977,7 +1188,7 @@ public sealed class DirectManager
         {
             // A computer hosts for a phone (a phone's own network costs its battery and takes the computer off its Wi-Fi).
             if (_selfIsComputer != peerIsComputer) return _selfIsComputer ? Plan.HostForPeer : Plan.JoinPeer;
-            return ChooseBetweenComputers(Traits(), theirs, peer.Id);
+            return string.CompareOrdinal(_selfId(), peer.Id) < 0 ? Plan.HostForPeer : Plan.JoinPeer; // two phones
         }
 
         return canJoinPeer ? Plan.JoinPeer : canHostForPeer ? Plan.HostForPeer : Plan.None;

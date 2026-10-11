@@ -458,5 +458,17 @@
   "This computer has no Wi-Fi, so it can't join the other computer's network.": "Bu bilgisayarda Wi-Fi yok; bu yüzden diğer bilgisayarın ağına katılamaz.",
   "The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location.": "Diğer bilgisayarın ağı menzilde değil. Bilgisayarları birbirine yaklaştırın; yine bulunamazsa Windows Ayarları → Gizlilik ve güvenlik → Konum'da masaüstü uygulamaları için konum erişimini açın.",
   "This computer couldn't join the other computer's network. Move the computers closer together and try again.": "Bu bilgisayar diğer bilgisayarın ağına katılamadı. Bilgisayarları birbirine yaklaştırıp tekrar deneyin.",
-  "{0} is set to “Same Wi-Fi network”, so it doesn't leave its Wi-Fi to connect directly. Choose “Direct connection” in its Settings, or send over Wi-Fi.": "{0} “Aynı Wi-Fi ağı” olarak ayarlı; bu yüzden doğrudan bağlanmak için Wi-Fi ağından ayrılmaz. Ayarlarında “Doğrudan bağlantı”yı seçin veya Wi-Fi üzerinden gönderin."
+  "Connect directly to {0}?": "{0} ile doğrudan bağlanılsın mı?",
+  "Connecting…": "Bağlanıyor…",
+  "Disconnect": "Bağlantıyı kes",
+  "Don't allow": "İzin verme",
+  "This computer has no internet meanwhile.": "Bu sırada bu bilgisayarın interneti olmaz.",
+  "This computer leaves its Wi-Fi and joins {0}'s network while connected directly. {0} can't share its internet, so this computer has no internet until you disconnect.": "Doğrudan bağlıyken bu bilgisayar Wi-Fi ağından ayrılıp {0} adlı cihazın ağına katılır. {0} internetini paylaşamıyor; bu yüzden bağlantıyı kesene kadar bu bilgisayarın interneti olmaz.",
+  "This device starts its own Wi-Fi network for {0}. Your Wi-Fi stays connected.": "Bu cihaz {0} için kendi Wi-Fi ağını başlatır. Wi-Fi bağlantınız devam eder.",
+  "To connect directly, this computer leaves its Wi-Fi and joins {0}'s network until you disconnect.": "Doğrudan bağlanmak için bu bilgisayar, siz bağlantıyı kesene kadar Wi-Fi ağından ayrılıp {0} adlı cihazın ağına katılır.",
+  "{0} didn't allow the direct connection.": "{0} doğrudan bağlantıya izin vermedi.",
+  "{0} is connecting to you at the same time.": "{0} aynı anda size bağlanıyor.",
+  "{0} shares its internet, so this computer stays online.": "{0} internetini paylaşıyor; bu yüzden bu bilgisayar çevrimiçi kalır.",
+  "{0} wants to connect directly": "{0} doğrudan bağlanmak istiyor",
+  "{0} · Direct": "{0} · Doğrudan"
 }

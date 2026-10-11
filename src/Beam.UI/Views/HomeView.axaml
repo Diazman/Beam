@@ -74,6 +74,11 @@
                         <PathIcon Data="{StaticResource IconCheck}" Width="12" Height="12" Foreground="White" />
                       </Border>
                     </Grid>
+                    <!-- Another computer: connect directly to it (this computer joins its network) -->
+                    <Button Grid.Row="1" Classes="link" Padding="4,2" Margin="-4,0,0,0" FontSize="12"
+                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Content="{Binding DirectButtonText}" Command="{Binding DirectCommand}"
+                            IsVisible="{Binding ShowsDirectButton}" />
                     <TextBlock Grid.Row="2" Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Row="3" Classes="caption" Text="{Binding Subtitle}" Margin="0,2,0,0"
