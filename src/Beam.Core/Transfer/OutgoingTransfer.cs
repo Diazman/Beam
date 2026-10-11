@@ -77,6 +77,7 @@ internal sealed class OutgoingTransfer
             }
 
             var failures = 0;
+            long firstFailure = 0;
             while (true)
             {
                 token.ThrowIfCancellationRequested();
@@ -91,9 +92,12 @@ internal sealed class OutgoingTransfer
                     // other on the new path: keep trying for a while instead of giving up after a few attempts.
                     var switching = Environment.TickCount64 < Volatile.Read(ref _switchingUntil);
                     if (!switching) failures++;
-                    var maxAttempts = _accepted ? 6 : 2;
+                    if (failures == 1 && !switching) firstFailure = Environment.TickCount64;
                     Log.Warn($"Transfer {_session.Id} to {PeerName}: attempt failed{(switching ? " while switching connection" : $" ({failures})")} ({ex.GetType().Name}: {ex.Message})");
-                    if (failures >= maxAttempts) throw;
+                    // Before the other side accepted, give up quickly. A running transfer keeps trying for a while: the
+                    // devices may be re-joining a direct network, walking back into Wi-Fi range or waking up.
+                    if (!_accepted && failures >= 2) throw;
+                    if (_accepted && failures >= 2 && Environment.TickCount64 - firstFailure > (long)ReconnectPatience.TotalMilliseconds) throw;
                     _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
                     if (!switching) _session.SetPath(TransferPath.Unknown);
                     await Task.Delay(switching ? TimeSpan.FromSeconds(1.5) : Backoff(failures), token).ConfigureAwait(false);
@@ -128,13 +132,15 @@ internal sealed class OutgoingTransfer
         _session.SetState(state, error);
     }
 
+    /// <summary>How long a running transfer keeps trying to reconnect before it fails (it can still be resumed later).</summary>
+    internal static TimeSpan ReconnectPatience { get; set; } = TimeSpan.FromMinutes(3);
+
     private static TimeSpan Backoff(int failures) => TimeSpan.FromSeconds(failures switch
     {
-        1 => 2,
-        2 => 3,
-        3 => 5,
-        4 => 8,
-        _ => 12,
+        1 => 1,
+        2 => 2,
+        3 => 3,
+        _ => 5,
     });
 
     private async Task RunAttemptAsync(CancellationToken token)

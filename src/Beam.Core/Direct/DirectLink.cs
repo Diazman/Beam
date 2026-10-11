@@ -115,6 +115,13 @@ public interface IDirectLink
     void Stop();
 }
 
+/// <summary>A link that says when a network it joined went away (stopped by the other device, or out of range).</summary>
+public interface IDirectLinkEvents
+{
+    /// <summary>Raised (on any thread) when the joined network was lost; this device is back on its normal network.</summary>
+    event Action? Lost;
+}
+
 /// <summary>A link that can also list the Wi-Fi networks in range (phones: to notice a paired PC's direct network).</summary>
 public interface IDirectNetworkScanner
 {

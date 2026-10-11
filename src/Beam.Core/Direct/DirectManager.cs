@@ -47,6 +47,7 @@ public sealed class DirectManager
         _settings = settings;
         _selfId = selfId;
         _link = link;
+        if (link is IDirectLinkEvents events) events.Lost += OnLinkLost;
         _transfers.BeforeConnect = BeforeConnectAsync;
         _transfers.DirectHandler = HandleRequestAsync;
     }
@@ -354,7 +355,7 @@ public sealed class DirectManager
     /// <summary>The Phone page no longer needs the direct network (stopped unless a transfer still uses it).</summary>
     public void StopForBrowser()
     {
-        if (_linkedPeers.TryRemove(BrowserUser, out _)) StopLinkIfUnused();
+        if (_linkedPeers.TryRemove(BrowserUser, out _)) StopLinkIfUnused(keepForRunningTransfers: true);
     }
 
     /// <summary>
@@ -544,6 +545,9 @@ public sealed class DirectManager
     private async Task FindOnDirectLinkAsync(DeviceInfo peer, IPAddress? host, CancellationToken token)
     {
         DirectAddresses.Invalidate();
+        // The host's address on the new network is known: try Beam's port there right away instead of waiting for
+        // discovery (which can take several seconds after a network change).
+        var port = (_discovery.Find(peer.Id) ?? peer).Endpoints.FirstOrDefault()?.Port ?? AppInfo.TransferPort;
         var deadline = Environment.TickCount64 + (long)FindTimeout.TotalMilliseconds;
         var next = 0L;
         while (Environment.TickCount64 < deadline)
@@ -563,11 +567,44 @@ public sealed class DirectManager
                 return;
             }
 
+            if (host != null && _transfers.IsDirectAddress(host) && await CanReachAsync(new IPEndPoint(host, port), token).ConfigureAwait(false))
+            {
+                var current = _discovery.Find(peer.Id) ?? peer;
+                _discovery.ReportReachable(current with { Endpoints = new[] { new IPEndPoint(host, port) }.Concat(current.Endpoints).Take(4).ToList() });
+                Log.Info($"Direct: reached {peer.Name} at {host}:{port}");
+                return;
+            }
+
             await Task.Delay(250, token).ConfigureAwait(false);
         }
 
         Log.Warn($"Direct: {peer.Name} not found on the direct link. Adapters: {DirectAddresses.Describe()}");
         throw new DirectLinkException(L.T("The direct connection to {0} started, but Beam couldn't reach it. Check that Beam is allowed through the firewall.", peer.Name));
+    }
+
+    private static async Task<bool> CanReachAsync(IPEndPoint endpoint, CancellationToken token)
+    {
+        using var socket = new System.Net.Sockets.Socket(endpoint.AddressFamily, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(1.5));
+        try
+        {
+            await socket.ConnectAsync(endpoint, timeout.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The joined network went away: forget its addresses, so transfers reconnect (re-joining, or over Wi-Fi).</summary>
+    private void OnLinkLost()
+    {
+        Log.Warn("Direct: the direct network was lost");
+        DirectAddresses.Invalidate();
+        _discovery.RescanNetworks();
+        Changed?.Invoke();
     }
 
     private async Task HandleRequestAsync(PeerConnection connection, CancellationToken token)
@@ -667,9 +704,16 @@ public sealed class DirectManager
         Changed?.Invoke();
     }
 
-    private void StopLinkIfUnused()
+    private void StopLinkIfUnused(bool keepForRunningTransfers = false)
     {
         if (!_linkedPeers.IsEmpty || _link == null) return;
+        // Leaving the Phone page mustn't pull the network from under a transfer that runs over it.
+        if (keepForRunningTransfers && _transfers.Sessions.Any(s => !s.IsFinished && s.Path == TransferPath.Direct))
+        {
+            Log.Info("Direct: link kept, a transfer still uses it");
+            return;
+        }
+
         try
         {
             _link.Stop();
