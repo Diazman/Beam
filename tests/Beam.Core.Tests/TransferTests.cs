@@ -323,6 +323,28 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task KeepsReconnectingWhileTheOtherDeviceIsUnreachableForAWhile()
+    {
+        // E.g. the phone's direct network dropped and is being re-joined, or someone walked out of Wi-Fi range.
+        await using var sender = new TestNode("Phone");
+        await using var receiver = new TestNode("PC");
+        var file = sender.CreateFile("video.mp4", 40L * 1024 * 1024, 7);
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
+
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { file });
+        await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 8L * 1024 * 1024, because: "transferring");
+        proxy.Unreachable = true;
+        proxy.CutAll();
+        await Task.Delay(TimeSpan.FromSeconds(40)); // longer than the old ~30 s of retries
+        Assert.False(session.IsFinished, $"gave up while the other device was away ({session.State})");
+        proxy.Unreachable = false;
+
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(90));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+    }
+
+    [Fact]
     public async Task CorruptedPartialFileIsDetectedAndResent()
     {
         await using var sender = new TestNode("Sender");

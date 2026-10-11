@@ -20,7 +20,7 @@ namespace Beam.Droid;
 /// Android 12), so it then joins it as an ordinary Wi-Fi network (Android asks the user once), and Beam's
 /// traffic goes over that network until the direct link is stopped. Needs Android 10.
 /// </summary>
-internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
+internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner
 {
     private static readonly TimeSpan GroupTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan P2pJoinTimeout = TimeSpan.FromSeconds(15);
@@ -190,7 +190,8 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
     /// Waits (up to <see cref="VisibleTimeout"/>) until the network shows up in Wi-Fi scans. A network that was just
     /// started takes a few seconds to appear; asking Android for it before that ends in "no network found".
     /// </summary>
-    private async Task WaitUntilVisibleAsync(string ssid, CancellationToken cancellationToken)
+    /// <returns>The network's access point address (BSSID) when it was seen; null otherwise.</returns>
+    private async Task<string?> WaitUntilVisibleAsync(string ssid, CancellationToken cancellationToken)
     {
         var deadline = System.Environment.TickCount64 + (long)VisibleTimeout.TotalMilliseconds;
         _lastScanStart = 0; // scan now
@@ -200,8 +201,9 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
             var visible = VisibleNetworks(scanEveryMs: 5_000);
             if (visible.Contains(ssid))
             {
-                Log.Info($"Wi-Fi: {ssid} is in range");
-                return;
+                var bssid = BssidOf(ssid);
+                Log.Info($"Wi-Fi: {ssid} is in range ({bssid ?? "no BSSID"})");
+                return bssid;
             }
 
             sawAnything |= visible.Count > 0;
@@ -209,6 +211,25 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
         }
 
         Log.Info(sawAnything ? $"Wi-Fi: {ssid} didn't show up in scans; asking Android anyway" : "Wi-Fi: no scan results; asking Android anyway");
+        return null;
+    }
+
+    /// <summary>The strongest access point broadcasting <paramref name="ssid"/> in the last scan.</summary>
+    private string? BssidOf(string ssid)
+    {
+        try
+        {
+            if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return null;
+#pragma warning disable CA1422 // ScanResult.Ssid: the replacement needs Android 13
+            return wifi.ScanResults?.Where(r => r.Ssid?.Trim('"') == ssid && !string.IsNullOrEmpty(r.Bssid))
+                .OrderByDescending(r => r.Level).Select(r => r.Bssid).FirstOrDefault();
+#pragma warning restore CA1422
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Wi-Fi: no access point address for {ssid}: {ex.Message}");
+            return null;
+        }
     }
 
     public void Stop()
@@ -227,14 +248,18 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
     {
         var connectivity = (ConnectivityManager?)_context.GetSystemService(Context.ConnectivityService)
                            ?? throw new DirectLinkException(L.T("This phone couldn't join the direct connection. Move the devices closer together and try again."));
-        var specifier = new WifiNetworkSpecifier.Builder().SetSsid(network.Ssid)!.SetWpa2Passphrase(network.Passphrase)!.Build();
+        var bssid = await WaitUntilVisibleAsync(network.Ssid, cancellationToken).ConfigureAwait(false);
+        var builder = new WifiNetworkSpecifier.Builder().SetSsid(network.Ssid)!.SetWpa2Passphrase(network.Passphrase)!;
+        // The exact access point: Android connects to it without searching again, and once the user approved it,
+        // later requests for it are usually approved without asking.
+        if (bssid != null && global::Android.Net.MacAddress.FromString(bssid) is { } mac) builder.SetBssid(mac);
+        var specifier = builder.Build();
         var request = new NetworkRequest.Builder()
             .AddTransportType(TransportType.Wifi)!
             .RemoveCapability(NetCapability.Internet)!
             .SetNetworkSpecifier(specifier)!
             .Build();
-        await WaitUntilVisibleAsync(network.Ssid, cancellationToken).ConfigureAwait(false);
-        var callback = new WifiCallback(network.Ssid);
+        var callback = new WifiCallback(network.Ssid, OnNetworkLost);
         Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
         try
         {
@@ -294,6 +319,19 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
         }
 
         return null;
+    }
+
+    public event Action? Lost;
+
+    /// <summary>
+    /// Android dropped the PC's network (the PC stopped it, it went out of range, or Android gave up on it). Beam was
+    /// bound to that network, so until it lets go every connection fails, also over the normal Wi-Fi: let go now.
+    /// </summary>
+    private void OnNetworkLost(WifiCallback callback)
+    {
+        if (!ReferenceEquals(Volatile.Read(ref _wifiNetwork), callback)) return;
+        ReleaseWifiNetwork();
+        Lost?.Invoke();
     }
 
     private void ReleaseWifiNetwork()
@@ -386,7 +424,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
 
     private sealed class WifiCallback : ConnectivityManager.NetworkCallback
     {
-        public WifiCallback(string ssid) => Ssid = ssid;
+        private readonly Action<WifiCallback> _lost;
+
+        public WifiCallback(string ssid, Action<WifiCallback> lost)
+        {
+            Ssid = ssid;
+            _lost = lost;
+        }
 
         public string Ssid { get; }
 
@@ -406,8 +450,9 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectNetworkScanner
 
         public override void OnLost(Android.Net.Network network)
         {
-            Log.Info($"Wi-Fi: lost {Ssid}");
+            Log.Warn($"Wi-Fi: lost {Ssid}");
             Network = null;
+            _lost(this);
         }
     }
 

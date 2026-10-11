@@ -225,6 +225,9 @@ public sealed class FlakyProxy : IDisposable
 
     public long BytesForwarded;
 
+    /// <summary>While set, the other side is unreachable: new connections are closed straight away.</summary>
+    public volatile bool Unreachable;
+
     public void CutAll()
     {
         lock (_sockets)
@@ -253,6 +256,12 @@ public sealed class FlakyProxy : IDisposable
             catch
             {
                 return;
+            }
+
+            if (Unreachable)
+            {
+                client.Dispose();
+                continue;
             }
 
             Interlocked.Increment(ref Connections);
