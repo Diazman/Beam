@@ -539,5 +539,11 @@
   "• Open Settings → Wi-Fi. For every other saved Wi-Fi in range, turn off Auto-reconnect, or tap Forget (you can join it again later).": "• Откройте Настройки → Wi-Fi. Для каждой другой сохранённой сети Wi-Fi поблизости отключите автоподключение или нажмите «Забыть» (позже к ней можно подключиться снова).",
   "• Turn off options that switch networks by themselves, such as Wi-Fi assistant, Smart network switch or Switch to mobile data.": "• Отключите функции, которые сами переключают сети, например «Помощник Wi-Fi», «Умное переключение сетей» или «Переключаться на мобильные данные».",
   "Got it": "Понятно",
-  "This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.": "Этот компьютер раздаёт свой интернет через свой Wi-Fi, поэтому телефону незачем переключаться на другой Wi-Fi."
+  "This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.": "Этот компьютер раздаёт свой интернет через свой Wi-Fi, поэтому телефону незачем переключаться на другой Wi-Fi.",
+  "Beam is connected to a computer": "Beam подключён к компьютеру",
+  "On the computer's own Wi-Fi, ready to send and receive files.": "В собственном Wi-Fi компьютера, готов отправлять и принимать файлы.",
+  "Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again.": "Windows не разрешил Beam использовать Wi-Fi. В Параметрах Windows → Конфиденциальность и защита → Расположение включите доступ к расположению и разрешите его классическим приложениям, затем повторите попытку.",
+  "This computer has no Wi-Fi, so it can't join the other computer's network.": "На этом компьютере нет Wi-Fi, поэтому он не может подключиться к сети другого компьютера.",
+  "The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location.": "Сеть другого компьютера вне зоны досягаемости. Поставьте компьютеры ближе друг к другу; если она всё равно не находится, включите доступ к расположению для классических приложений в Параметрах Windows → Конфиденциальность и защита → Расположение.",
+  "This computer couldn't join the other computer's network. Move the computers closer together and try again.": "Этому компьютеру не удалось подключиться к сети другого компьютера. Поставьте компьютеры ближе друг к другу и повторите попытку."
 }

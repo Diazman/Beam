@@ -75,6 +75,49 @@ public class DirectConnectionTests
     }
 
     [Fact]
+    public async Task TwoComputersConnectDirectlyOneJoinsTheOthersNetwork()
+    {
+        var air = new FakeDirectAir();
+        var pcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
+        var deskLink = air.Link(pcRoles);
+        var laptopLink = air.Link(pcRoles);
+        await using var desk = new TestNode("Desk", directLink: deskLink);
+        await using var laptop = new TestNode("Laptop", directLink: laptopLink, kind: DeviceKinds.Laptop);
+        air.Connect(laptop.Node, () => laptop.AsDevice(), desk.Node, () => desk.AsDevice());
+        laptop.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        var paths = new List<TransferPath>();
+
+        var session = laptop.Node.Send(desk.AsDevice(), new[] { laptop.CreateFile("photos.zip", 300_000) });
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(session);
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(1, air.Joined);
+        // The laptop, set to Direct, already keeps its own network on (for phones): the desk joins that one.
+        Assert.Same(laptopLink, air.LastHostLink);
+        Assert.Same(deskLink, air.LastJoinLink);
+        Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
+    }
+
+    [Fact]
+    public async Task AComputerThatCanJoinOtherComputersStillHostsForAPhone()
+    {
+        // Phones (also older Beam versions, which only understand "host") always join the computer's network.
+        var air = new FakeDirectAir();
+        var pcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
+        var phoneRoles = DirectRoles.Host | DirectRoles.Join;
+        await using var pc = new TestNode("Laptop", directLink: air.Link(pcRoles), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        Assert.Equal("host", DirectRolesText.Format(DirectRolesText.Parse("host,joinpc") & (DirectRoles.Host | DirectRoles.Join)));
+
+        // Chosen on the computer: it starts its network and the phone joins.
+        Assert.True(await pc.Node.Direct.SwitchAsync(phone.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        Assert.Equal(pcRoles, air.LastHost);
+        Assert.Equal(phoneRoles, air.LastJoiner);
+    }
+
+    [Fact]
     public async Task WhenTheOtherDeviceCantConnectDirectlyTheNetworkIsUsed()
     {
         var air = new FakeDirectAir();

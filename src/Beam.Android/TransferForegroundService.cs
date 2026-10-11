@@ -22,11 +22,14 @@ public sealed class TransferForegroundService : Service
 
     public override IBinder? OnBind(Intent? intent) => null;
 
+    /// <summary>Intent extra: true while files transfer, false while Beam only stays on a computer's network.</summary>
+    internal const string TransferringExtra = "transferring";
+
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         try
         {
-            var notification = BuildNotification(this);
+            var notification = BuildNotification(this, intent?.GetBooleanExtra(TransferringExtra, true) ?? true);
             if (OperatingSystem.IsAndroidVersionAtLeast(29)) StartForeground(NotificationId, notification, ForegroundService.TypeDataSync);
             else StartForeground(NotificationId, notification);
         }
@@ -39,7 +42,19 @@ public sealed class TransferForegroundService : Service
         return StartCommandResult.NotSticky;
     }
 
-    private static Notification BuildNotification(Context context)
+    internal static void Update(Context context, bool transferring)
+    {
+        try
+        {
+            ((NotificationManager?)context.GetSystemService(NotificationService))?.Notify(NotificationId, BuildNotification(context, transferring));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not update Beam's notification", ex);
+        }
+    }
+
+    private static Notification BuildNotification(Context context, bool transferring)
     {
         var manager = (NotificationManager?)context.GetSystemService(NotificationService);
         if (OperatingSystem.IsAndroidVersionAtLeast(26) && manager?.GetNotificationChannel(ChannelId) == null)
@@ -51,60 +66,84 @@ public sealed class TransferForegroundService : Service
         var builder = OperatingSystem.IsAndroidVersionAtLeast(26) ? new Notification.Builder(context, ChannelId) : new Notification.Builder(context);
 #pragma warning restore CA1422
         return builder
-            .SetContentTitle(L.T("Beam is transferring files"))
-            .SetContentText(L.T("Keep Wi-Fi on until it's done. You can use other apps meanwhile."))
-            .SetSmallIcon(global::Android.Resource.Drawable.StatSysUpload)
+            .SetContentTitle(transferring ? L.T("Beam is transferring files") : L.T("Beam is connected to a computer"))
+            .SetContentText(transferring
+                ? L.T("Keep Wi-Fi on until it's done. You can use other apps meanwhile.")
+                : L.T("On the computer's own Wi-Fi, ready to send and receive files."))
+            .SetSmallIcon(transferring ? global::Android.Resource.Drawable.StatSysUpload : global::Android.Resource.Drawable.StatNotifySync)
             .SetContentIntent(pending)
             .SetOngoing(true)
             .Build()!;
     }
 }
 
-/// <summary>Starts <see cref="TransferForegroundService"/> while any transfer runs (or waits for an answer) and stops it after.</summary>
+/// <summary>
+/// Starts <see cref="TransferForegroundService"/> while any transfer runs (or waits for an answer), and while Beam is on a
+/// computer's own Wi-Fi, so a transfer the computer starts later still runs with Beam in the background (Android doesn't
+/// let a hidden app start this service). Stops it after.
+/// </summary>
 internal sealed class TransferKeepAlive
 {
     private readonly Context _context;
     private readonly TransferService _transfers;
+    private readonly AndroidDirectLink? _link;
     private readonly object _gate = new();
     private bool _running;
+    private bool _transferring;
     private WifiManager.WifiLock? _wifiLock;
     private PowerManager.WakeLock? _wakeLock;
 
-    public TransferKeepAlive(Context context, TransferService transfers)
+    public TransferKeepAlive(Context context, TransferService transfers, AndroidDirectLink? link)
     {
         _context = context;
         _transfers = transfers;
+        _link = link;
         transfers.SessionStarted += _ => Update();
         transfers.SessionFinished += _ => Update();
+        if (link != null) link.JoinedChanged += Update;
     }
+
+    /// <summary>Beam came to the screen: start the service now if Android refused it while Beam was hidden.</summary>
+    public void Retry() => Update();
 
     private void Update()
     {
         lock (_gate)
         {
-            var active = _transfers.Sessions.Any(s => !s.IsFinished);
+            var transferring = _transfers.Sessions.Any(s => !s.IsFinished);
+            var active = transferring || _link?.IsJoined == true;
+            if (active && _running)
+            {
+                if (transferring != _transferring) TransferForegroundService.Update(_context, transferring);
+                _transferring = transferring;
+                return;
+            }
+
             if (active == _running) return;
-            _running = active;
-            var intent = new Intent(_context, typeof(TransferForegroundService));
+            var intent = new Intent(_context, typeof(TransferForegroundService)).PutExtra(TransferForegroundService.TransferringExtra, transferring);
             try
             {
                 if (active)
                 {
                     if (OperatingSystem.IsAndroidVersionAtLeast(26)) _context.StartForegroundService(intent);
                     else _context.StartService(intent);
+                    _running = true;
+                    _transferring = transferring;
                     AcquireLocks();
-                    Log.Info("Keeping Beam running while files transfer");
+                    Log.Info(transferring ? "Keeping Beam running while files transfer" : "Keeping Beam running while it's on a computer's Wi-Fi");
                 }
                 else
                 {
+                    _running = false;
                     _context.StopService(intent);
                     ReleaseLocks();
                 }
             }
             catch (Exception ex)
             {
-                // E.g. Android doesn't let an app in the background start this (a transfer that began while Beam was hidden).
-                Log.Warn("Could not start or stop the transfer service", ex);
+                // E.g. Android doesn't let an app in the background start this (a transfer that began while Beam was
+                // hidden): keep Wi-Fi awake anyway and try again when Beam is opened.
+                Log.Warn($"Could not start or stop the transfer service: {ex.Message}");
                 if (active) AcquireLocks();
             }
         }

@@ -13,17 +13,24 @@ public enum DirectRoles
 
     /// <summary>Can join another device's direct network (Android 10+).</summary>
     Join = 2,
+
+    /// <summary>
+    /// Can join another computer's direct network, but not a phone's (Windows: its Wi-Fi joins the other PC's network).
+    /// Announced as its own word, so older Beam versions on phones see only "host" and keep joining the PC.
+    /// </summary>
+    JoinComputers = 4,
 }
 
 public static class DirectRolesText
 {
-    public static string Format(DirectRoles roles) => roles switch
+    public static string Format(DirectRoles roles)
     {
-        DirectRoles.Host | DirectRoles.Join => "host,join",
-        DirectRoles.Host => "host",
-        DirectRoles.Join => "join",
-        _ => "",
-    };
+        var parts = new List<string>(3);
+        if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
+        if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
+        if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
+        return string.Join(",", parts);
+    }
 
     public static DirectRoles Parse(string? text)
     {
@@ -32,6 +39,7 @@ public static class DirectRolesText
         {
             if (part == "host") roles |= DirectRoles.Host;
             else if (part == "join") roles |= DirectRoles.Join;
+            else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
         }
 
         return roles;

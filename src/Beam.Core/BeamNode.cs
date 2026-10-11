@@ -72,7 +72,9 @@ public sealed class BeamNode : IAsyncDisposable
             () => new LocalAnnouncement(Identity.DeviceId, Settings.Current.DeviceName, Transfers.Port, Identity.Fingerprint,
                 options.DeviceKind ?? DeviceKinds.Desktop, Direct!.Roles));
         Discovery.Discoverable = Settings.Current.Discoverable;
-        Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink);
+        var selfKind = options.DeviceKind ?? DeviceKinds.Desktop;
+        Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink,
+            selfIsComputer: selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }

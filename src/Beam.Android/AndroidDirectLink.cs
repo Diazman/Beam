@@ -312,6 +312,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         var host = HostAddress(connectivity.GetLinkProperties(joined));
         callback.Host = host;
         Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host?.ToString() ?? "unknown"}");
+        JoinedChanged?.Invoke();
         return host;
     }
 
@@ -340,6 +341,12 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     }
 
     public event Action? Lost;
+
+    /// <summary>Beam is on a computer's network right now (joined and bound to it).</summary>
+    public bool IsJoined => Volatile.Read(ref _wifiNetwork) is { Network: not null };
+
+    /// <summary>Joined or left a computer's network.</summary>
+    public event Action? JoinedChanged;
 
     /// <summary>
     /// Android dropped the PC's network (the PC stopped it, it went out of range, or Android gave up on it). Beam was
@@ -370,6 +377,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             }
 
             Log.Info($"Wi-Fi: left {callback.Ssid}");
+            JoinedChanged?.Invoke();
         }
         catch (Exception ex)
         {

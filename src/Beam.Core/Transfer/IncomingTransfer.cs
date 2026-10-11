@@ -597,13 +597,25 @@ internal sealed class IncomingTransfer
         return new FileResultMessage { Index = file.Index, Ok = true };
     }
 
+    /// <summary>File.Move; replaceable in tests (e.g. to act like Android refusing to replace another app's file).</summary>
+    internal static Action<string, string, bool> MoveFile { get; set; } = File.Move;
+
     private static string MoveIntoPlace(ResumeFile file)
     {
         var target = file.TargetPath;
         if (file.Replace && File.Exists(target))
         {
-            File.Move(file.PartPath, target, overwrite: true);
-            return target;
+            try
+            {
+                MoveFile(file.PartPath, target, true);
+                return target;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Not ours to replace (on Android, a file an earlier install of Beam or another app saved): keep both
+                // rather than losing what was just received.
+                Log.Warn($"Couldn't replace {target} ({ex.Message}); saving the received file under a new name");
+            }
         }
 
         for (var attempt = 0; attempt < 5; attempt++)

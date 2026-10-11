@@ -30,6 +30,18 @@ public sealed class FakeDirectAir
         return link;
     }
 
+    /// <summary>The roles of the device whose link started the last network (who hosted).</summary>
+    public DirectRoles? LastHost { get; private set; }
+
+    /// <summary>The link that started the last network.</summary>
+    public IDirectLink? LastHostLink { get; private set; }
+
+    /// <summary>The link that joined last.</summary>
+    public IDirectLink? LastJoinLink { get; private set; }
+
+    /// <summary>The roles of the device whose link joined last (who joined).</summary>
+    public DirectRoles? LastJoiner { get; private set; }
+
     /// <summary>Whether a joiner is on the host's network right now.</summary>
     public bool LinkUp { get; private set; }
 
@@ -90,6 +102,8 @@ public sealed class FakeDirectAir
         {
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
             Interlocked.Increment(ref _air._hosted);
+            _air.LastHost = Roles;
+            _air.LastHostLink = this;
             return Task.FromResult(_air._network ??= preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
         }
 
@@ -99,6 +113,8 @@ public sealed class FakeDirectAir
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
             _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);
+            _air.LastJoiner = Roles;
+            _air.LastJoinLink = this;
             _air.LinkUp = true;
             _air._onJoined?.Invoke();
             return DirectAddress;

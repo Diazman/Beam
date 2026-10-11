@@ -40,6 +40,7 @@ public sealed class DirectManager
     private readonly SettingsStore _settings;
     private readonly Func<string> _selfId;
     private readonly IDirectLink? _link;
+    private readonly bool _selfIsComputer;
     private readonly ConcurrentDictionary<string, ConnectionMethod> _peerMethod = new();
     private readonly ConcurrentDictionary<string, (int Count, long At)> _directFailures = new();
     private readonly ConcurrentDictionary<string, byte> _upgrading = new();
@@ -50,8 +51,10 @@ public sealed class DirectManager
     private readonly ConcurrentDictionary<string, long> _autoJoinedAt = new();
     private int _availabilityRunning;
 
-    internal DirectManager(TransferService transfers, DiscoveryService discovery, SettingsStore settings, Func<string> selfId, IDirectLink? link)
+    internal DirectManager(TransferService transfers, DiscoveryService discovery, SettingsStore settings, Func<string> selfId, IDirectLink? link,
+        bool selfIsComputer = true)
     {
+        _selfIsComputer = selfIsComputer;
         _transfers = transfers;
         _discovery = discovery;
         _settings = settings;
@@ -219,7 +222,7 @@ public sealed class DirectManager
     /// </summary>
     private void UpdateAvailability()
     {
-        if (_link == null || Roles != DirectRoles.Host) return;
+        if (_link == null || !Roles.HasFlag(DirectRoles.Host) || Roles.HasFlag(DirectRoles.Join)) return;
         if (_settings.Current.Connection == ConnectionMethod.Direct)
         {
             if (Interlocked.Exchange(ref _availabilityRunning, 1) == 0) _ = Task.Run(KeepAvailableAsync);
@@ -505,6 +508,7 @@ public sealed class DirectManager
                         throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name));
                     var network = new DirectNetwork(reply.Ssid, reply.Passphrase) { HostIsComputer = IsComputer(current.Kind, current.Platform) };
                     Remember(peer.Id, peer.Name, peer.Fingerprint, peer.Kind, network);
+                    if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
                     host = await link.JoinAsync(network, token).ConfigureAwait(false);
                     break;
                 }
@@ -778,8 +782,10 @@ public sealed class DirectManager
 
             case DirectActions.Join:
             {
-                if (_link == null || !Roles.HasFlag(DirectRoles.Join)) throw new DirectLinkException(L.T("This device can't connect directly."));
+                if (_link == null || !CanJoin(IsComputer(peerKind, _discovery.Find(peerId)?.Platform)))
+                    throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
+                if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
                 Log.Info($"Direct: joining {request.Ssid} for {peerName}");
                 var joining = new DirectNetwork(request.Ssid, request.Passphrase) { HostIsComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform) };
                 Remember(peerId, peerName, peerFingerprint, peerKind, joining);
@@ -809,20 +815,23 @@ public sealed class DirectManager
         }
     }
 
+    /// <summary>Before this device's network starts or it joins another's (e.g. letting Beam through the firewall there).</summary>
+    private async Task PrepareAsync()
+    {
+        if (BeforeHosting is not { } before) return;
+        try
+        {
+            await before().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Direct: preparing the direct connection failed", ex);
+        }
+    }
+
     private async Task<DirectNetwork> HostOwnNetworkAsync(CancellationToken cancellationToken)
     {
-        if (BeforeHosting is { } before)
-        {
-            try
-            {
-                await before().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("Direct: preparing to host failed", ex);
-            }
-        }
-
+        await PrepareAsync().ConfigureAwait(false);
         var network = await _link!.HostAsync(OwnNetwork(), cancellationToken).ConfigureAwait(false);
         HostedNetwork = network;
         return network;
@@ -904,14 +913,29 @@ public sealed class DirectManager
         Problem?.Invoke(message);
     }
 
+    /// <summary>This device can join the direct network of a computer (<paramref name="hostIsComputer"/>) or a phone.</summary>
+    private bool CanJoin(bool hostIsComputer) =>
+        Roles.HasFlag(DirectRoles.Join) || (hostIsComputer && Roles.HasFlag(DirectRoles.JoinComputers));
+
     private Plan PlanFor(DeviceInfo peer)
     {
         var mine = Roles;
         var theirs = peer.DirectRoles;
-        var canJoinPeer = mine.HasFlag(DirectRoles.Join) && theirs.HasFlag(DirectRoles.Host);
-        var canHostForPeer = mine.HasFlag(DirectRoles.Host) && theirs.HasFlag(DirectRoles.Join);
+        var peerIsComputer = IsComputer(peer.Kind, peer.Platform);
+        var canJoinPeer = CanJoin(peerIsComputer) && theirs.HasFlag(DirectRoles.Host);
+        var canHostForPeer = mine.HasFlag(DirectRoles.Host)
+                             && (theirs.HasFlag(DirectRoles.Join) || (_selfIsComputer && theirs.HasFlag(DirectRoles.JoinComputers)));
         if (canJoinPeer && canHostForPeer)
-            return string.CompareOrdinal(_selfId(), peer.Id) < 0 ? Plan.HostForPeer : Plan.JoinPeer; // both sides agree
+        {
+            // A computer hosts for a phone (a phone's own network costs its battery and takes the computer off its Wi-Fi);
+            // between two of a kind, both sides pick the same one.
+            if (_selfIsComputer != peerIsComputer) return _selfIsComputer ? Plan.HostForPeer : Plan.JoinPeer;
+            // Two computers: this one's network is already on (Direct setting) → the other joins it; else both sides
+            // would pick the same one.
+            if (HostedNetwork != null) return Plan.HostForPeer;
+            return string.CompareOrdinal(_selfId(), peer.Id) < 0 ? Plan.HostForPeer : Plan.JoinPeer;
+        }
+
         return canJoinPeer ? Plan.JoinPeer : canHostForPeer ? Plan.HostForPeer : Plan.None;
     }
 

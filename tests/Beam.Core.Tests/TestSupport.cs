@@ -86,8 +86,12 @@ public sealed class TestNode : IAsyncDisposable
 {
     private readonly TempDir _dir = new();
 
-    public TestNode(string name, bool startDiscovery = false, Files.IExternalFiles? externalFiles = null, Direct.IDirectLink? directLink = null)
+    private readonly string _kind;
+
+    public TestNode(string name, bool startDiscovery = false, Files.IExternalFiles? externalFiles = null, Direct.IDirectLink? directLink = null,
+        string kind = DeviceKinds.Desktop)
     {
+        _kind = kind;
         Handler = new TestHandler();
         ReceiveFolder = _dir.Combine("received");
         Directory.CreateDirectory(ReceiveFolder);
@@ -98,6 +102,7 @@ public sealed class TestNode : IAsyncDisposable
             Handler = Handler,
             ExternalFiles = externalFiles,
             DirectLink = directLink,
+            DeviceKind = kind,
             Discovery = new DiscoveryOptions
             {
                 Port = 0,
@@ -131,6 +136,7 @@ public sealed class TestNode : IAsyncDisposable
         Name = Node.Settings.Current.DeviceName,
         Fingerprint = Node.Identity.Fingerprint,
         DirectRoles = Node.Direct.Roles,
+        Kind = _kind,
         Endpoints = new[] { new IPEndPoint(IPAddress.Loopback, viaPort ?? Node.Transfers.Port) },
     };
 
