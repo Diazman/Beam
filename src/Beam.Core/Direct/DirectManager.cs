@@ -434,10 +434,26 @@ public sealed class DirectManager
             _ = Task.Run(() => WatchKnownNetworksAsync(scanner, _stopping.Token));
     }
 
-    internal void Stop()
+    /// <summary>
+    /// Beam is closing: turn this device's network off (and leave another's) whoever still uses it, and wait for that
+    /// (a bit), so a hotspot doesn't stay on after Beam has closed.
+    /// </summary>
+    internal async Task StopAsync()
     {
         _stopping.Cancel();
-        if (_linkedPeers.TryRemove(AvailableUser, out _)) StopLinkIfUnused();
+        _linkedPeers.Clear();
+        if (_link == null) return;
+        try
+        {
+            if (_link is IAsyncDisposable closing) await closing.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            else _link.Stop();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Direct: stopping the link on exit failed", ex);
+        }
+
+        HostedNetwork = null;
     }
 
     /// <summary>
