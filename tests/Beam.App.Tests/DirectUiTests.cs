@@ -108,9 +108,17 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
 
+        // Turning "Let senders connect directly" off turns it off too; back on, it starts again only when asked.
+        receive.AllowDirect = false;
+        await UiHarness.WaitForAsync(() => air.Stopped > 0 && !receive.NetworkOn, "own Wi-Fi off with the switch");
+        Assert.Null(await app.Node.Direct.HostForNearbyAsync(CancellationToken.None));
+        receive.AllowDirect = true;
+        await app.Node.Direct.HostForNearbyAsync(CancellationToken.None);
+        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on again");
+
         // Leaving Receive turns it off (at once here; after a few minutes in the app).
         app.ViewModel.ShowHomeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => air.Stopped > 0, "own Wi-Fi off");
+        await UiHarness.WaitForAsync(() => air.Stopped > 1, "own Wi-Fi off");
         Assert.False(app.Node.Nearby.IsReceiving);
 
         // Turned off: senders aren't offered a direct connection.

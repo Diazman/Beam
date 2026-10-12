@@ -241,6 +241,25 @@ public sealed class DirectManager
         return _discovery.Find(code.DeviceId) ?? device;
     }
 
+    /// <summary>
+    /// "Let senders connect directly" was turned off: this device's own network goes off (and it leaves a network it
+    /// joined to receive), unless a transfer still runs over it.
+    /// </summary>
+    internal void OnDirectSendersNotAllowed()
+    {
+        if (HostedNetwork == null && _joinedReceivers.IsEmpty) return;
+        if (_transfers.Sessions.Any(s => !s.IsFinished && s.Path == TransferPath.Direct))
+        {
+            Log.Info("Direct: senders may no longer connect directly; the network stays until the running transfer is done");
+            return;
+        }
+
+        Log.Info("Direct: senders may no longer connect directly; turning this device's network off");
+        foreach (var peer in _linkedPeers.Keys.ToList()) _linkedPeers.TryRemove(peer, out _);
+        _joinedReceivers.Clear();
+        StopLinkIfUnused();
+    }
+
     private DirectLinkException NotAllowed() =>
         new(L.T("{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.", _settings.Current.DeviceName), declined: true);
 
