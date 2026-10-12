@@ -11,53 +11,19 @@ using Beam.Core.Util;
 
 namespace Beam.App.ViewModels;
 
-/// <summary>"Connect directly" between two computers, as the device cards need it.</summary>
-public interface IComputerLinks
-{
-    bool CanConnect(DeviceInfo device);
-
-    bool IsConnected(string deviceId);
-
-    bool IsConnecting(string deviceId);
-
-    Task ToggleAsync(DeviceInfo device);
-}
-
 public sealed class DeviceViewModel : ObservableObject
 {
-    private readonly IComputerLinks? _links;
     private DeviceInfo _device;
     private bool _isSelected;
 
-    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select, IComputerLinks? links = null)
+    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select)
     {
         _device = device;
-        _links = links;
         SelectCommand = new RelayCommand(() => select(this));
-        DirectCommand = new AsyncCommand(() => _links?.ToggleAsync(_device) ?? Task.CompletedTask, () => !IsConnectingDirectly);
     }
 
-    /// <summary>Another computer that this one can connect to directly ("Connect directly" on its card).</summary>
-    public bool ShowsDirectButton => _links != null && (_links.CanConnect(_device) || IsDirect);
-
-    public bool IsDirect => _links?.IsConnected(_device.Id) == true;
-
-    public bool IsConnectingDirectly => _links?.IsConnecting(_device.Id) == true;
-
-    public string DirectButtonText => IsConnectingDirectly ? L.T("Connecting…") : IsDirect ? L.T("Disconnect") : L.T("Connect directly");
-
-    public AsyncCommand DirectCommand { get; }
-
-    /// <summary>The direct link changed somewhere: update the button.</summary>
-    public void RefreshDirect()
-    {
-        OnPropertyChanged(nameof(ShowsDirectButton));
-        OnPropertyChanged(nameof(IsDirect));
-        OnPropertyChanged(nameof(IsConnectingDirectly));
-        OnPropertyChanged(nameof(DirectButtonText));
-        OnPropertyChanged(nameof(Subtitle));
-        DirectCommand.RaiseCanExecuteChanged();
-    }
+    /// <summary>The direct link changed somewhere: update the subtitle.</summary>
+    public void RefreshDirect() => OnPropertyChanged(nameof(Subtitle));
 
     public DeviceInfo Device
     {
@@ -68,7 +34,6 @@ public sealed class DeviceViewModel : ObservableObject
             OnPropertyChanged(nameof(Name));
             OnPropertyChanged(nameof(Subtitle));
             OnPropertyChanged(nameof(Icon));
-            RefreshDirect();
         }
     }
 
@@ -90,7 +55,6 @@ public sealed class DeviceViewModel : ObservableObject
                 Beam.Core.Nearby.NearbyService.BluetoothPlatform => _device.Kind == DeviceKinds.Phone ? L.T("Phone") : L.T("Computer"),
                 _ => L.T("Computer"),
             };
-            if (IsDirect) return L.T("{0} · Direct", platform);
             // A paired PC seen only by its direct network (no shared Wi-Fi): Beam joins that network when sending.
             if (_device.Endpoints.Count == 0 && _device.DirectRoles.HasFlag(Beam.Core.Direct.DirectRoles.Host))
                 return L.T("{0} · Nearby · connects directly", platform);
@@ -233,6 +197,7 @@ public sealed class HomeViewModel : ObservableObject
             OnPropertyChanged(nameof(LocalDeviceName));
             OnPropertyChanged(nameof(IsDiscoverable));
             OnPropertyChanged(nameof(VisibilityText));
+            OnPropertyChanged(nameof(PreferDirect));
         });
     }
 
@@ -252,6 +217,29 @@ public sealed class HomeViewModel : ObservableObject
     public bool HasDevices => Devices.Count > 0;
 
     public bool HasNoDevices => Devices.Count == 0;
+
+    /// <summary>
+    /// Prefer direct connection (the Connection setting): sending connects to the other device directly first (it starts
+    /// its own Wi-Fi, this device joins it) and uses the shared Wi-Fi when that isn't possible.
+    /// </summary>
+    public bool PreferDirect
+    {
+        get => _node.Settings.Current.Connection == Beam.Core.Settings.ConnectionMethod.Direct;
+        set => _ = SetPreferDirectAsync(value);
+    }
+
+    public bool CanConnectDirectly => _node.Direct.IsSupported;
+
+    private async Task SetPreferDirectAsync(bool value)
+    {
+        if (value && _main.IsPhone && !await _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices))
+        {
+            OnPropertyChanged(nameof(PreferDirect));
+            return;
+        }
+
+        _node.Settings.Update(s => s.Connection = value ? Beam.Core.Settings.ConnectionMethod.Direct : Beam.Core.Settings.ConnectionMethod.SameNetwork);
+    }
 
     /// <summary>Bluetooth is off or not allowed: devices that aren't on this Wi-Fi can't be found.</summary>
     public bool HasBluetoothNotice => _node.Nearby.State is Beam.Core.Nearby.NearbyRadioState.Off or Beam.Core.Nearby.NearbyRadioState.NeedsPermission;
@@ -508,7 +496,7 @@ public sealed class HomeViewModel : ObservableObject
         {
             var index = 0;
             while (index < Devices.Count && string.Compare(Devices[index].Name, device.Name, StringComparison.CurrentCultureIgnoreCase) < 0) index++;
-            Devices.Insert(index, new DeviceViewModel(device, SelectDevice, _main.IsPhone ? null : _main));
+            Devices.Insert(index, new DeviceViewModel(device, SelectDevice));
             _main.OnDeviceAppeared(device);
         }
 

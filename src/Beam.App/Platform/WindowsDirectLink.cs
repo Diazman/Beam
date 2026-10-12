@@ -3,6 +3,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Direct;
 using Beam.Core.Localization;
 #if WINDOWS_WINRT
+using Windows.Devices.Radios;
 using Windows.Devices.WiFi;
 using Windows.Devices.WiFiDirect;
 using Windows.Foundation.Metadata;
@@ -123,6 +124,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     {
         {
 #if WINDOWS_WINRT
+            await EnsureWifiOnAsync().ConfigureAwait(false);
             if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
                 && (preferred == null || preferred == _network)) return _network;
             if (_hotspot?.TetheringOperationalState == TetheringOperationalState.On && _network != null
@@ -217,6 +219,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     {
 #if WINDOWS_WINRT
         {
+            await EnsureWifiOnAsync().ConfigureAwait(false);
             if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
                 throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
             var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);
@@ -458,6 +461,60 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     /// Wi-Fi Direct network is used) when there's no internet, the Wi-Fi can't share it while staying connected, the
     /// user's own hotspot is already on, or Windows refuses.
     /// </summary>
+    /// <summary>Wi-Fi is switched off (airplane mode, or in quick settings): Beam turns it on itself.</summary>
+    private static async Task EnsureWifiOnAsync()
+    {
+        try
+        {
+            var wifi = (await Radio.GetRadiosAsync()).FirstOrDefault(r => r.Kind == RadioKind.WiFi);
+            if (wifi == null || wifi.State == RadioState.On) return;
+            if (await Radio.RequestAccessAsync() != RadioAccessStatus.Allowed)
+            {
+                Log.Info("Wi-Fi: it is off, and Windows doesn't let Beam turn it on");
+                return;
+            }
+
+            var result = await wifi.SetStateAsync(RadioState.On);
+            Log.Info($"Wi-Fi: it was off; turning it on: {result}");
+            for (var i = 0; i < 20 && wifi.State != RadioState.On; i++) await Task.Delay(250).ConfigureAwait(false);
+            await Task.Delay(1500).ConfigureAwait(false); // the adapter needs a moment before it can host or join
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Wi-Fi: couldn't check whether it is on: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// WPA2 for Beam's hotspot, also when the user's own hotspot is set to WPA3: phones join it with a WPA2 passphrase
+    /// (Android's join request has to match the network's security exactly).
+    /// </summary>
+    private static void UseWpa2(NetworkOperatorTetheringSessionAccessPointConfiguration session)
+    {
+        try
+        {
+            if (ApiInformation.IsPropertyPresent(typeof(NetworkOperatorTetheringSessionAccessPointConfiguration).FullName, "AuthenticationKind"))
+                session.AuthenticationKind = TetheringWiFiAuthenticationKind.Wpa2;
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Hotspot: couldn't choose WPA2 ({ex.Message})");
+        }
+    }
+
+    private static void UseWpa2(NetworkOperatorTetheringAccessPointConfiguration settings)
+    {
+        try
+        {
+            if (ApiInformation.IsPropertyPresent(typeof(NetworkOperatorTetheringAccessPointConfiguration).FullName, "AuthenticationKind"))
+                settings.AuthenticationKind = TetheringWiFiAuthenticationKind.Wpa2;
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Hotspot: couldn't choose WPA2 ({ex.Message})");
+        }
+    }
+
     private async Task<bool> TryStartHotspotAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
         try
@@ -496,6 +553,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             {
                 // Windows 11: settings for this session only; the user's own hotspot name and password stay as they are.
                 var session = new NetworkOperatorTetheringSessionAccessPointConfiguration { Ssid = network.Ssid, Passphrase = network.Passphrase };
+                UseWpa2(session);
                 result = await manager.StartTetheringAsync(session).AsTask(cancellationToken).ConfigureAwait(false);
             }
             else
@@ -503,6 +561,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
                 // Older Windows: set Beam's name and password, and put the user's back when Beam's hotspot stops.
                 _userHotspotSettings = manager.GetCurrentAccessPointConfiguration();
                 var settings = new NetworkOperatorTetheringAccessPointConfiguration { Ssid = network.Ssid, Passphrase = network.Passphrase };
+                UseWpa2(settings);
                 await manager.ConfigureAccessPointAsync(settings).AsTask(cancellationToken).ConfigureAwait(false);
                 result = await manager.StartTetheringAsync().AsTask(cancellationToken).ConfigureAwait(false);
             }

@@ -30,7 +30,7 @@ public enum Page
 /// Root view model: navigation, the transfers panel, dialogs, notifications, and the bridge
 /// that lets the transfer engine ask the user about incoming files.
 /// </summary>
-public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingTransferHandler
+public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 {
     private readonly IPlatformServices _platform;
     private readonly IUiServices _ui;
@@ -75,14 +75,15 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
 
     private bool _showingDirectProblem;
 
-    /// <summary>Another device asks this one to start its network for it, or (computers) to leave its Wi-Fi and join.</summary>
+    /// <summary>
+    /// A device that can't start its own network wants to send directly: this computer would leave its Wi-Fi and join
+    /// that device's network while the files arrive.
+    /// </summary>
     private async Task<bool> AskDirectApprovalAsync(DirectApproval approval)
     {
         var name = approval.PeerName;
-        var text = approval.LeavesWiFi
-            ? L.T("To connect directly, this computer leaves its Wi-Fi and joins {0}'s network until you disconnect.", name) + " "
-              + (approval.KeepsInternet ? L.T("{0} shares its internet, so this computer stays online.", name) : L.T("This computer has no internet meanwhile."))
-            : L.T("This device starts its own Wi-Fi network for {0}. Your Wi-Fi stays connected.", name);
+        var text = L.T("To receive directly, this computer leaves its Wi-Fi and joins {0}'s network until the files have arrived.", name) + " "
+                   + (approval.KeepsInternet ? L.T("{0} shares its internet, so this computer stays online.", name) : L.T("This computer has no internet meanwhile."));
         return await ShowDialogAsync(new ConfirmViewModel(L.T("{0} wants to connect directly", name), text, L.T("Allow"), L.T("Don't allow"))) is true;
     }
 
@@ -103,29 +104,6 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     }
 
     public BeamNode Node { get; }
-
-    bool IComputerLinks.CanConnect(DeviceInfo device) => Node.Direct.CanConnectComputer(device);
-
-    bool IComputerLinks.IsConnected(string deviceId) => Node.Direct.IsComputerLinked(deviceId) && !Node.Direct.IsConnectingComputer(deviceId);
-
-    bool IComputerLinks.IsConnecting(string deviceId) => Node.Direct.IsConnectingComputer(deviceId);
-
-    /// <summary>"Connect directly" / "Disconnect" on another computer's card.</summary>
-    async Task IComputerLinks.ToggleAsync(DeviceInfo device)
-    {
-        if (Node.Direct.IsComputerLinked(device.Id))
-        {
-            await Node.Direct.DisconnectComputerAsync(device.Id);
-            return;
-        }
-
-        if (Node.Direct.JoinLeavesWithoutInternet(device)
-            && await ShowDialogAsync(new ConfirmViewModel(L.T("Connect directly to {0}?", device.Name),
-                L.T("This computer leaves its Wi-Fi and joins {0}'s network while connected directly. {0} can't share its internet, so this computer has no internet until you disconnect.", device.Name),
-                L.T("Connect"), L.T("Cancel"))) is not true)
-            return;
-        await Node.Direct.ConnectComputerAsync(device.Id);
-    }
 
     public RatingService Rating { get; }
 
@@ -250,7 +228,11 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     /// <summary>Shows the first-run screen if needed, then starts networking.</summary>
     public async Task InitializeAsync(CommandLine commandLine)
     {
-        if (_page == Page.Home) Node.Nearby.SetLooking(true);
+        if (_page == Page.Home)
+        {
+            Node.Nearby.SetLooking(true);
+            EnsureBluetoothOn();
+        }
         if (_platform.SupportsStartWithSystem && Node.Settings.Current.StartWithWindows != _platform.GetStartWithSystem())
             Node.Settings.Update(s => s.StartWithWindows = _platform.GetStartWithSystem());
 
@@ -398,7 +380,11 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
         _page = page;
         if (page == Page.Phone) Phone.OnShown();
         if (page == Page.Receive) Receive.OnShown();
-        if (page == Page.Home) Node.Nearby.SetLooking(true);
+        if (page == Page.Home)
+        {
+            Node.Nearby.SetLooking(true);
+            EnsureBluetoothOn();
+        }
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageKind));
         OnPropertyChanged(nameof(IsHomePage));
@@ -449,6 +435,19 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
                 L.T("OK"), ""));
             return null;
         }
+    }
+
+    private bool _bluetoothAsked;
+
+    /// <summary>
+    /// Send or Receive opened with Bluetooth off: turn it on (Windows does it; Android shows its one-tap prompt), once
+    /// per run so a "no" isn't asked again and again.
+    /// </summary>
+    internal void EnsureBluetoothOn()
+    {
+        if (_bluetoothAsked || Node.Nearby.State != Beam.Core.Nearby.NearbyRadioState.Off) return;
+        _bluetoothAsked = true;
+        _ = Node.Nearby.TurnOnAsync();
     }
 
     internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);

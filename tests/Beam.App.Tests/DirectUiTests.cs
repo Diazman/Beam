@@ -46,11 +46,11 @@ public class DirectUiTests
         Assert.Empty(phone.TextOutsideWindow());
         phone.Screenshot("direct-02-direct");
 
-        // The laptop's card shows the direct connection too, and it can switch back to Wi-Fi.
+        // The laptop's card shows the direct connection too, but only the sender switches.
         var received = laptop.ViewModel.Transfers.Single();
         await UiHarness.WaitForAsync(() => received.PathText == "Direct connection", "receiver on direct");
-        Assert.True(received.CanSwitchToNetwork);
-        received.SwitchToNetworkCommand.Execute(null);
+        Assert.False(received.CanSwitchToNetwork);
+        card.SwitchToNetworkCommand.Execute(null);
         await UiHarness.WaitForAsync(() => card.PathText == "Over Wi-Fi", "back on Wi-Fi", 25000);
         Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(laptop.Node.Identity.DeviceId));
 
@@ -85,26 +85,26 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task ReceiveWithPreferDirectKeepsThisComputersWiFiOnWhileOpen()
+    public async Task ReceiveStartsThisComputersWiFiWhenASenderWantsIt()
     {
         var air = new FakeDirectAir();
         await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: new FakeNearbyAir().Radio());
         await app.InitializeAsync();
         var receive = app.ViewModel.Receive;
 
-        // Without Prefer direct connection, Receive only becomes visible (its own Wi-Fi starts when a sender needs it).
         app.ViewModel.IsReceivePage = true;
         await UiHarness.PumpAsync(200);
-        Assert.Equal(0, air.Hosted);
+        Assert.Equal(0, air.Hosted); // nothing started until a sender asks
         Assert.True(app.Node.Nearby.IsReceiving);
+        Assert.True(receive.AllowDirect);
         Assert.Contains("Ready to receive", app.VisibleTexts());
+        Assert.Contains("Let senders connect directly", app.VisibleTexts());
         Assert.Contains("Devices nearby can find it over Bluetooth, even without a shared Wi-Fi.", app.VisibleTexts());
-        Assert.Contains("Its own Wi-Fi starts only when someone without your Wi-Fi sends to it.", app.VisibleTexts());
+        Assert.Contains("Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.", app.VisibleTexts());
 
-        // Turned on: its own Wi-Fi starts, and phones are warned it has no internet.
-        receive.PreferDirect = true;
+        // A sender asks: its own Wi-Fi starts, and phones are warned it has no internet.
+        await app.Node.Direct.HostForNearbyAsync(CancellationToken.None);
         await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on");
-        Assert.Equal(1, air.Hosted);
         await UiHarness.PumpAsync(100);
         Assert.Contains("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
         Assert.Empty(app.TextOutsideWindow());
@@ -114,10 +114,15 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
 
-        // Leaving Receive turns it off.
+        // Leaving Receive turns it off (at once here; after a few minutes in the app).
         app.ViewModel.ShowHomeCommand.Execute(null);
         await UiHarness.WaitForAsync(() => air.Stopped > 0, "own Wi-Fi off");
         Assert.False(app.Node.Nearby.IsReceiving);
+
+        // Turned off: senders aren't offered a direct connection.
+        receive.AllowDirect = false;
+        await UiHarness.PumpAsync(100);
+        Assert.Equal(DirectRoles.None, app.Node.Direct.AnnouncedRoles);
     }
 
     [AvaloniaFact]
@@ -206,49 +211,20 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task ConnectDirectlyOnAnotherComputersCard()
+    public async Task PreferDirectConnectionOnTheSendPage()
     {
         var air = new FakeDirectAir();
-        var pcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
-        await using var laptop = new UiHarness("Laptop", directLink: air.Link(pcRoles));
-        await using var desk = new UiHarness("Office desktop", directLink: air.Link(pcRoles));
+        await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers));
         await laptop.InitializeAsync();
-        await desk.InitializeAsync();
-        air.Connect(laptop.Node, laptop.AsDevice, desk.Node, desk.AsDevice);
         var home = laptop.ViewModel.Home;
-        await UiHarness.WaitForAsync(() => home.Devices.Count == 1, "desk listed");
-        var card = home.Devices[0];
-        Assert.True(card.ShowsDirectButton);
-        Assert.Equal("Connect directly", card.DirectButtonText);
         await UiHarness.PumpAsync();
-        Assert.Contains("Connect directly", laptop.VisibleTexts());
-        laptop.Screenshot("direct-pc-01-card");
+        Assert.Contains("Prefer direct connection", laptop.VisibleTexts());
+        Assert.DoesNotContain("Connect directly", laptop.VisibleTexts());
+        Assert.False(home.PreferDirect);
 
-        // The desk can't share its internet: the laptop is told it goes offline meanwhile, and goes ahead.
-        card.DirectCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => laptop.ViewModel.Dialog is ConfirmViewModel, "internet warning");
-        Assert.Contains("no internet until you disconnect", ((ConfirmViewModel)laptop.ViewModel.Dialog!).Message);
-        laptop.Screenshot("direct-pc-02-warning");
-        ((ConfirmViewModel)laptop.ViewModel.Dialog!).PrimaryCommand.Execute(null);
-
-        // The desk (which doesn't trust the laptop yet) is asked before starting its network.
-        await UiHarness.WaitForAsync(() => desk.ViewModel.Dialog is ConfirmViewModel, "desk asked");
-        var ask = (ConfirmViewModel)desk.ViewModel.Dialog!;
-        Assert.Equal("Laptop wants to connect directly", ask.Title);
-        Assert.Contains("Your Wi-Fi stays connected", ask.Message);
-        await UiHarness.PumpAsync();
-        Assert.Empty(desk.TextOutsideWindow());
-        desk.Screenshot("direct-pc-03-asked");
-        ask.PrimaryCommand.Execute(null);
-
-        await UiHarness.WaitForAsync(() => card.IsDirect, "connected directly", 20000);
-        Assert.Equal("Disconnect", card.DirectButtonText);
-        await UiHarness.PumpAsync();
-        Assert.EndsWith("· Direct", card.Subtitle);
-        Assert.Contains(card.Subtitle, laptop.VisibleTexts());
-        laptop.Screenshot("direct-pc-04-connected");
-
-        card.DirectCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => !card.IsDirect && card.DirectButtonText == "Connect directly", "disconnected");
+        home.PreferDirect = true;
+        await UiHarness.PumpAsync(100);
+        Assert.Equal(ConnectionMethod.Direct, laptop.Node.Settings.Current.Connection);
+        laptop.Screenshot("send-01-prefer-direct");
     }
 }

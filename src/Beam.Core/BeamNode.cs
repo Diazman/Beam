@@ -79,7 +79,8 @@ public sealed class BeamNode : IAsyncDisposable
         Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink,
             selfIsComputer: selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
         Nearby = new Nearby.NearbyService(options.NearbyRadio, Direct, Discovery, Settings, () => Identity.DeviceId,
-            connectDirectly => CreatePairingCode(connectDirectly), selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
+            connectDirectly => CreatePairingCode(connectDirectly), selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
+            () => Transfers.Sessions.Any(s => !s.IsFinished));
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }

@@ -34,6 +34,10 @@ public sealed class FakeNearbyAir
 
         public Task<bool> RequestPermissionAsync() => Task.FromResult(true);
 
+        public Task<bool> TurnOnAsync() => Task.FromResult(true);
+
+        public IReadOnlyList<string> RecentServiceAddresses() => _air._advertisers.Keys.Where(a => a != _address).ToList();
+
         public void StartAdvertising(byte[] beacon, INearbyResponder responder) => _air._advertisers[_address] = (beacon, responder);
 
         public void StopAdvertising() => _air._advertisers.TryRemove(_address, out _);

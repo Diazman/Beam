@@ -98,17 +98,17 @@ public class NearbyTests
         DirectManager.LeaveReceiverAfter = TimeSpan.FromMilliseconds(300);
         try
         {
-            // The phone prefers direct connections: Receive turns its network on right away.
-            phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+            // Receive open on the phone: visible over Bluetooth; its network starts when the PC asks for it.
             phone.Node.Nearby.SetReceiving(true);
-            await Wait.UntilAsync(() => wifi.Hosted > 0, because: "phone's network on while Receive is open");
             Assert.True(phone.Node.Direct.AnnouncedRoles.HasFlag(DirectRoles.Receiving));
+            Assert.Equal(0, wifi.Hosted);
 
             pc.Node.Nearby.SetLooking(true);
             DeviceInfo? listed = null;
             await Wait.UntilAsync(() => (listed = pc.Node.Discovery.Devices.FirstOrDefault(NearbyService.IsPlaceholder)) != null, because: "phone heard");
             Assert.Equal(DeviceKinds.Phone, listed!.Kind);
             var device = await pc.Node.Nearby.ResolveAsync(listed, CancellationToken.None);
+            Assert.Equal(1, wifi.Hosted);
 
             var session = pc.Node.Send(device, new[] { pc.CreateFile("report.pdf", 200_000) });
             await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
@@ -169,5 +169,25 @@ public class NearbyTests
         Assert.True(bluetooth.Connections > 0, "asked over Bluetooth after the remembered network failed");
         Assert.Equal(0, wifi.Joined);
         Assert.Equal("oldpassphrase", phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Passphrase);
+    }
+
+    [Fact]
+    public async Task AfterLeavingReceiveItStaysReceivableForAWhileUnlessReopened()
+    {
+        var bluetooth = new FakeNearbyAir();
+        await using var pc = new TestNode("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
+        await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
+        pc.Node.Nearby.ReceiveGrace = TimeSpan.FromMilliseconds(600);
+        phone.Node.Nearby.SetLooking(true);
+
+        pc.Node.Nearby.SetReceiving(true);
+        pc.Node.Nearby.SetReceiving(false); // left Receive
+        Assert.True(pc.Node.Nearby.IsReceiving);
+        pc.Node.Nearby.SetReceiving(true); // came back: nothing stops
+        pc.Node.Nearby.SetReceiving(false);
+        await Task.Delay(300);
+        Assert.True(pc.Node.Nearby.IsReceiving);
+        await Wait.UntilAsync(() => !pc.Node.Nearby.IsReceiving, because: "stopped after the grace period");
+        Assert.False(pc.Node.Direct.IsReceiving);
     }
 }

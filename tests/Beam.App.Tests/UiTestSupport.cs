@@ -198,6 +198,7 @@ public sealed class UiHarness : IAsyncDisposable
             s.FirstRunCompleted = firstRunDone;
         });
         Node.Direct.HasWiredInternet = () => false; // not the test machine's own cable
+        Node.Nearby.ReceiveGrace = TimeSpan.Zero;
         Ui = new FakeUi();
         Platform = new FakePlatform { IsPhone = phone };
         Window = new MainWindow { Width = width, Height = height };

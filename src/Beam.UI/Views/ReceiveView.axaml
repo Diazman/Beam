@@ -50,15 +50,15 @@
         </Grid>
       </StackPanel>
 
-      <!-- Prefer direct connection -->
+      <!-- Let senders connect directly -->
       <Border Classes="card" Padding="20" IsVisible="{Binding CanConnectDirectly}">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Spacing="4">
-            <TextBlock Classes="h3" Text="{l:T 'Prefer direct connection'}" TextWrapping="Wrap" />
+            <TextBlock Classes="h3" Text="{l:T 'Let senders connect directly'}" TextWrapping="Wrap" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Keeps this device\'s own Wi-Fi on while Receive is open. Senders connect to it directly: faster, and no router or internet needed.'}" />
+                       Text="{l:T 'When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.'}" />
           </StackPanel>
-          <ToggleSwitch Grid.Column="1" IsChecked="{Binding PreferDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
+          <ToggleSwitch Grid.Column="1" IsChecked="{Binding AllowDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
         </Grid>
       </Border>
 

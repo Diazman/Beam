@@ -88,6 +88,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         try
         {
             var channel = await PrepareAsync().ConfigureAwait(false);
+            await EnsureWifiOnAsync(cancellationToken).ConfigureAwait(false);
             if (await GroupInfoAsync(channel).ConfigureAwait(false) is { IsGroupOwner: true } existing
                 && !string.IsNullOrEmpty(existing.NetworkName) && !string.IsNullOrEmpty(existing.Passphrase))
                 return new DirectNetwork(existing.NetworkName, existing.Passphrase);
@@ -127,6 +128,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         try
         {
             var channel = await PrepareAsync().ConfigureAwait(false);
+            await EnsureWifiOnAsync(cancellationToken).ConfigureAwait(false);
             if (await GroupInfoAsync(channel).ConfigureAwait(false) is { } current && current.NetworkName == network.Ssid
                 && await ConnectionInfoAsync(channel).ConfigureAwait(false) is { GroupFormed: true, GroupOwnerAddress: { } existing })
                 return IPAddress.Parse(existing.HostAddress!);
@@ -283,6 +285,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             }
             catch (TimeoutException)
             {
+                Log.Info($"Wi-Fi: no answer from Android about {network.Ssid} within {WifiJoinTimeout.TotalSeconds:0} s");
                 joined = null;
             }
             catch (System.OperationCanceledException)
@@ -385,6 +388,34 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         }
     }
 
+    /// <summary>
+    /// Wi-Fi is off: Android doesn't let apps switch it on (since Android 10), so Beam opens Android's Wi-Fi panel (one
+    /// tap) and waits a little for it.
+    /// </summary>
+    private async Task EnsureWifiOnAsync(CancellationToken cancellationToken)
+    {
+        if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi || wifi.IsWifiEnabled) return;
+        if (AndroidHost.CurrentActivity is { } activity)
+        {
+            Log.Info("Wi-Fi: it is off; asking the user to turn it on");
+            activity.RunOnUiThread(() =>
+            {
+                try
+                {
+                    activity.StartActivity(new Intent(global::Android.Provider.Settings.Panel.ActionWifi));
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Wi-Fi: couldn't open the Wi-Fi panel: {ex.Message}");
+                }
+            });
+            for (var i = 0; i < 40 && !wifi.IsWifiEnabled; i++) await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!wifi.IsWifiEnabled) throw new DirectLinkException(L.T("Turn on Wi-Fi to connect directly."));
+        await Task.Delay(1500, cancellationToken).ConfigureAwait(false); // Wi-Fi needs a moment before it can join or host
+    }
+
     /// <summary>Asks for the permission Wi-Fi Direct needs (Nearby devices on Android 13+, location before) and opens the channel.</summary>
     private async Task<WifiP2pManager.Channel> PrepareAsync()
     {
@@ -472,7 +503,11 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             Available.TrySetResult(network);
         }
 
-        public override void OnUnavailable() => Available.TrySetResult(null);
+        public override void OnUnavailable()
+        {
+            Log.Info($"Wi-Fi: Android says {Ssid} is unavailable (the request was turned down, or the network wasn't found)");
+            Available.TrySetResult(null);
+        }
 
         public override void OnLost(Android.Net.Network network)
         {
