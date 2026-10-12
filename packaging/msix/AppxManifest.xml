@@ -104,5 +104,7 @@
     <Capability Name="internetClientServer" />
     <Capability Name="privateNetworkClientServer" />
     <rescap:Capability Name="runFullTrust" />
+    <!-- Receive / Send without a shared Wi-Fi: devices find each other over Bluetooth LE. -->
+    <DeviceCapability Name="bluetooth" />
   </Capabilities>
 </Package>

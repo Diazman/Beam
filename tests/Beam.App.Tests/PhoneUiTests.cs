@@ -19,17 +19,8 @@ public class PhoneUiTests
         app.ViewModel.IsPhonePage = true;
         await UiHarness.PumpAsync();
         var phone = app.ViewModel.Phone;
-        // First the Beam app's code; the browser page isn't running.
-        Assert.True(phone.ShowsAppCode);
-        Assert.NotNull(phone.AppQr);
-        Assert.False(phone.IsOn);
-        Assert.Contains("Don't have the Beam app? Connect with the browser", app.VisibleTexts());
-        Assert.DoesNotContain("Send to your phone", app.VisibleTexts());
-        app.Screenshot("phone-01-app-code");
-
-        phone.ShowBrowserCommand.Execute(null);
-        await UiHarness.PumpAsync();
-        Assert.True(phone.IsOn);
+        // The page is for phones' browsers: its code is there right away.
+        await UiHarness.WaitForAsync(() => phone.IsOn, "browser page on");
         Assert.True(phone.ShowsBrowserCode);
         Assert.Contains("Send to your phone", app.VisibleTexts());
         Assert.NotNull(phone.Qr);
@@ -77,9 +68,7 @@ public class PhoneUiTests
         Avalonia.Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
 
         phone.StopSharingCommand.Execute(null);
-        phone.ShowAppCodeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => !phone.IsOn, "browser page off");
-        Assert.True(phone.ShowsAppCode);
+        await UiHarness.WaitForAsync(() => !phone.IsSharing, "stopped sharing");
     }
 
     [AvaloniaFact]
@@ -87,11 +76,10 @@ public class PhoneUiTests
     {
         await using var app = new UiHarness();
         await app.InitializeAsync();
-        app.ViewModel.IsPhonePage = true;
+        app.ViewModel.IsReceivePage = true;
         await UiHarness.PumpAsync();
-        Assert.Contains("How to keep the phone connected", app.VisibleTexts());
 
-        app.ViewModel.Phone.ConnectionHelpCommand.Execute(null);
+        app.ViewModel.Receive.LearnMoreCommand.Execute(null);
         await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ConnectionHelpViewModel, "help dialog");
         var help = (ConnectionHelpViewModel)app.ViewModel.Dialog!;
         Assert.False(help.SharesInternet);

@@ -85,32 +85,39 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task PhonePageStartsThisComputersWiFiForTheAppCode()
+    public async Task ReceiveWithPreferDirectKeepsThisComputersWiFiOnWhileOpen()
     {
         var air = new FakeDirectAir();
-        await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: new FakeNearbyAir().Radio());
         await app.InitializeAsync();
-        var phone = app.ViewModel.Phone;
+        var receive = app.ViewModel.Receive;
 
-        // Opening the Phone page turns this computer's own Wi-Fi on; the app's code then says to join it.
-        app.ViewModel.IsPhonePage = true;
-        await UiHarness.WaitForAsync(() => phone.AppCodeConnectsDirectly, "own Wi-Fi on");
+        // Without Prefer direct connection, Receive only becomes visible (its own Wi-Fi starts when a sender needs it).
+        app.ViewModel.IsReceivePage = true;
+        await UiHarness.PumpAsync(200);
+        Assert.Equal(0, air.Hosted);
+        Assert.True(app.Node.Nearby.IsReceiving);
+        Assert.Contains("Ready to receive", app.VisibleTexts());
+        Assert.Contains("Devices nearby can find it over Bluetooth, even without a shared Wi-Fi.", app.VisibleTexts());
+        Assert.Contains("Its own Wi-Fi starts only when someone without your Wi-Fi sends to it.", app.VisibleTexts());
+
+        // Turned on: its own Wi-Fi starts, and phones are warned it has no internet.
+        receive.PreferDirect = true;
+        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on");
         Assert.Equal(1, air.Hosted);
-        Assert.True(app.Node.CreatePairingCode(connectDirectly: true).ConnectDirectly);
-        Assert.Contains("The phone has no internet while it's connected to this computer's Wi-Fi.", app.VisibleTexts());
-        app.Screenshot("direct-04-app-code");
-
-        // The browser code is for the shared Wi-Fi only: this computer's own Wi-Fi goes off.
-        phone.ShowBrowserCommand.Execute(null);
         await UiHarness.PumpAsync(100);
-        Assert.Equal(1, air.Stopped);
-        Assert.DoesNotContain("192.168.137.", phone.Link);
+        Assert.Contains("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("receive-01-direct");
 
-        // Leaving the page turns it off too (unless a phone connected over it).
-        phone.ShowAppCodeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => phone.AppCodeConnectsDirectly, "own Wi-Fi on again");
+        receive.ToggleCodeCommand.Execute(null);
+        await UiHarness.PumpAsync(100);
+        Assert.NotNull(receive.Code);
+
+        // Leaving Receive turns it off.
         app.ViewModel.ShowHomeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => air.Stopped == 2, "own Wi-Fi off");
+        await UiHarness.WaitForAsync(() => air.Stopped > 0, "own Wi-Fi off");
+        Assert.False(app.Node.Nearby.IsReceiving);
     }
 
     [AvaloniaFact]

@@ -89,7 +89,7 @@ public sealed class TestNode : IAsyncDisposable
     private readonly string _kind;
 
     public TestNode(string name, bool startDiscovery = false, Files.IExternalFiles? externalFiles = null, Direct.IDirectLink? directLink = null,
-        string kind = DeviceKinds.Desktop)
+        string kind = DeviceKinds.Desktop, Nearby.INearbyRadio? nearbyRadio = null)
     {
         _kind = kind;
         Handler = new TestHandler();
@@ -102,6 +102,7 @@ public sealed class TestNode : IAsyncDisposable
             Handler = Handler,
             ExternalFiles = externalFiles,
             DirectLink = directLink,
+            NearbyRadio = nearbyRadio,
             DeviceKind = kind,
             Discovery = new DiscoveryOptions
             {

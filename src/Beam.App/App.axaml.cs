@@ -65,6 +65,7 @@ public partial class App : Application
                 {
                     Paths = DataPaths,
                     DirectLink = OperatingSystem.IsWindows() ? WindowsDirectLink.TryCreate(() => settings?.Current.DeviceName ?? Environment.MachineName) : null,
+                    NearbyRadio = OperatingSystem.IsWindows() ? WindowsNearbyRadio.TryCreate() : null,
                 });
                 settings = _node.Settings;
             }

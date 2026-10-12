@@ -149,7 +149,8 @@ public class DirectConnectionTests
         await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: phoneLink, kind: DeviceKinds.Phone);
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
-        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on for paired phones");
+        pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
         phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
@@ -484,6 +485,7 @@ public class PairingTests
         // The PC is set to Direct: it keeps its own network on for paired phones, with the same name every time.
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
+        pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
         await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
         var own = pc.Node.Direct.OwnNetwork();
         Assert.Equal(own, pc.Node.Direct.OwnNetwork());
@@ -537,6 +539,7 @@ public class PairingTests
         // The PC's Phone page runs its direct network (Connect directly); its code carries that network.
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
+        pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
         await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
 
         // One scan: paired, then joined the PC's network without asking for anything else.
@@ -560,6 +563,7 @@ public class PairingTests
         air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
+        pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
         await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
 
         var code = PairingCode.TryParse(pc.Node.CreatePairingCode(connectDirectly: true).AppendTo("http://192.168.137.1:47831/t/"))!;
@@ -582,6 +586,7 @@ public class PairingTests
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
+        pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
         await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
         phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!); // the phone knows the PC's network
         Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
@@ -607,6 +612,7 @@ public class PairingTests
             air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
             pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
             pc.Node.Direct.Start();
+            pc.Node.Nearby.SetReceiving(true); // Receive open: its network stays on
             await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on");
             phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
             phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);

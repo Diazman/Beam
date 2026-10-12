@@ -28,6 +28,12 @@ public enum DirectRoles
     /// <summary>Its network shares its internet (Windows' Mobile hotspot): whoever joins it keeps internet.</summary>
     SharesInternet = 16,
 
+    /// <summary>
+    /// Receive is open on it: it hosts the direct link (its own network) for anyone sending to it, so a sender joins
+    /// it whatever both devices are.
+    /// </summary>
+    Receiving = 32,
+
 }
 
 /// <summary>
@@ -52,6 +58,7 @@ public static class DirectRolesText
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
         if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
+        if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
         return string.Join(",", parts);
     }
 
@@ -65,6 +72,7 @@ public static class DirectRolesText
             else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
             else if (part == "wired") roles |= DirectRoles.Wired;
             else if (part == "share") roles |= DirectRoles.SharesInternet;
+            else if (part == "rx") roles |= DirectRoles.Receiving;
         }
 
         return roles;

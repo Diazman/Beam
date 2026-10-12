@@ -13,6 +13,7 @@ public sealed class ViewLocator : IDataTemplate
     {
         [typeof(HomeViewModel)] = () => new HomeView(),
         [typeof(PhoneViewModel)] = () => new PhoneView(),
+        [typeof(ReceiveViewModel)] = () => new ReceiveView(),
         [typeof(HistoryViewModel)] = () => new HistoryView(),
         [typeof(SettingsViewModel)] = () => new SettingsView(),
         [typeof(TransfersPage)] = () => new TransfersView(),

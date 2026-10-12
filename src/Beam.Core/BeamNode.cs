@@ -32,6 +32,9 @@ public sealed class BeamNodeOptions
 
     /// <summary>The platform's direct Wi-Fi link (Wi-Fi Direct); null where there is none.</summary>
     public IDirectLink? DirectLink { get; init; }
+
+    /// <summary>The platform's Bluetooth LE, for finding devices with no shared network; null where there is none.</summary>
+    public Nearby.INearbyRadio? NearbyRadio { get; init; }
 }
 
 /// <summary>
@@ -75,6 +78,8 @@ public sealed class BeamNode : IAsyncDisposable
         var selfKind = options.DeviceKind ?? DeviceKinds.Desktop;
         Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink,
             selfIsComputer: selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
+        Nearby = new Nearby.NearbyService(options.NearbyRadio, Direct, Discovery, Settings, () => Identity.DeviceId,
+            connectDirectly => CreatePairingCode(connectDirectly), selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }
@@ -93,6 +98,9 @@ public sealed class BeamNode : IAsyncDisposable
 
     /// <summary>Same network or direct Wi-Fi link, per device and switchable during transfers.</summary>
     public DirectManager Direct { get; }
+
+    /// <summary>Finding and reaching devices over Bluetooth when there's no shared network (Receive / Send).</summary>
+    public Nearby.NearbyService Nearby { get; }
 
     /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
     public PhoneLinkServer PhoneLink { get; }
@@ -263,6 +271,7 @@ public sealed class BeamNode : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return; // safe to call more than once
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
+        Nearby.Stop();
         await Direct.StopAsync().ConfigureAwait(false);
         Discovery.Dispose();
         await PhoneLink.DisposeAsync().ConfigureAwait(false);

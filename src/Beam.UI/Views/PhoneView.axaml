@@ -9,35 +9,11 @@
       <StackPanel Spacing="4">
         <TextBlock Classes="h1" Text="{l:T 'Phone'}" />
         <TextBlock Classes="secondary" TextWrapping="Wrap"
-                   Text="{l:T 'Send files between this computer and a phone: with the Beam app, or with any phone\'s web browser.'}" />
+                   Text="{l:T 'Send files between this computer and any phone\'s web browser. No app needed.'}" />
       </StackPanel>
 
       <Border Classes="notice error" IsVisible="{Binding HasProblem}">
         <TextBlock Text="{Binding Problem}" TextWrapping="Wrap" />
-      </Border>
-
-      <!-- The Beam app: one code pairs and connects (also without a shared Wi-Fi) -->
-      <Border Classes="card" IsVisible="{Binding ShowsAppCode}" Padding="24">
-        <Grid ColumnDefinitions="Auto,*">
-          <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
-          <Border Background="White" CornerRadius="12" Padding="16" VerticalAlignment="Top">
-            <Path Data="{Binding AppQr}" Fill="Black" Stretch="Uniform" Width="240" Height="240" />
-          </Border>
-          <StackPanel Grid.Column="1" Margin="24,0,0,0" Spacing="10">
-            <TextBlock Classes="h3" Text="{l:T 'Scan this code with the Beam app'}" TextWrapping="Wrap" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding AppCodeText}" />
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding IsHostingStarting}"
-                       Text="{l:T 'Getting this computer\'s own Wi-Fi ready…'}" />
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding NoInternetNote}"
-                       Text="{l:T 'The phone has no internet while it\'s connected to this computer\'s Wi-Fi.'}" />
-            <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding SharesInternet}"
-                       Text="{l:T 'This computer shares its internet on its Wi-Fi, so the phone has no reason to switch to another Wi-Fi.'}" />
-            <Button Content="{l:T 'How to keep the phone connected'}" Command="{Binding ConnectionHelpCommand}"
-                    HorizontalAlignment="Left" Margin="0,6,0,0" />
-            <Button Classes="accent" Content="{l:T 'Don\'t have the Beam app? Connect with the browser'}" Command="{Binding ShowBrowserCommand}"
-                    HorizontalAlignment="Left" />
-          </StackPanel>
-        </Grid>
       </Border>
 
       <!-- Any phone: Beam's page in the browser, over the shared Wi-Fi -->
@@ -69,7 +45,8 @@
             <TextBlock Classes="caption" Text="{Binding OtherLinks}" IsVisible="{Binding HasOtherLinks}" TextWrapping="Wrap" />
             <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"
                        Text="{l:T 'Only someone with this code can connect, and files from the phone still need your OK. The code changes every time and stops working when you turn it off. Use it on networks you trust: unlike transfers between Beam apps, browser transfers aren\'t encrypted.'}" />
-            <Button Content="{l:T 'Back to the Beam app code'}" Command="{Binding ShowAppCodeCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+            <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="{l:T 'Phone has the Beam app? Use Send and Receive instead: they find each other by themselves, even without Wi-Fi.'}" />
           </StackPanel>
         </Grid>
       </Border>

@@ -13,6 +13,14 @@
   <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
   <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
+  <!-- Receive / Send without a shared Wi-Fi: devices find each other and exchange connection details over Bluetooth LE.
+       Android 12+ asks once for "Nearby devices" (never used for location); before that, location covers scanning. -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
   <!-- "Files received" and incoming-request notifications (Android 13+ asks the user). -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Transfers keep running when Beam is in the background or the screen is off (ongoing notification). -->

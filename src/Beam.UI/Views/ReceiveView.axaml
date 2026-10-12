@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             x:Class="Beam.App.Views.ReceiveView"
+             x:DataType="vm:ReceiveViewModel">
+  <ScrollViewer>
+    <StackPanel Classes="page" Spacing="24" MaxWidth="860" HorizontalAlignment="Left">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="{l:T 'Receive'}" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding ReadyText}" />
+      </StackPanel>
+
+      <!-- Ready -->
+      <Border Classes="card" Padding="20">
+        <Grid ColumnDefinitions="Auto,*">
+          <Panel Width="64" Height="64" VerticalAlignment="Top" Margin="-4,-4,0,0">
+            <Ellipse Classes="pulse" Fill="{DynamicResource AccentBrush}" />
+            <Border Classes="iconBadge" Width="40" Height="40" CornerRadius="20">
+              <PathIcon Data="{StaticResource IconDownload}" />
+            </Border>
+          </Panel>
+          <StackPanel Grid.Column="1" Margin="16,2,0,0" Spacing="4">
+            <TextBlock Classes="h3" Text="{l:T 'Ready to receive'}" />
+            <TextBlock Text="{Binding DeviceName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="caption" Text="{l:T 'Verification code:'}" />
+              <TextBlock Classes="caption" Text="{Binding VerificationCode}" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- How senders reach it -->
+      <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="Auto,*">
+          <PathIcon Data="{StaticResource IconBluetooth}" Width="18" Height="18" VerticalAlignment="Top" Margin="0,2,12,0" />
+          <StackPanel Grid.Column="1" Spacing="6">
+            <TextBlock Text="{Binding BluetoothText}" TextWrapping="Wrap" />
+            <Button Classes="accent" Content="{l:T 'Allow'}" Command="{Binding AllowBluetoothCommand}"
+                    IsVisible="{Binding BluetoothNeedsPermission}" HorizontalAlignment="Left" />
+          </StackPanel>
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*">
+          <PathIcon Data="{StaticResource IconWifi}" Width="18" Height="18" VerticalAlignment="Top" Margin="0,2,12,0" />
+          <StackPanel Grid.Column="1" Spacing="6">
+            <TextBlock Text="{l:T 'Devices on the same Wi-Fi can send to it too.'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" Text="{Binding NetworkText}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+      </StackPanel>
+
+      <!-- Prefer direct connection -->
+      <Border Classes="card" Padding="20" IsVisible="{Binding CanConnectDirectly}">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="h3" Text="{l:T 'Prefer direct connection'}" TextWrapping="Wrap" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="{l:T 'Keeps this device\'s own Wi-Fi on while Receive is open. Senders connect to it directly: faster, and no router or internet needed.'}" />
+          </StackPanel>
+          <ToggleSwitch Grid.Column="1" IsChecked="{Binding PreferDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
+        </Grid>
+      </Border>
+
+      <!-- A phone on a network without internet may switch away from it -->
+      <Border Classes="notice warning" IsVisible="{Binding ShowsPhoneWarning}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                     Text="{l:T 'Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.'}" />
+          <Button Grid.Column="1" Classes="link" Content="{l:T 'Learn more'}" Command="{Binding LearnMoreCommand}"
+                  VerticalAlignment="Center" Margin="12,0,0,0" />
+        </Grid>
+      </Border>
+
+      <!-- Fallback: a code to scan -->
+      <StackPanel Spacing="12">
+        <Button Classes="link" Content="{Binding CodeButtonText}" Command="{Binding ToggleCodeCommand}" HorizontalAlignment="Left" Padding="0" />
+        <Border Classes="card" Padding="20" IsVisible="{Binding ShowsCode}">
+          <StackPanel Spacing="12">
+            <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
+            <Border Background="White" CornerRadius="12" Padding="16" HorizontalAlignment="Left">
+              <Path Data="{Binding Code}" Fill="Black" Stretch="Uniform" Width="220" Height="220" />
+            </Border>
+            <TextBlock Classes="secondary" TextWrapping="Wrap"
+                       Text="{l:T 'In Beam on the other phone, tap the scan button next to Nearby devices and scan this code. The two are paired from then on.'}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

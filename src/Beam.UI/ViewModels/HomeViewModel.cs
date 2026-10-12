@@ -87,6 +87,7 @@ public sealed class DeviceViewModel : ObservableObject
                 "linux" => "Linux",
                 "android" => "Android",
                 "ios" => "iPhone",
+                Beam.Core.Nearby.NearbyService.BluetoothPlatform => _device.Kind == DeviceKinds.Phone ? L.T("Phone") : L.T("Computer"),
                 _ => L.T("Computer"),
             };
             if (IsDirect) return L.T("{0} · Direct", platform);
@@ -202,6 +203,13 @@ public sealed class HomeViewModel : ObservableObject
         ScanCodeCommand = new AsyncCommand(ScanCodeAsync);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
+        AllowBluetoothCommand = new AsyncCommand(async () => await _node.Nearby.RequestPermissionAsync());
+        node.Nearby.Changed += () => Dispatcher.UIThread.Post(() =>
+        {
+            OnPropertyChanged(nameof(HasBluetoothNotice));
+            OnPropertyChanged(nameof(BluetoothNotice));
+            OnPropertyChanged(nameof(BluetoothNeedsPermission));
+        });
 
         Items.CollectionChanged += (_, _) => OnItemsChanged();
         _searchHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
@@ -244,6 +252,17 @@ public sealed class HomeViewModel : ObservableObject
     public bool HasDevices => Devices.Count > 0;
 
     public bool HasNoDevices => Devices.Count == 0;
+
+    /// <summary>Bluetooth is off or not allowed: devices that aren't on this Wi-Fi can't be found.</summary>
+    public bool HasBluetoothNotice => _node.Nearby.State is Beam.Core.Nearby.NearbyRadioState.Off or Beam.Core.Nearby.NearbyRadioState.NeedsPermission;
+
+    public bool BluetoothNeedsPermission => _node.Nearby.State == Beam.Core.Nearby.NearbyRadioState.NeedsPermission;
+
+    public string BluetoothNotice => _node.Nearby.State == Beam.Core.Nearby.NearbyRadioState.NeedsPermission
+        ? L.T("Allow Nearby devices to also find devices that aren't on your Wi-Fi (they need Receive open).")
+        : L.T("Turn on Bluetooth to also find devices that aren't on your Wi-Fi (they need Receive open).");
+
+    public AsyncCommand AllowBluetoothCommand { get; }
 
     public bool DiscoveryUnavailable => _node.Discovery.Problem != null;
 
