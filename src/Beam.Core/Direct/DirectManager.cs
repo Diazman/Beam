@@ -67,6 +67,7 @@ public sealed class DirectManager
         _link = link;
         if (link is IDirectLinkEvents events) events.Lost += OnLinkLost;
         _transfers.BeforeConnect = BeforeConnectAsync;
+        _transfers.SessionFinished += OnSessionFinished;
         _transfers.DirectHandler = HandleRequestAsync;
     }
 
@@ -616,6 +617,21 @@ public sealed class DirectManager
         }
     }
 
+    /// <summary>
+    /// "Switch to Wi-Fi" / "Switch to direct" on a transfer is for the transfers running with that device: once the last
+    /// one is done, the Connection setting decides again (a "Connect directly" link between computers stays as chosen).
+    /// </summary>
+    private void OnSessionFinished(TransferSession session)
+    {
+        var peerId = session.PeerId;
+        if (IsComputerLinked(peerId) || _transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished)) return;
+        if (_peerMethod.TryGetValue(peerId, out var method) && method != _settings.Current.Connection && _peerMethod.TryRemove(peerId, out _))
+        {
+            Log.Info($"Direct: transfers with {session.PeerName} done; back to the Connection setting ({_settings.Current.Connection})");
+            Changed?.Invoke();
+        }
+    }
+
     /// <summary>The Connection setting changed: forget per-device choices and switch running transfers.</summary>
     internal void OnSettingChanged(ConnectionMethod method)
     {
@@ -709,7 +725,10 @@ public sealed class DirectManager
             // Join the PC's known network straight away when there's no shared network to ask over, and when the direct
             // link was just lost (the phone usually fell back to its normal Wi-Fi, where asking the PC fails or is slow).
             var rejoining = _linkedPeers.ContainsKey(peer.Id);
-            if (known != null && (viaKnownNetwork || rejoining || current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
+            // A paired computer's network that this phone can see: join it right away, without asking the computer first
+            // (asking needs the shared Wi-Fi, which may be slow or blocked).
+            var inSight = known != null && _link is IDirectNetworkScanner scanner && scanner.VisibleNetworks().Contains(known.Ssid);
+            if (known != null && (viaKnownNetwork || rejoining || inSight || current.Endpoints.Count == 0 || IsNearbyOnlyDirectly(peer.Id)))
             {
                 Log.Info($"Direct: {(rejoining ? "rejoining" : "joining")} {peer.Name}'s known network {known.Ssid}");
                 try
@@ -718,10 +737,11 @@ public sealed class DirectManager
                         .ConfigureAwait(false);
                     plan = Plan.None;
                 }
-                catch (DirectLinkException ex) when (rejoining && !viaKnownNetwork && plan == Plan.JoinPeer && current.Endpoints.Count > 0 && !token.IsCancellationRequested)
+                catch (DirectLinkException ex) when ((rejoining || inSight) && !viaKnownNetwork && plan == Plan.JoinPeer && current.Endpoints.Count > 0
+                                                    && !token.IsCancellationRequested)
                 {
                     // Its network may have changed (new password): ask it over the shared network instead.
-                    Log.Warn($"Direct: rejoining {known.Ssid} failed ({ex.Message}); asking {peer.Name} instead");
+                    Log.Warn($"Direct: joining {known.Ssid} failed ({ex.Message}); asking {peer.Name} instead");
                 }
             }
 
