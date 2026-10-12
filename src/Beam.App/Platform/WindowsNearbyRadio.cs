@@ -176,10 +176,10 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
             // A long write arrives in pieces (offsets); the request is complete once it has all its bytes.
             var offset = (int)request.Offset;
             var buffer = offset == 0 ? data : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, data);
-            if (buffer.Length >= NearbyHandshake.RequestLength)
+            if (NearbyHandshake.ExpectedLength(buffer) is { } length && buffer.Length >= length)
             {
                 _writes.TryRemove(key, out _);
-                _responder?.Request(key, buffer[..NearbyHandshake.RequestLength]);
+                _responder?.Request(key, buffer[..length]);
             }
             else
             {

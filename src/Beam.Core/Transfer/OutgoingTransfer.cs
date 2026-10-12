@@ -180,6 +180,8 @@ internal sealed class OutgoingTransfer
         _accepted = true;
         var plan = ApplyPlan(response.Plan);
         _session.SetPath(_service.PathOf(connection.RemoteEndPoint));
+        Log.Info($"Transfer {_session.Id} to {PeerName}: connected at {connection.RemoteEndPoint} ({_service.PathOf(connection.RemoteEndPoint)}), " +
+                 $"from {connection.LocalEndPoint}; addresses known: {string.Join(", ", target.Endpoints)}");
         Volatile.Write(ref _switchingUntil, 0);
         _session.SetInterruptAction(() =>
         {
@@ -275,7 +277,7 @@ internal sealed class OutgoingTransfer
             var snapshot = _session.GetSnapshot();
             _session.SetCurrentFile(null);
             _session.SetState(snapshot.FailedFiles > 0 ? TransferState.CompletedWithErrors : TransferState.Completed);
-            Log.Info($"Sent {_session.Title} to {PeerName}: {snapshot.CompletedFiles} ok, {snapshot.FailedFiles} failed, {snapshot.SkippedFiles} skipped");
+            Log.Info($"Sent {_session.Title} to {PeerName}: {snapshot.CompletedFiles} ok, {snapshot.FailedFiles} failed, {snapshot.SkippedFiles} skipped ({_session.RateSummary()})");
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -323,8 +325,11 @@ internal sealed class OutgoingTransfer
                 long offset = planOffset;
                 try
                 {
-                    if (stream.CanSeek && stream.Length != entry.Size)
+                    // A file that grew since it was chosen (e.g. a log being written): send what was chosen. One that shrank can't be.
+                    if (stream.CanSeek && stream.Length < entry.Size)
                         throw new IOException("The file was changed after it was selected.");
+                    if (stream.CanSeek && stream.Length > entry.Size)
+                        Log.Info($"{entry.RelativePath} grew since it was chosen; sending its first {entry.Size} bytes");
                     // Resuming: hash what the receiver already has; this also moves the stream to the resume point.
                     if (offset > 0) offset = await HashPrefixAsync(stream, hash, offset, buffers.A, token).ConfigureAwait(false);
                     if (offset == 0 && stream.CanSeek) stream.Position = 0;
@@ -426,11 +431,10 @@ internal sealed class OutgoingTransfer
         try
         {
             await using var stream = entry.OpenRead();
-            if (stream.CanSeek && stream.Length != entry.Size) throw new IOException("The file was changed after it was selected.");
+            // Grown since it was chosen (e.g. a log being written): the first bytes, as chosen. Shrunk: can't send it.
+            if (stream.CanSeek && stream.Length < entry.Size) throw new IOException("The file was changed after it was selected.");
             var data = new byte[entry.Size];
             await stream.ReadExactlyAsync(data, token).ConfigureAwait(false);
-            if (stream.CanSeek ? stream.Length != entry.Size : stream.ReadByte() != -1)
-                throw new IOException("The file was changed after it was selected.");
             return new SmallFile(data, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(), null);
         }
         catch (EndOfStreamException)

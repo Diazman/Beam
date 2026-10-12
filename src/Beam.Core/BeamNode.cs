@@ -151,6 +151,7 @@ public sealed class BeamNode : IAsyncDisposable
         Ssid = Direct.CanHost ? Direct.OwnNetwork().Ssid : null,
         Passphrase = Direct.CanHost ? Direct.OwnNetwork().Passphrase : null,
         ConnectDirectly = connectDirectly && Direct.CanHost,
+        Roles = DirectRolesText.Format(Direct.AnnouncedRoles),
     };
 
     /// <summary>

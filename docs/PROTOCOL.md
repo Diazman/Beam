@@ -89,7 +89,8 @@ Windows also advertises the GATT service separately; Android puts the service UU
 
 **GATT**: service `8b2f6a10-4c1e-4d7b-9e55-3b0e5a1c7d01`, characteristic `8b2f6a11-…` (write, then read).
 
-1. The sender writes 72 bytes: version `1`, a fresh P-256 public key (65 bytes, uncompressed), and its own 6-byte id hash.
+1. The sender writes 73 bytes: version `1`, a fresh P-256 public key (65 bytes, uncompressed), its own 6-byte id hash,
+   and flags (`1`: the sender will host, so don't start your network).
    The id hash is a hint only: it tells the receiver whether the sender is a paired device.
 2. The sender reads until the answer isn't "working" (`[1, 0]`, sent while the receiver starts its network).
    A refusal is `[1, 2, message…]`. A ready answer is `[1, 1]`, then the receiver's fresh P-256 key (65 bytes),
@@ -100,3 +101,9 @@ Windows also advertises the GATT service separately; Android puts the service UU
 
 A device seen before must answer with the same fingerprint, or the sender refuses to connect.
 When the passphrase went to an unpaired sender, the receiver gives its network a new passphrase once the network is off.
+
+**Join request** (a phone sending to a computer hosts its own Wi-Fi Direct group): after a ready answer, the sender
+writes `[1, 0x20, length (2 bytes, big-endian), IV, ciphertext, HMAC]` with the same keys. The plaintext is the
+sender's pairing code, including its network. The receiver joins that network and answers `[1, 3, its address there]`,
+or `[1, 2, message…]` when it can't. Until then it answers "working".
+

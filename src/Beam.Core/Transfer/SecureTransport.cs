@@ -3,6 +3,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using Beam.Core.Diagnostics;
 using Beam.Core.Identity;
 using Beam.Core.Protocol;
 using Beam.Core.Localization;
@@ -167,7 +168,11 @@ internal static class SecureTransport
             cancellationToken.ThrowIfCancellationRequested();
             // One of this device's own addresses (e.g. a phone on this PC's hotspot seen through it): it would only
             // reach this device itself.
-            if (Direct.DirectAddresses.IsOwnAddress(endpoint.Address)) continue;
+            if (Direct.DirectAddresses.IsOwnAddress(endpoint.Address))
+            {
+                Log.Info($"Connecting to {peerName}: skipping {endpoint}, which is this device's own address");
+                continue;
+            }
             var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
@@ -188,6 +193,7 @@ internal static class SecureTransport
             }
             catch (Exception ex) when (ex is SocketException or IOException)
             {
+                Log.Info($"Connecting to {peerName} at {endpoint} failed: {ex.Message}");
                 lastError = ex;
                 socket.Dispose();
                 continue;

@@ -69,23 +69,10 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         foreach (var session in node.Transfers.Sessions) AddTransfer(session);
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
         node.Direct.BeforeHosting = () => Dispatcher.UIThread.InvokeAsync(EnsureFirewallForDirectAsync);
-        node.Direct.Approve = approval => Dispatcher.UIThread.InvokeAsync(() => AskDirectApprovalAsync(approval));
         node.Direct.Problem += message => Dispatcher.UIThread.Post(() => ShowDirectProblem(message));
     }
 
     private bool _showingDirectProblem;
-
-    /// <summary>
-    /// A device that can't start its own network wants to send directly: this computer would leave its Wi-Fi and join
-    /// that device's network while the files arrive.
-    /// </summary>
-    private async Task<bool> AskDirectApprovalAsync(DirectApproval approval)
-    {
-        var name = approval.PeerName;
-        var text = L.T("To receive directly, this computer leaves its Wi-Fi and joins {0}'s network until the files have arrived.", name) + " "
-                   + (approval.KeepsInternet ? L.T("{0} shares its internet, so this computer stays online.", name) : L.T("This computer has no internet meanwhile."));
-        return await ShowDialogAsync(new ConfirmViewModel(L.T("{0} wants to connect directly", name), text, L.T("Allow"), L.T("Don't allow"))) is true;
-    }
 
     /// <summary>A direct connection couldn't be set up; transfers carry on over Wi-Fi.</summary>
     private async void ShowDirectProblem(string message)

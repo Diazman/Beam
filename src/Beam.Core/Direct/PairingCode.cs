@@ -44,6 +44,10 @@ public sealed class PairingCode
     [JsonPropertyName("d")]
     public bool ConnectDirectly { get; set; }
 
+    /// <summary>What the device can do with direct links (as discovery announces it), so the other side picks who hosts.</summary>
+    [JsonPropertyName("r")]
+    public string? Roles { get; set; }
+
     /// <summary>Appends the pairing information to a link (the Phone page's), or returns it as a "beam:" text.</summary>
     public string AppendTo(string? link)
     {
@@ -117,7 +121,7 @@ public sealed class PairingCode
         Name = Name,
         Fingerprint = Fingerprint,
         Kind = string.IsNullOrEmpty(Kind) ? Discovery.DeviceKinds.Desktop : Kind,
-        DirectRoles = Network != null ? DirectRoles.Host : DirectRoles.None,
+        DirectRoles = !string.IsNullOrEmpty(Roles) ? DirectRolesText.Parse(Roles) : Network != null ? DirectRoles.Host : DirectRoles.None,
         Endpoints = Addresses.Select(a => TryParseEndPoint(a, out var e) ? e : null).OfType<IPEndPoint>().ToList(),
     };
 

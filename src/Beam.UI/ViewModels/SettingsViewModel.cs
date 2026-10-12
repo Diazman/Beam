@@ -171,32 +171,6 @@ public sealed class SettingsViewModel : ObservableObject
         set => Apply(s => s.NotifyOnDeviceFound = value);
     }
 
-    /// <summary>Connect through the shared Wi-Fi network (default).</summary>
-    public bool UseSameNetwork
-    {
-        get => _node.Settings.Current.Connection == ConnectionMethod.SameNetwork;
-        set
-        {
-            if (value) Apply(s => s.Connection = ConnectionMethod.SameNetwork);
-        }
-    }
-
-    /// <summary>Connect over a direct Wi-Fi link (Wi-Fi Direct).</summary>
-    public bool UseDirect
-    {
-        get => _node.Settings.Current.Connection == ConnectionMethod.Direct;
-        set
-        {
-            if (!value) return;
-            Apply(s => s.Connection = ConnectionMethod.Direct);
-            if (_main.IsPhone) _ = _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices);
-        }
-    }
-
-    public bool DirectSupported => _node.Direct.IsSupported;
-
-    public bool DirectUnsupported => !DirectSupported;
-
     public IReadOnlyList<ThemeOption> ThemeOptions { get; }
 
     public IReadOnlyList<LanguageOption> LanguageOptions { get; }
@@ -290,7 +264,7 @@ public sealed class SettingsViewModel : ObservableObject
                          nameof(ReceiveFolder), nameof(UsesDefaultFolder), nameof(StartWithWindows), nameof(CloseToTray),
                          nameof(Discoverable), nameof(NotificationsEnabled), nameof(NotifyOnIncomingRequest),
                          nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(SelectedLanguage),
-                         nameof(LanguageNeedsRestart), nameof(LocalAddresses), nameof(UseSameNetwork), nameof(UseDirect),
+                         nameof(LanguageNeedsRestart), nameof(LocalAddresses),
                      })
             {
                 OnPropertyChanged(name);
