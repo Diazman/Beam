@@ -56,6 +56,18 @@ public interface INearbyRadio
     /// <summary>Phones: asks for the Bluetooth permission (no-op elsewhere). True when granted.</summary>
     Task<bool> RequestPermissionAsync();
 
+    /// <summary>
+    /// Turns Bluetooth on where the system lets an app do that (Windows), or asks the user with the system's
+    /// one-tap prompt (Android). True when it is on (or turning on).
+    /// </summary>
+    Task<bool> TurnOnAsync();
+
+    /// <summary>
+    /// Addresses that advertised Beam's GATT service recently, newest first. A Windows receiver sends its beacon and its
+    /// service from different addresses, so the sender tries these too.
+    /// </summary>
+    IReadOnlyList<string> RecentServiceAddresses();
+
     /// <summary>Advertises <paramref name="beacon"/> (manufacturer data) with Beam's GATT service; replaces a running one.</summary>
     void StartAdvertising(byte[] beacon, INearbyResponder responder);
 
@@ -65,6 +77,7 @@ public interface INearbyRadio
 
     void StopScanning();
 
+    /// <summary>Connects to Beam's GATT service at <paramref name="address"/> (one try).</summary>
     Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken);
 }
 

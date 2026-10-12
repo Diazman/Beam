@@ -208,7 +208,8 @@ public sealed class TransferViewModel : ObservableObject
 
     private ConnectionMethod Method => _direct?.MethodFor(Session.PeerId) ?? ConnectionMethod.SameNetwork;
 
-    private bool CanSwitch => _direct is { IsSupported: true } && !_switching && !Session.IsText
+    /// <summary>Only the sender switches (its choice decides how both devices connect).</summary>
+    private bool CanSwitch => IsSend && _direct is { IsSupported: true } && !_switching && !Session.IsText
                               && Session.PeerId != Beam.Core.Phone.PhoneLinkServer.PhonePeerId
                               && State is TransferState.Transferring or TransferState.Reconnecting or TransferState.Interrupted;
 

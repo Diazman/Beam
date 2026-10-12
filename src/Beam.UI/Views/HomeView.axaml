@@ -48,6 +48,15 @@
 
           <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
 
+          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding CanConnectDirectly}">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+              <TextBlock Text="{l:T 'Prefer direct connection'}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Connect to the other device directly first: faster, and no router needed. If that isn\'t possible, Beam uses the Wi-Fi network.'}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding PreferDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
+          </Grid>
+
           <Border Classes="notice" IsVisible="{Binding HasBluetoothNotice}">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Text="{Binding BluetoothNotice}" TextWrapping="Wrap" VerticalAlignment="Center" />
@@ -82,11 +91,6 @@
                         <PathIcon Data="{StaticResource IconCheck}" Width="12" Height="12" Foreground="White" />
                       </Border>
                     </Grid>
-                    <!-- Another computer: connect directly to it (this computer joins its network) -->
-                    <Button Grid.Row="1" Classes="link" Padding="4,2" Margin="-4,0,0,0" FontSize="12"
-                            HorizontalAlignment="Left" VerticalAlignment="Center"
-                            Content="{Binding DirectButtonText}" Command="{Binding DirectCommand}"
-                            IsVisible="{Binding ShowsDirectButton}" />
                     <TextBlock Grid.Row="2" Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Row="3" Classes="caption" Text="{Binding Subtitle}" Margin="0,2,0,0"

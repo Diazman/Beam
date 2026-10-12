@@ -350,32 +350,45 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
         }
     }
 
+    public IReadOnlyList<string> RecentServiceAddresses() =>
+        _serviceSeen.Where(s => System.Environment.TickCount64 - s.Value < 30_000).OrderByDescending(s => s.Value).Select(s => s.Key).ToList();
+
     public async Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken)
     {
         if (Adapter is not { } adapter) throw new IOException("No Bluetooth.");
-        var candidates = new List<string> { address };
-        candidates.AddRange(_serviceSeen.Where(s => s.Key != address && System.Environment.TickCount64 - s.Value < 30_000)
-            .OrderByDescending(s => s.Value).Select(s => s.Key).Take(3));
-        Exception? last = null;
-        foreach (var candidate in candidates)
+        try
         {
-            for (var attempt = 0; attempt < 2; attempt++) // status 133 right after a scan is common: once more
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    return await Client.ConnectAsync(_context, adapter.GetRemoteDevice(candidate)!, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not System.OperationCanceledException || !cancellationToken.IsCancellationRequested)
-                {
-                    last = ex;
-                    Log.Info($"Nearby: Bluetooth connection to {candidate} failed: {ex.Message}");
-                    if (ex is MissingServiceException) break;
-                }
-            }
+            return await Client.ConnectAsync(_context, adapter.GetRemoteDevice(address)!, cancellationToken).ConfigureAwait(false);
         }
+        catch (IOException ex) when (ex is not MissingServiceException && ex.Message.Contains("status 133", StringComparison.Ordinal))
+        {
+            // Status 133 right after a scan is common: once more.
+            await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            return await Client.ConnectAsync(_context, adapter.GetRemoteDevice(address)!, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
-        throw last ?? new IOException("The device isn't in range.");
+    /// <summary>
+    /// Android doesn't let apps switch Bluetooth on by themselves (since Android 13): it shows its own one-tap
+    /// "Allow Beam to turn on Bluetooth?" prompt instead.
+    /// </summary>
+    public Task<bool> TurnOnAsync()
+    {
+        if (Adapter is not { } adapter) return Task.FromResult(false);
+        if (adapter.IsEnabled) return Task.FromResult(true);
+        if (!HasPermissions() || AndroidHost.CurrentActivity is not { } activity) return Task.FromResult(false);
+        activity.RunOnUiThread(() =>
+        {
+            try
+            {
+                activity.StartActivity(new Intent(BluetoothAdapter.ActionRequestEnable));
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Nearby: couldn't ask to turn Bluetooth on: {ex.Message}");
+            }
+        });
+        return Task.FromResult(true);
     }
 
     private sealed class MissingServiceException : IOException
@@ -388,7 +401,7 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
     /// <summary>A GATT client connection: one operation at a time, each answered through the callback.</summary>
     private sealed class Client : BluetoothGattCallback, INearbyConnection
     {
-        private TaskCompletionSource<bool>? _connected = NewSource<bool>();
+        private readonly TaskCompletionSource<bool> _connected = NewSource<bool>();
         private TaskCompletionSource<bool>? _discovered;
         private TaskCompletionSource<bool>? _mtu;
         private TaskCompletionSource<bool>? _written;
@@ -402,7 +415,7 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
             try
             {
                 client._gatt = device.ConnectGatt(context, false, client, BluetoothTransports.Le) ?? throw new IOException("Couldn't connect.");
-                await client._connected!.Task.WaitAsync(ConnectTimeout, cancellationToken).ConfigureAwait(false);
+                await client._connected.Task.WaitAsync(ConnectTimeout, cancellationToken).ConfigureAwait(false);
                 client._mtu = NewSource<bool>();
                 if (client._gatt.RequestMtu(185))
                 {
@@ -455,12 +468,12 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
         {
             if (newState == ProfileState.Connected && status == GattStatus.Success)
             {
-                _connected?.TrySetResult(true);
+                _connected.TrySetResult(true);
                 return;
             }
 
             var lost = new IOException($"Bluetooth connection {(newState == ProfileState.Connected ? "failed" : "lost")} (status {(int)status})");
-            _connected?.TrySetException(lost);
+            _connected.TrySetException(lost);
             _discovered?.TrySetException(lost);
             _written?.TrySetException(lost);
             _read?.TrySetException(lost);

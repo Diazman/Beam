@@ -105,6 +105,12 @@ public sealed class AppSettings
     /// <summary>Same network (default) or a direct link; can also be switched during a transfer.</summary>
     public ConnectionMethod Connection { get; set; } = ConnectionMethod.SameNetwork;
 
+    /// <summary>
+    /// Receiving: senders that prefer a direct connection may have this device start its own Wi-Fi for them (Receive
+    /// tab). Off: senders use the shared Wi-Fi.
+    /// </summary>
+    public bool AllowDirectSenders { get; set; } = true;
+
     /// <summary>Interface language code ("en", "tr", "ru", "uz"); empty follows Windows.</summary>
     public string Language { get; set; } = "";
 

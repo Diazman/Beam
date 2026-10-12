@@ -209,6 +209,20 @@ public sealed class DiscoveryService : IDisposable
         Upsert(device with { IsManual = true }, device.Endpoints.FirstOrDefault());
     }
 
+    /// <summary>Forgets addresses of a device that stopped working (e.g. on a direct network that is gone).</summary>
+    public void DropEndpoints(string deviceId, Func<IPEndPoint, bool> drop)
+    {
+        while (_devices.TryGetValue(deviceId, out var existing))
+        {
+            var kept = existing.Device.Endpoints.Where(e => !drop(e)).ToList();
+            if (kept.Count == existing.Device.Endpoints.Count) return;
+            var changed = existing.Device with { Endpoints = kept };
+            if (!_devices.TryUpdate(deviceId, new Entry(changed, existing.LastSeen), existing)) continue;
+            DeviceChanged?.Invoke(this, new DeviceEventArgs(changed));
+            return;
+        }
+    }
+
     /// <summary>Drops a device from the list (e.g. a Bluetooth placeholder now known by its real id).</summary>
     public void Forget(string deviceId)
     {

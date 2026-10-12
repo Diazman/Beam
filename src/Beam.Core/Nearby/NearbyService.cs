@@ -30,6 +30,7 @@ public sealed class NearbyService : INearbyResponder
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan HostTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SightingLifetime = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
 
     private readonly INearbyRadio? _radio;
     private readonly DirectManager _direct;
@@ -43,11 +44,14 @@ public sealed class NearbyService : INearbyResponder
     private readonly object _gate = new();
     private byte[]? _advertised;
     private bool _receiving;
+    private CancellationTokenSource? _grace;
+    private readonly Func<bool> _transfersRunning;
     private bool _looking;
 
     internal NearbyService(INearbyRadio? radio, DirectManager direct, DiscoveryService discovery, SettingsStore settings, Func<string> selfId,
-        Func<bool, PairingCode> pairingCode, bool selfIsComputer)
+        Func<bool, PairingCode> pairingCode, bool selfIsComputer, Func<bool> transfersRunning)
     {
+        _transfersRunning = transfersRunning;
         _radio = radio;
         _direct = direct;
         _discovery = discovery;
@@ -60,6 +64,7 @@ public sealed class NearbyService : INearbyResponder
             radio.StateChanged += OnRadioStateChanged;
             direct.Changed += () => UpdateAdvertisement();
             direct.RefreshNetwork = RefreshAsync;
+            direct.PeerNetworkOn = NetworkOn;
         }
     }
 
@@ -80,18 +85,62 @@ public sealed class NearbyService : INearbyResponder
         return granted;
     }
 
-    /// <summary>Receive opened or closed: become visible over Bluetooth (and over Wi-Fi as receiving).</summary>
+    /// <summary>
+    /// After Receive is left, how long this device stays receivable (visible over Bluetooth, its network on for senders)
+    /// before turning that off. Running transfers keep it on until they finish. Closing Beam turns it off at once.
+    /// </summary>
+    internal TimeSpan ReceiveGrace { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Receive opened or closed: become visible over Bluetooth (and over Wi-Fi as receiving), or stop after a while.</summary>
     public void SetReceiving(bool receiving)
     {
         lock (_gate)
         {
+            _grace?.Cancel();
+            _grace = null;
             if (_receiving == receiving) return;
+            if (!receiving && ReceiveGrace > TimeSpan.Zero)
+            {
+                var grace = _grace = new CancellationTokenSource();
+                _ = StopAfterGraceAsync(grace.Token);
+                Log.Info($"Nearby: Receive left; still receivable for {ReceiveGrace.TotalMinutes:0} min");
+                return;
+            }
+
             _receiving = receiving;
         }
 
+        Apply(receiving);
+    }
+
+    private void Apply(bool receiving)
+    {
         _direct.SetReceiving(receiving);
         if (!receiving) _answers.Clear();
         UpdateAdvertisement();
+    }
+
+    private async Task StopAfterGraceAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(ReceiveGrace, token).ConfigureAwait(false);
+            while (_transfersRunning()) await Task.Delay(TimeSpan.FromSeconds(30), token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // Receive opened again
+        }
+
+        lock (_gate)
+        {
+            if (token.IsCancellationRequested || !_receiving) return;
+            _receiving = false;
+            _grace = null;
+        }
+
+        Log.Info("Nearby: no longer receivable (Receive was left a while ago)");
+        Apply(false);
     }
 
     /// <summary>Send opened or closed: listen for receivers over Bluetooth.</summary>
@@ -105,6 +154,26 @@ public sealed class NearbyService : INearbyResponder
 
         UpdateScanning();
     }
+
+    /// <summary>Turns Bluetooth on (Windows), or shows the system's prompt to (Android). True when it is on or turning on.</summary>
+    public async Task<bool> TurnOnAsync()
+    {
+        if (_radio == null || _radio.State == NearbyRadioState.Unsupported) return false;
+        if (_radio.State == NearbyRadioState.Ready) return true;
+        try
+        {
+            return await _radio.TurnOnAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: turning Bluetooth on failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Whether the device's beacon says its network is on (null: not heard over Bluetooth).</summary>
+    private bool? NetworkOn(string deviceId) =>
+        _sightings.TryGetValue(HashText(deviceId), out var s) && Fresh(s.At) ? s.Sighting.Beacon.Flags.HasFlag(NearbyBeaconFlags.Hosting) : null;
 
     /// <summary>A list entry for a receiver heard only over Bluetooth (to send to it, <see cref="ResolveAsync"/> first).</summary>
     public static bool IsPlaceholder(DeviceInfo device) => device.Platform == BluetoothPlatform;
@@ -233,7 +302,9 @@ public sealed class NearbyService : INearbyResponder
         }
 
         if (network == null && code.Addresses.Count == 0)
-            return NearbyHandshake.Refuse(L.T("{0} couldn't start its own Wi-Fi. Connect both devices to the same Wi-Fi.", _settings.Current.DeviceName));
+            return NearbyHandshake.Refuse(_settings.Current.AllowDirectSenders
+                ? L.T("{0} couldn't start its own Wi-Fi. Connect both devices to the same Wi-Fi.", _settings.Current.DeviceName)
+                : L.T("{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.", _settings.Current.DeviceName));
 
         // A sender that isn't trusted here gets the passphrase only until Receive closes: then the network gets a new one.
         var senderHash = NearbyHandshake.SenderHash(request);
@@ -331,21 +402,81 @@ public sealed class NearbyService : INearbyResponder
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(HandshakeTimeout);
         var token = timeout.Token;
-        Log.Info($"Nearby: handshake with {name} over Bluetooth");
+        // Where to connect: a phone's service is at its beacon's address. Windows sends its beacon from another
+        // (non-connectable) address, so for a computer try the addresses that advertised Beam's service first.
+        var serviceAddresses = _radio.RecentServiceAddresses().Where(a => a != seen.Sighting.Address).Take(4).ToList();
+        var candidates = seen.Sighting.Beacon.Flags.HasFlag(NearbyBeaconFlags.Computer)
+            ? serviceAddresses.Append(seen.Sighting.Address).ToList()
+            : serviceAddresses.Prepend(seen.Sighting.Address).ToList();
+        Log.Info($"Nearby: handshake with {name} over Bluetooth ({string.Join(", ", candidates)})");
+        Exception? last = null;
         try
         {
-            await using var connection = await _radio.ConnectAsync(seen.Sighting.Address, token).ConfigureAwait(false);
+            foreach (var address in candidates)
+            {
+                try
+                {
+                    var code = await HandshakeAtAsync(address, name, token).ConfigureAwait(false);
+                    if (HashText(code.DeviceId) == hash) return code;
+                    Log.Info($"Nearby: {address} is {code.Name}, not {name}; trying the next one");
+                }
+                catch (DirectLinkException)
+                {
+                    throw; // it answered: refused, or not who it was before
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
+                {
+                    last = ex;
+                    Log.Info($"Nearby: no handshake at {address}: {ex.Message}");
+                }
+            }
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new DirectLinkException(L.T("{0} didn't answer over Bluetooth. Move closer and try again.", name));
+        }
+
+        Log.Warn($"Nearby: handshake with {name} failed: {last?.Message}");
+        throw new DirectLinkException(L.T("{0} didn't answer over Bluetooth. Move closer and try again.", name), last);
+    }
+
+    /// <summary>One handshake at one address (connects with a time limit of its own, so a dead address costs little).</summary>
+    private async Task<PairingCode> HandshakeAtAsync(string address, string name, CancellationToken token)
+    {
+        using var connecting = CancellationTokenSource.CreateLinkedTokenSource(token);
+        connecting.CancelAfter(ConnectTimeout);
+        INearbyConnection connection;
+        try
+        {
+            connection = await _radio!.ConnectAsync(address, connecting.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (connecting.IsCancellationRequested && !token.IsCancellationRequested)
+        {
+            throw new TimeoutException("No connection.");
+        }
+
+        await using (connection.ConfigureAwait(false))
+        {
             using var sender = new NearbyHandshake.Sender(NearbyBeacon.HashOf(_selfId()));
             await connection.WriteAsync(sender.Request(), token).ConfigureAwait(false);
             while (true)
             {
                 await Task.Delay(400, token).ConfigureAwait(false);
-                var (status, text) = sender.Open(await connection.ReadAsync(token).ConfigureAwait(false));
+                NearbyHandshake.Status status;
+                string? text;
+                try
+                {
+                    (status, text) = sender.Open(await connection.ReadAsync(token).ConfigureAwait(false));
+                }
+                catch (CryptographicException ex)
+                {
+                    throw new IOException($"Bad answer: {ex.Message}");
+                }
+
                 if (status == NearbyHandshake.Status.Working) continue;
                 if (status == NearbyHandshake.Status.Refused || text == null)
                     throw new DirectLinkException(text ?? L.T("{0} didn't answer.", name));
-                var code = PairingCode.FromJson(text) ?? throw new DirectLinkException(L.T("{0} didn't answer.", name));
-                if (HashText(code.DeviceId) != hash) throw new DirectLinkException(L.T("{0} didn't answer.", name));
+                var code = PairingCode.FromJson(text) ?? throw new IOException("Not a pairing code.");
                 // A device seen before must still have the same certificate: otherwise someone is pretending to be it.
                 var expected = _settings.Current.TrustedDevices.FirstOrDefault(t => t.DeviceId == code.DeviceId)?.Fingerprint
                                ?? _direct.KnownNetworkFor(code.DeviceId)?.Fingerprint;
@@ -359,20 +490,6 @@ public sealed class NearbyService : INearbyResponder
                 return code;
             }
         }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            throw new DirectLinkException(L.T("{0} didn't answer over Bluetooth. Move closer and try again.", name));
-        }
-        catch (CryptographicException ex)
-        {
-            Log.Warn($"Nearby: bad answer from {name}: {ex.Message}");
-            throw new DirectLinkException(L.T("{0} didn't answer.", name));
-        }
-        catch (Exception ex) when (ex is not DirectLinkException and not OperationCanceledException)
-        {
-            Log.Warn($"Nearby: handshake with {name} failed: {ex.Message}");
-            throw new DirectLinkException(L.T("{0} didn't answer over Bluetooth. Move closer and try again.", name), ex);
-        }
     }
 
     private static string HashText(string deviceId) => Convert.ToHexString(NearbyBeacon.HashOf(deviceId)).ToLowerInvariant();
@@ -381,6 +498,7 @@ public sealed class NearbyService : INearbyResponder
 
     internal void Stop()
     {
+        lock (_gate) _grace?.Cancel();
         try
         {
             _radio?.StopAdvertising();

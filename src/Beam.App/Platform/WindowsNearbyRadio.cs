@@ -320,50 +320,50 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
         }
     }
 
+    public IReadOnlyList<string> RecentServiceAddresses() =>
+        _serviceSeen.Where(s => Environment.TickCount64 - s.Value < 30_000).OrderByDescending(s => s.Value).Select(s => s.Key.ToString("X12")).ToList();
+
     public async Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken)
     {
-        var first = Convert.ToUInt64(address, 16);
-        var candidates = new List<ulong> { first };
-        candidates.AddRange(_serviceSeen.Where(s => s.Key != first && Environment.TickCount64 - s.Value < 30_000)
-            .OrderByDescending(s => s.Value).Select(s => s.Key).Take(3));
-        Exception? last = null;
-        foreach (var candidate in candidates)
+        var device = await BluetoothLEDevice.FromBluetoothAddressAsync(Convert.ToUInt64(address, 16)).AsTask(cancellationToken)
+                     ?? throw new IOException("The device isn't in range.");
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            BluetoothLEDevice? device = null;
-            try
+            var services = await device.GetGattServicesForUuidAsync(NearbyUuids.Service, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
+            if (services.Status != GattCommunicationStatus.Success || services.Services.Count == 0)
+                throw new IOException($"No Beam service there ({services.Status})");
+            var service = services.Services[0];
+            var characteristics = await service.GetCharacteristicsForUuidAsync(NearbyUuids.Handshake, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
+            if (characteristics.Status != GattCommunicationStatus.Success || characteristics.Characteristics.Count == 0)
             {
-                device = await BluetoothLEDevice.FromBluetoothAddressAsync(candidate).AsTask(cancellationToken);
-                if (device == null) continue;
-                var services = await device.GetGattServicesForUuidAsync(NearbyUuids.Service, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
-                if (services.Status != GattCommunicationStatus.Success || services.Services.Count == 0)
-                {
-                    last = new IOException($"No Beam service at {candidate:X12} ({services.Status})");
-                    device.Dispose();
-                    continue;
-                }
-
-                var service = services.Services[0];
-                var characteristics = await service.GetCharacteristicsForUuidAsync(NearbyUuids.Handshake, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
-                if (characteristics.Status != GattCommunicationStatus.Success || characteristics.Characteristics.Count == 0)
-                {
-                    last = new IOException($"No handshake at {candidate:X12} ({characteristics.Status})");
-                    service.Dispose();
-                    device.Dispose();
-                    continue;
-                }
-
-                if (candidate != first) Log.Info($"Nearby: Beam's service is at {candidate:X12}, not the beacon's {first:X12}");
-                return new Connection(device, service, characteristics.Characteristics[0]);
+                service.Dispose();
+                throw new IOException($"No handshake there ({characteristics.Status})");
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                last = ex;
-                device?.Dispose();
-            }
+
+            return new Connection(device, service, characteristics.Characteristics[0]);
+        }
+        catch
+        {
+            device.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Turns the Bluetooth radio on (Windows lets desktop apps do that; it may ask the user once).</summary>
+    public async Task<bool> TurnOnAsync()
+    {
+        if (_radio == null) return false;
+        if (_radio.State == RadioState.On) return true;
+        var access = await Radio.RequestAccessAsync();
+        if (access != RadioAccessStatus.Allowed)
+        {
+            Log.Info($"Nearby: not allowed to turn Bluetooth on ({access})");
+            return false;
         }
 
-        throw last ?? new IOException("The device isn't in range.");
+        var result = await _radio.SetStateAsync(RadioState.On);
+        Log.Info($"Nearby: turning Bluetooth on: {result}");
+        return result == RadioAccessStatus.Allowed;
     }
 
     private sealed class Connection : INearbyConnection
@@ -415,6 +415,10 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
     public void StopScanning()
     {
     }
+
+    public Task<bool> TurnOnAsync() => Task.FromResult(false);
+
+    public IReadOnlyList<string> RecentServiceAddresses() => Array.Empty<string>();
 
     public Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken) =>
         Task.FromException<INearbyConnection>(new PlatformNotSupportedException());
