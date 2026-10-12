@@ -170,6 +170,61 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task ReplacingAFileThisDeviceMayNotChangeKeepsBothInsteadOfFailing()
+    {
+        // On Android, a file saved by an earlier install of Beam can't be replaced by the new one.
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        var file = sender.CreateFile("video.mp4", 300_000, 3);
+        var existing = Path.Combine(receiver.ReceiveFolder, "video.mp4");
+        File.WriteAllText(existing, "old content");
+        receiver.Handler.Resolve = c => c.Select(_ => ConflictAction.Replace).ToList();
+        var move = IncomingTransfer.MoveFile;
+        IncomingTransfer.MoveFile = (from, to, overwrite) =>
+        {
+            if (overwrite && to == existing) throw new UnauthorizedAccessException("Access to the path is denied.");
+            move(from, to, overwrite);
+        };
+        try
+        {
+            var session = sender.Node.Send(receiver.AsDevice(), new[] { file });
+            await Wait.ForFinishAsync(session);
+
+            Assert.Equal(TransferState.Completed, session.State);
+            Assert.Equal(1, session.GetSnapshot().CompletedFiles);
+            Assert.Equal("old content", File.ReadAllText(existing));
+            Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video (1).mp4")));
+        }
+        finally
+        {
+            IncomingTransfer.MoveFile = move;
+        }
+    }
+
+    [Fact]
+    public async Task AnotherDeviceAnsweringAtAnOldAddressDoesntStopTheTransfer()
+    {
+        // After switching networks, an address the receiver used before can lead to another device running Beam (or,
+        // through a PC's hotspot, to the sender itself): try its other addresses instead of failing with "couldn't
+        // confirm this is really …".
+        await using var sender = new TestNode("Laptop");
+        await using var receiver = new TestNode("Galaxy");
+        await using var other = new TestNode("Someone else");
+        var file = sender.CreateFile("video.mp4", 300_000, 4);
+        var device = receiver.AsDevice() with
+        {
+            Endpoints = new[] { other.AsDevice().Endpoints[0], receiver.AsDevice().Endpoints[0] },
+        };
+
+        var session = sender.Node.Send(device, new[] { file });
+        await Wait.ForFinishAsync(session);
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+        Assert.Empty(other.Handler.Requests);
+    }
+
+    [Fact]
     public async Task MergesIntoExistingFolderAndRenamesFolderBlockedByFile()
     {
         await using var sender = new TestNode("Sender");

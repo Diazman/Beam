@@ -161,9 +161,13 @@ internal static class SecureTransport
                 L.T("{0} isn't available right now. Make sure Beam is open on that computer.", peerName));
 
         Exception? lastError = null;
+        TransferException? mismatch = null;
         foreach (var endpoint in endpoints)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // One of this device's own addresses (e.g. a phone on this PC's hotspot seen through it): it would only
+            // reach this device itself.
+            if (Direct.DirectAddresses.IsOwnAddress(endpoint.Address)) continue;
             var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
@@ -189,9 +193,22 @@ internal static class SecureTransport
                 continue;
             }
 
-            return await HandshakeAsync(socket, identity, hello, expectedFingerprint, peerName, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await HandshakeAsync(socket, identity, hello, expectedFingerprint, peerName, cancellationToken).ConfigureAwait(false);
+            }
+            catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.IdentityMismatch)
+            {
+                // Another device answered at this address (e.g. it was handed the address the device just left):
+                // the right one may be at the next address.
+                Diagnostics.Log.Warn($"{endpoint} isn't {peerName}: {ex.Error.Details}");
+                mismatch = ex;
+            }
         }
 
+        // Only a different device answering everywhere is a real mismatch; when the device's own address didn't
+        // answer at all (it is switching networks), it is just not reachable yet and the transfer retries.
+        if (mismatch != null && lastError == null) throw mismatch;
         var details = lastError?.Message;
         throw new TransferException(TransferErrorKind.ConnectFailed,
             L.T("Couldn't reach {0}. Make sure Beam is open on that computer and both computers are on the same network.", peerName),

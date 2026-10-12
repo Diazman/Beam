@@ -183,6 +183,7 @@ public sealed class UiHarness : IAsyncDisposable
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
             DirectLink = directLink,
             ExternalFiles = externalFiles,
+            DeviceKind = phone ? DeviceKinds.Phone : DeviceKinds.Laptop,
         });
         Node.Settings.Update(s =>
         {
@@ -190,6 +191,7 @@ public sealed class UiHarness : IAsyncDisposable
             s.ReceiveFolder = ReceiveFolder;
             s.FirstRunCompleted = firstRunDone;
         });
+        Node.Direct.HasWiredInternet = () => false; // not the test machine's own cable
         Ui = new FakeUi();
         Platform = new FakePlatform { IsPhone = phone };
         Window = new MainWindow { Width = width, Height = height };
@@ -238,7 +240,7 @@ public sealed class UiHarness : IAsyncDisposable
         Name = Node.Settings.Current.DeviceName,
         Fingerprint = Node.Identity.Fingerprint,
         Kind = Platform.IsPhone ? DeviceKinds.Phone : DeviceKinds.Laptop,
-        DirectRoles = Node.Direct.Roles,
+        DirectRoles = Node.Direct.AnnouncedRoles,
         Endpoints = new[] { new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, Node.Transfers.Port) },
     };
 

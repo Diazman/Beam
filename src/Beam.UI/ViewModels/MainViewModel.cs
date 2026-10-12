@@ -6,6 +6,7 @@ using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core;
 using Beam.Core.Diagnostics;
+using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.Localization;
 using Beam.Core.Settings;
@@ -28,7 +29,7 @@ public enum Page
 /// Root view model: navigation, the transfers panel, dialogs, notifications, and the bridge
 /// that lets the transfer engine ask the user about incoming files.
 /// </summary>
-public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
+public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingTransferHandler
 {
     private readonly IPlatformServices _platform;
     private readonly IUiServices _ui;
@@ -66,10 +67,22 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         foreach (var session in node.Transfers.Sessions) AddTransfer(session);
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
         node.Direct.BeforeHosting = () => Dispatcher.UIThread.InvokeAsync(EnsureFirewallForDirectAsync);
+        node.Direct.Approve = approval => Dispatcher.UIThread.InvokeAsync(() => AskDirectApprovalAsync(approval));
         node.Direct.Problem += message => Dispatcher.UIThread.Post(() => ShowDirectProblem(message));
     }
 
     private bool _showingDirectProblem;
+
+    /// <summary>Another device asks this one to start its network for it, or (computers) to leave its Wi-Fi and join.</summary>
+    private async Task<bool> AskDirectApprovalAsync(DirectApproval approval)
+    {
+        var name = approval.PeerName;
+        var text = approval.LeavesWiFi
+            ? L.T("To connect directly, this computer leaves its Wi-Fi and joins {0}'s network until you disconnect.", name) + " "
+              + (approval.KeepsInternet ? L.T("{0} shares its internet, so this computer stays online.", name) : L.T("This computer has no internet meanwhile."))
+            : L.T("This device starts its own Wi-Fi network for {0}. Your Wi-Fi stays connected.", name);
+        return await ShowDialogAsync(new ConfirmViewModel(L.T("{0} wants to connect directly", name), text, L.T("Allow"), L.T("Don't allow"))) is true;
+    }
 
     /// <summary>A direct connection couldn't be set up; transfers carry on over Wi-Fi.</summary>
     private async void ShowDirectProblem(string message)
@@ -88,6 +101,29 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     }
 
     public BeamNode Node { get; }
+
+    bool IComputerLinks.CanConnect(DeviceInfo device) => Node.Direct.CanConnectComputer(device);
+
+    bool IComputerLinks.IsConnected(string deviceId) => Node.Direct.IsComputerLinked(deviceId) && !Node.Direct.IsConnectingComputer(deviceId);
+
+    bool IComputerLinks.IsConnecting(string deviceId) => Node.Direct.IsConnectingComputer(deviceId);
+
+    /// <summary>"Connect directly" / "Disconnect" on another computer's card.</summary>
+    async Task IComputerLinks.ToggleAsync(DeviceInfo device)
+    {
+        if (Node.Direct.IsComputerLinked(device.Id))
+        {
+            await Node.Direct.DisconnectComputerAsync(device.Id);
+            return;
+        }
+
+        if (Node.Direct.JoinLeavesWithoutInternet(device)
+            && await ShowDialogAsync(new ConfirmViewModel(L.T("Connect directly to {0}?", device.Name),
+                L.T("This computer leaves its Wi-Fi and joins {0}'s network while connected directly. {0} can't share its internet, so this computer has no internet until you disconnect.", device.Name),
+                L.T("Connect"), L.T("Cancel"))) is not true)
+            return;
+        await Node.Direct.ConnectComputerAsync(device.Id);
+    }
 
     public RatingService Rating { get; }
 

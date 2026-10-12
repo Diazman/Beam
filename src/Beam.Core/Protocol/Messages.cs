@@ -80,6 +80,12 @@ public sealed class DirectResponseMessage
 
     /// <summary>Why it didn't work (shown to the user on the other device).</summary>
     public string? Message { get; set; }
+
+    /// <summary>The user of the device that was asked said no.</summary>
+    public bool Declined { get; set; }
+
+    /// <summary>For a join: the joined device's own address on the direct network, so the host can reach it right away.</summary>
+    public string? Address { get; set; }
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>

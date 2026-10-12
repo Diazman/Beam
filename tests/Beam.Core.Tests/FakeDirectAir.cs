@@ -23,12 +23,24 @@ public sealed class FakeDirectAir
 
     private readonly List<FakeLink> _links = new();
 
-    public IDirectLink Link(DirectRoles roles)
+    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null)
     {
-        var link = new FakeLink(this, roles);
+        var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet, JoinError = joinError };
         _links.Add(link);
         return link;
     }
+
+    /// <summary>The roles of the device whose link started the last network (who hosted).</summary>
+    public DirectRoles? LastHost { get; private set; }
+
+    /// <summary>The link that started the last network.</summary>
+    public IDirectLink? LastHostLink { get; private set; }
+
+    /// <summary>The link that joined last.</summary>
+    public IDirectLink? LastJoinLink { get; private set; }
+
+    /// <summary>The roles of the device whose link joined last (who joined).</summary>
+    public DirectRoles? LastJoiner { get; private set; }
 
     /// <summary>Whether a joiner is on the host's network right now.</summary>
     public bool LinkUp { get; private set; }
@@ -60,22 +72,33 @@ public sealed class FakeDirectAir
         };
     }
 
-    /// <summary>Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address.</summary>
-    public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice)
+    /// <summary>
+    /// Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address. With
+    /// <paramref name="hostHearsJoiner"/> false the host doesn't learn where the joiner is on its network by itself (like
+    /// a phone on a PC's hotspot whose announcements don't get through); the joiner then says so in its answer.
+    /// </summary>
+    public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice, bool hostHearsJoiner = true)
     {
         joiner.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
         host.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
         joiner.Discovery.ReportReachable(hostDevice());
         host.Discovery.ReportReachable(joinerDevice());
+        if (!hostHearsJoiner) joiner.Direct.OwnAddressNear = _ => DirectAddress;
         _onJoined = () =>
         {
             joiner.Discovery.ReportReachable(hostDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Transfers.Port) } });
-            host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
+            if (hostHearsJoiner)
+                host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
         };
     }
 
-    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents
+    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
     {
+        public bool CanShareInternet { get; init; }
+
+        /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
+        public string? JoinError { get; init; }
+
         private readonly FakeDirectAir _air;
 
         public FakeLink(FakeDirectAir air, DirectRoles roles)
@@ -90,15 +113,20 @@ public sealed class FakeDirectAir
         {
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
             Interlocked.Increment(ref _air._hosted);
+            _air.LastHost = Roles;
+            _air.LastHostLink = this;
             return Task.FromResult(_air._network ??= preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
         }
 
         public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
         {
             await Task.Delay(100, cancellationToken);
+            if (JoinError != null) throw new DirectLinkException(JoinError);
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
             _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);
+            _air.LastJoiner = Roles;
+            _air.LastJoinLink = this;
             _air.LinkUp = true;
             _air._onJoined?.Invoke();
             return DirectAddress;

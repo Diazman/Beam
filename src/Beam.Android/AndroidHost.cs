@@ -46,12 +46,13 @@ internal static class AndroidHost
         _view = view;
         if (_viewModel != null) return _viewModel;
 
+        var directLink = new AndroidDirectLink(Context, () => _node?.Settings.Current.DeviceName ?? "Phone");
         _node = BeamNode.Create(new BeamNodeOptions
         {
             Paths = Paths,
             ExternalFiles = new ContentFiles(Context.ContentResolver!),
             DeviceKind = DeviceKinds.Phone,
-            DirectLink = new AndroidDirectLink(Context, () => _node?.Settings.Current.DeviceName ?? "Phone"),
+            DirectLink = directLink,
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>
@@ -72,7 +73,7 @@ internal static class AndroidHost
         }
 
         _node.Transfers.SessionFinished += AddToMediaLibrary;
-        _keepAlive = new TransferKeepAlive(Context, _node.Transfers);
+        _keepAlive = new TransferKeepAlive(Context, _node.Transfers, directLink);
         AcquireMulticastLock();
         _viewModel = new MainViewModel(_node, new AndroidPlatformServices(), view, new UnavailableStoreService());
         var share = Interlocked.Exchange(ref _pendingShare, null);
@@ -97,6 +98,7 @@ internal static class AndroidHost
     public static void SetForeground(bool foreground)
     {
         if (_view != null) _view.IsInForeground = foreground;
+        if (foreground) _keepAlive?.Retry();
     }
 
     /// <summary>

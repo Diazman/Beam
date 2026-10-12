@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Beam.Core.Tests" />
+    <InternalsVisibleTo Include="Beam.App.Tests" />
   </ItemGroup>
 
 </Project>

@@ -1,3 +1,4 @@
+using Beam.App.ViewModels.Dialogs;
 using Avalonia.Headless.XUnit;
 using Beam.Core.Direct;
 using Beam.Core.Settings;
@@ -168,5 +169,52 @@ public class DirectUiTests
         phone.Screenshot("pair-02-paired");
         Assert.Contains(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == laptop.Node.Identity.DeviceId);
         Assert.NotNull(phone.Node.Direct.KnownNetworkFor(laptop.Node.Identity.DeviceId));
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectDirectlyOnAnotherComputersCard()
+    {
+        var air = new FakeDirectAir();
+        var pcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
+        await using var laptop = new UiHarness("Laptop", directLink: air.Link(pcRoles));
+        await using var desk = new UiHarness("Office desktop", directLink: air.Link(pcRoles));
+        await laptop.InitializeAsync();
+        await desk.InitializeAsync();
+        air.Connect(laptop.Node, laptop.AsDevice, desk.Node, desk.AsDevice);
+        var home = laptop.ViewModel.Home;
+        await UiHarness.WaitForAsync(() => home.Devices.Count == 1, "desk listed");
+        var card = home.Devices[0];
+        Assert.True(card.ShowsDirectButton);
+        Assert.Equal("Connect directly", card.DirectButtonText);
+        await UiHarness.PumpAsync();
+        Assert.Contains("Connect directly", laptop.VisibleTexts());
+        laptop.Screenshot("direct-pc-01-card");
+
+        // The desk can't share its internet: the laptop is told it goes offline meanwhile, and goes ahead.
+        card.DirectCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => laptop.ViewModel.Dialog is ConfirmViewModel, "internet warning");
+        Assert.Contains("no internet until you disconnect", ((ConfirmViewModel)laptop.ViewModel.Dialog!).Message);
+        laptop.Screenshot("direct-pc-02-warning");
+        ((ConfirmViewModel)laptop.ViewModel.Dialog!).PrimaryCommand.Execute(null);
+
+        // The desk (which doesn't trust the laptop yet) is asked before starting its network.
+        await UiHarness.WaitForAsync(() => desk.ViewModel.Dialog is ConfirmViewModel, "desk asked");
+        var ask = (ConfirmViewModel)desk.ViewModel.Dialog!;
+        Assert.Equal("Laptop wants to connect directly", ask.Title);
+        Assert.Contains("Your Wi-Fi stays connected", ask.Message);
+        await UiHarness.PumpAsync();
+        Assert.Empty(desk.TextOutsideWindow());
+        desk.Screenshot("direct-pc-03-asked");
+        ask.PrimaryCommand.Execute(null);
+
+        await UiHarness.WaitForAsync(() => card.IsDirect, "connected directly", 20000);
+        Assert.Equal("Disconnect", card.DirectButtonText);
+        await UiHarness.PumpAsync();
+        Assert.EndsWith("· Direct", card.Subtitle);
+        Assert.Contains(card.Subtitle, laptop.VisibleTexts());
+        laptop.Screenshot("direct-pc-04-connected");
+
+        card.DirectCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => !card.IsDirect && card.DirectButtonText == "Connect directly", "disconnected");
     }
 }

@@ -51,6 +51,27 @@ public static class DirectAddresses
         }
     }
 
+    /// <summary>This device's own address (not loopback): connecting to it would reach this device itself.</summary>
+    public static bool IsOwnAddress(IPAddress address)
+    {
+        if (address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(address)) return false;
+        var value = ToUInt(address);
+        return LocalAdapters().Any(a => a.Address == value);
+    }
+
+    /// <summary>This device's address on the network that <paramref name="other"/> is on (e.g. on a direct network just joined).</summary>
+    public static IPAddress? OwnAddressNear(IPAddress other)
+    {
+        if (other.AddressFamily != AddressFamily.InterNetwork) return null;
+        var value = ToUInt(other);
+        foreach (var (address, mask, _) in LocalAdapters())
+        {
+            if ((value & mask) == (address & mask) && address != value) return FromUInt(address);
+        }
+
+        return null;
+    }
+
     /// <summary>Re-reads the adapters on the next check (after joining or leaving a direct network).</summary>
     public static void Invalidate()
     {
@@ -120,6 +141,9 @@ public static class DirectAddresses
             return _local;
         }
     }
+
+    private static IPAddress FromUInt(uint value) =>
+        new(new[] { (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value });
 
     private static uint ToUInt(IPAddress address)
     {

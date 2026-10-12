@@ -319,14 +319,14 @@ public sealed class DiscoveryService : IDisposable
                 return;
 
             case DiscoveryPacket.TypeQuery:
-                if (!packet.Hidden) Upsert(ToDevice(packet, remote), new IPEndPoint(remote.Address, packet.Port));
+                if (!packet.Hidden) Upsert(ToDevice(packet, remote), EndpointOf(remote, packet.Port));
                 if (_discoverable && ShouldReply(packet.Id))
                     SendTo(CreatePacket(DiscoveryPacket.TypeAnnounce), remote);
                 return;
 
             case DiscoveryPacket.TypeAnnounce:
                 var isNew = !_devices.ContainsKey(packet.Id);
-                Upsert(ToDevice(packet, remote), new IPEndPoint(remote.Address, packet.Port));
+                Upsert(ToDevice(packet, remote), EndpointOf(remote, packet.Port));
 
                 // Answer newcomers directly so both sides see each other immediately.
                 if (isNew && _discoverable && ShouldReply(packet.Id))
@@ -344,7 +344,7 @@ public sealed class DiscoveryService : IDisposable
         return true;
     }
 
-    private static DeviceInfo ToDevice(DiscoveryPacket packet, IPEndPoint remote) => new()
+    private DeviceInfo ToDevice(DiscoveryPacket packet, IPEndPoint remote) => new()
     {
         Id = packet.Id,
         Name = packet.Name,
@@ -353,8 +353,15 @@ public sealed class DiscoveryService : IDisposable
         Kind = packet.Kind,
         AppVersion = packet.AppVersion,
         DirectRoles = Direct.DirectRolesText.Parse(packet.Direct),
-        Endpoints = new[] { new IPEndPoint(remote.Address, packet.Port) },
+        Endpoints = EndpointOf(remote, packet.Port) is { } endpoint ? new[] { endpoint } : Array.Empty<IPEndPoint>(),
     };
+
+    /// <summary>
+    /// Where the sender can be reached; null when the packet came from one of this device's own addresses (another
+    /// device's traffic passed on by this PC's hotspot): connecting there would reach this device itself.
+    /// </summary>
+    private IPEndPoint? EndpointOf(IPEndPoint remote, int port) =>
+        _options.UseMulticastAndBroadcast && Direct.DirectAddresses.IsOwnAddress(remote.Address) ? null : new IPEndPoint(remote.Address, port);
 
     private void Upsert(DeviceInfo incoming, IPEndPoint? endpoint)
     {

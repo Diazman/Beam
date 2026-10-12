@@ -13,17 +13,47 @@ public enum DirectRoles
 
     /// <summary>Can join another device's direct network (Android 10+).</summary>
     Join = 2,
+
+    /// <summary>
+    /// Can join another computer's direct network, but not a phone's (Windows: its Wi-Fi joins the other PC's network).
+    /// Announced as its own word, so older Beam versions on phones see only "host" and keep joining the PC.
+    /// </summary>
+    JoinComputers = 4,
+
+    // What the device tells others about its situation (announced with the roles):
+
+    /// <summary>Has internet over a cable: its Wi-Fi can join another network without losing internet.</summary>
+    Wired = 8,
+
+    /// <summary>Its network shares its internet (Windows' Mobile hotspot): whoever joins it keeps internet.</summary>
+    SharesInternet = 16,
+
+}
+
+/// <summary>
+/// A request that needs this device's user to agree: another device asks this computer to start its own network for it,
+/// or (<see cref="LeavesWiFi"/>) to leave its Wi-Fi and join the other computer's network.
+/// </summary>
+public sealed record DirectApproval(string PeerName, bool LeavesWiFi, bool KeepsInternet);
+
+/// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
+public interface IInternetSharing
+{
+    bool CanShareInternet { get; }
 }
 
 public static class DirectRolesText
 {
-    public static string Format(DirectRoles roles) => roles switch
+    public static string Format(DirectRoles roles)
     {
-        DirectRoles.Host | DirectRoles.Join => "host,join",
-        DirectRoles.Host => "host",
-        DirectRoles.Join => "join",
-        _ => "",
-    };
+        var parts = new List<string>(6);
+        if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
+        if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
+        if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
+        if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
+        if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
+        return string.Join(",", parts);
+    }
 
     public static DirectRoles Parse(string? text)
     {
@@ -32,6 +62,9 @@ public static class DirectRolesText
         {
             if (part == "host") roles |= DirectRoles.Host;
             else if (part == "join") roles |= DirectRoles.Join;
+            else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
+            else if (part == "wired") roles |= DirectRoles.Wired;
+            else if (part == "share") roles |= DirectRoles.SharesInternet;
         }
 
         return roles;
@@ -137,8 +170,12 @@ public interface IDirectNetworkScanner
 
 public sealed class DirectLinkException : Exception
 {
-    public DirectLinkException(string message, Exception? inner = null)
+    public DirectLinkException(string message, Exception? inner = null, bool declined = false)
         : base(message, inner)
     {
+        Declined = declined;
     }
+
+    /// <summary>The other device's user said no (so don't try another way that would ask again).</summary>
+    public bool Declined { get; }
 }

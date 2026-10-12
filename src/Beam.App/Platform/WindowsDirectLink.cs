@@ -3,6 +3,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Direct;
 using Beam.Core.Localization;
 #if WINDOWS_WINRT
+using Windows.Devices.WiFi;
 using Windows.Devices.WiFiDirect;
 using Windows.Foundation.Metadata;
 using Windows.Networking.Connectivity;
@@ -18,8 +19,10 @@ namespace Beam.App.Platform;
 /// while staying connected, the network is Windows' Mobile hotspot, which shares that internet: phones then have no
 /// reason to switch to another Wi-Fi mid-transfer. Otherwise it is a Wi-Fi Direct group with "legacy" access (no
 /// internet). Windows hands out 192.168.137.x on both, which is how Beam recognizes the direct path.
+/// To reach another computer directly, this PC's Wi-Fi can also join that computer's network (never a phone's: phones
+/// join the PC), and goes back to the Wi-Fi it was on when the link stops.
 /// </summary>
-internal sealed class WindowsDirectLink : IDirectLink
+internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInternetSharing
 {
     private readonly Func<string> _deviceName;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -27,12 +30,53 @@ internal sealed class WindowsDirectLink : IDirectLink
     private WiFiDirectAdvertisementPublisher? _publisher;
     private NetworkOperatorTetheringManager? _hotspot;
     private NetworkOperatorTetheringAccessPointConfiguration? _userHotspotSettings; // restored when Beam's hotspot stops
+    private WiFiAdapter? _joinedAdapter; // this PC's Wi-Fi while it is on another computer's network
+    private string? _joinedSsid;
+    private string? _previousSsid; // the Wi-Fi to go back to
 #endif
     private DirectNetwork? _network;
 
     private WindowsDirectLink(Func<string> deviceName) => _deviceName = deviceName;
 
-    public DirectRoles Roles => DirectRoles.Host;
+    public DirectRoles Roles => DirectRoles.Host | DirectRoles.JoinComputers;
+
+    private bool _canShare;
+    private long _canShareCheckedAt = long.MinValue / 2;
+
+    /// <summary>
+    /// This PC's network would share its internet: it is online and Windows can run its Mobile hotspot from here (and the
+    /// user's own hotspot isn't on). Checked at most every 30 seconds; announced so two PCs agree which one hosts.
+    /// </summary>
+    public bool CanShareInternet
+    {
+        get
+        {
+#if WINDOWS_WINRT
+            if (_hotspot != null) return true;
+            if (Environment.TickCount64 - Volatile.Read(ref _canShareCheckedAt) < 30_000) return _canShare;
+            _canShareCheckedAt = Environment.TickCount64;
+            try
+            {
+                var profile = NetworkInformation.GetInternetConnectionProfile();
+                _canShare = profile != null && profile.GetNetworkConnectivityLevel() == NetworkConnectivityLevel.InternetAccess
+                            && NetworkOperatorTetheringManager.GetTetheringCapabilityFromConnectionProfile(profile) == TetheringCapability.Enabled
+                            && NetworkOperatorTetheringManager.CreateFromConnectionProfile(profile).TetheringOperationalState == TetheringOperationalState.Off;
+            }
+            catch
+            {
+                _canShare = false;
+            }
+
+            return _canShare;
+#else
+            return false;
+#endif
+        }
+    }
+
+#pragma warning disable CS0067 // raised only in the Windows build
+    public event Action? Lost;
+#pragma warning restore CS0067
 
     /// <summary>Null where Windows has no Wi-Fi Direct API (the plain net8.0 build).</summary>
     public static IDirectLink? TryCreate(Func<string> deviceName)
@@ -122,9 +166,64 @@ internal sealed class WindowsDirectLink : IDirectLink
         }
     }
 
-    /// <summary>Windows only hosts: a phone (or another PC's Beam) joins the PC's network.</summary>
-    public Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken) =>
+    /// <summary>Joins another computer's direct network with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
+    public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
+    {
+#if WINDOWS_WINRT
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
+                throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
+            var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);
+            var adapter = adapters.FirstOrDefault()
+                          ?? throw new DirectLinkException(L.T("This computer has no Wi-Fi, so it can't join the other computer's network."));
+
+            var current = await ConnectedSsidAsync(adapter).ConfigureAwait(false);
+            if (current == network.Ssid && _joinedAdapter != null) return await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
+
+            WiFiAvailableNetwork? target = null;
+            for (var attempt = 0; attempt < 4 && target == null; attempt++)
+            {
+                if (attempt > 0) await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+                await adapter.ScanAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                target = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == network.Ssid);
+            }
+
+            if (target == null)
+            {
+                Log.Warn($"Wi-Fi: {network.Ssid} not found in a scan");
+                throw new DirectLinkException(L.T("The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location."));
+            }
+
+            _previousSsid ??= current;
+            Log.Info($"Wi-Fi: joining {network.Ssid}{(current != null ? $" (leaving {current} meanwhile)" : "")}");
+            var result = await adapter.ConnectAsync(target, WiFiReconnectionKind.Manual, new PasswordCredential { Password = network.Passphrase })
+                .AsTask(cancellationToken).ConfigureAwait(false);
+            if (result.ConnectionStatus != WiFiConnectionStatus.Success)
+            {
+                Log.Warn($"Wi-Fi: joining {network.Ssid} failed ({result.ConnectionStatus})");
+                _ = ReturnToPreviousWiFiAsync(adapter);
+                throw new DirectLinkException(L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
+            }
+
+            _joinedAdapter = adapter;
+            _joinedSsid = network.Ssid;
+            NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
+            NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
+            var host = await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
+            Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host}");
+            return host;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+#else
+        await Task.CompletedTask.ConfigureAwait(false);
         throw new DirectLinkException(L.T("This device can't connect directly."));
+#endif
+    }
 
     public void Stop()
     {
@@ -134,6 +233,7 @@ internal sealed class WindowsDirectLink : IDirectLink
 #if WINDOWS_WINRT
             StopPublisher();
             StopHotspotAsync().GetAwaiter().GetResult();
+            LeaveJoinedNetwork();
 #endif
             _network = null;
         }
@@ -144,6 +244,102 @@ internal sealed class WindowsDirectLink : IDirectLink
     }
 
 #if WINDOWS_WINRT
+    private static async Task<string?> ConnectedSsidAsync(WiFiAdapter adapter)
+    {
+        try
+        {
+            var profile = await adapter.NetworkAdapter.GetConnectedProfileAsync().AsTask().ConfigureAwait(false);
+            return profile?.IsWlanConnectionProfile == true ? profile.WlanConnectionProfileDetails.GetConnectedSsid() : null;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Wi-Fi: reading the current network failed", ex);
+            return null;
+        }
+    }
+
+    /// <summary>The other computer's address on its network (its gateway; Windows hosts are 192.168.137.1).</summary>
+    private static async Task<IPAddress> WaitForHostAsync(WiFiAdapter adapter, CancellationToken cancellationToken)
+    {
+        var id = adapter.NetworkAdapter.NetworkAdapterId;
+        var deadline = Environment.TickCount64 + 15_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            var nic = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(n => Guid.TryParse(n.Id, out var nicId) && nicId == id);
+            var gateway = nic?.GetIPProperties().GatewayAddresses
+                .Select(g => g.Address).FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !a.Equals(IPAddress.Any));
+            if (gateway != null) return gateway;
+            await Task.Delay(300, cancellationToken).ConfigureAwait(false);
+        }
+
+        return IPAddress.Parse("192.168.137.1");
+    }
+
+    /// <summary>Windows dropped the other computer's network (it stopped, or went out of range).</summary>
+    private async void OnNetworkStatusChanged(object? sender)
+    {
+        var adapter = _joinedAdapter;
+        if (adapter == null) return;
+        try
+        {
+            await Task.Delay(1000).ConfigureAwait(false); // let the change settle
+            if (_joinedAdapter == null || await ConnectedSsidAsync(adapter).ConfigureAwait(false) == _joinedSsid) return;
+            Log.Warn($"Wi-Fi: lost {_joinedSsid}");
+            NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
+            _joinedAdapter = null;
+            _joinedSsid = null;
+            _ = ReturnToPreviousWiFiAsync(adapter);
+            Lost?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Wi-Fi: checking the network failed", ex);
+        }
+    }
+
+    private void LeaveJoinedNetwork()
+    {
+        var adapter = _joinedAdapter;
+        NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
+        _joinedAdapter = null;
+        if (adapter == null) return;
+        Log.Info($"Wi-Fi: leaving {_joinedSsid}");
+        _joinedSsid = null;
+        try
+        {
+            adapter.Disconnect();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Wi-Fi: disconnecting failed", ex);
+        }
+
+        _ = ReturnToPreviousWiFiAsync(adapter);
+    }
+
+    /// <summary>Back to the Wi-Fi this PC was on before joining (Windows usually does this by itself; this makes sure).</summary>
+    private async Task ReturnToPreviousWiFiAsync(WiFiAdapter adapter)
+    {
+        var previous = _previousSsid;
+        _previousSsid = null;
+        if (string.IsNullOrEmpty(previous)) return;
+        try
+        {
+            await Task.Delay(1500).ConfigureAwait(false);
+            if (await ConnectedSsidAsync(adapter).ConfigureAwait(false) is { } now && now != _joinedSsid) return; // already back
+            await adapter.ScanAsync().AsTask().ConfigureAwait(false);
+            var network = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == previous);
+            if (network == null) return;
+            var result = await adapter.ConnectAsync(network, WiFiReconnectionKind.Automatic).AsTask().ConfigureAwait(false); // its saved profile
+            Log.Info($"Wi-Fi: back on {previous} ({result.ConnectionStatus})");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Wi-Fi: going back to {previous} failed", ex);
+        }
+    }
+
     /// <summary>
     /// Starts Windows' Mobile hotspot as <paramref name="network"/>, sharing this PC's internet. False (and the plain
     /// Wi-Fi Direct network is used) when there's no internet, the Wi-Fi can't share it while staying connected, the

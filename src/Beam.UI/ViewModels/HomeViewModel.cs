@@ -11,15 +11,52 @@ using Beam.Core.Util;
 
 namespace Beam.App.ViewModels;
 
+/// <summary>"Connect directly" between two computers, as the device cards need it.</summary>
+public interface IComputerLinks
+{
+    bool CanConnect(DeviceInfo device);
+
+    bool IsConnected(string deviceId);
+
+    bool IsConnecting(string deviceId);
+
+    Task ToggleAsync(DeviceInfo device);
+}
+
 public sealed class DeviceViewModel : ObservableObject
 {
+    private readonly IComputerLinks? _links;
     private DeviceInfo _device;
     private bool _isSelected;
 
-    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select)
+    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select, IComputerLinks? links = null)
     {
         _device = device;
+        _links = links;
         SelectCommand = new RelayCommand(() => select(this));
+        DirectCommand = new AsyncCommand(() => _links?.ToggleAsync(_device) ?? Task.CompletedTask, () => !IsConnectingDirectly);
+    }
+
+    /// <summary>Another computer that this one can connect to directly ("Connect directly" on its card).</summary>
+    public bool ShowsDirectButton => _links != null && (_links.CanConnect(_device) || IsDirect);
+
+    public bool IsDirect => _links?.IsConnected(_device.Id) == true;
+
+    public bool IsConnectingDirectly => _links?.IsConnecting(_device.Id) == true;
+
+    public string DirectButtonText => IsConnectingDirectly ? L.T("Connecting…") : IsDirect ? L.T("Disconnect") : L.T("Connect directly");
+
+    public AsyncCommand DirectCommand { get; }
+
+    /// <summary>The direct link changed somewhere: update the button.</summary>
+    public void RefreshDirect()
+    {
+        OnPropertyChanged(nameof(ShowsDirectButton));
+        OnPropertyChanged(nameof(IsDirect));
+        OnPropertyChanged(nameof(IsConnectingDirectly));
+        OnPropertyChanged(nameof(DirectButtonText));
+        OnPropertyChanged(nameof(Subtitle));
+        DirectCommand.RaiseCanExecuteChanged();
     }
 
     public DeviceInfo Device
@@ -31,6 +68,7 @@ public sealed class DeviceViewModel : ObservableObject
             OnPropertyChanged(nameof(Name));
             OnPropertyChanged(nameof(Subtitle));
             OnPropertyChanged(nameof(Icon));
+            RefreshDirect();
         }
     }
 
@@ -51,6 +89,7 @@ public sealed class DeviceViewModel : ObservableObject
                 "ios" => "iPhone",
                 _ => L.T("Computer"),
             };
+            if (IsDirect) return L.T("{0} · Direct", platform);
             // A paired PC seen only by its direct network (no shared Wi-Fi): Beam joins that network when sending.
             if (_device.Endpoints.Count == 0 && _device.DirectRoles.HasFlag(Beam.Core.Direct.DirectRoles.Host))
                 return L.T("{0} · Nearby · connects directly", platform);
@@ -177,6 +216,10 @@ public sealed class HomeViewModel : ObservableObject
         node.Discovery.DeviceFound += (_, e) => Dispatcher.UIThread.Post(() => AddOrUpdateDevice(e.Device));
         node.Discovery.DeviceChanged += (_, e) => Dispatcher.UIThread.Post(() => AddOrUpdateDevice(e.Device));
         node.Discovery.DeviceLost += (_, e) => Dispatcher.UIThread.Post(() => RemoveDevice(e.Device.Id));
+        node.Direct.Changed += () => Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var device in Devices) device.RefreshDirect();
+        });
         node.Settings.Changed += _ => Dispatcher.UIThread.Post(() =>
         {
             OnPropertyChanged(nameof(LocalDeviceName));
@@ -446,7 +489,7 @@ public sealed class HomeViewModel : ObservableObject
         {
             var index = 0;
             while (index < Devices.Count && string.Compare(Devices[index].Name, device.Name, StringComparison.CurrentCultureIgnoreCase) < 0) index++;
-            Devices.Insert(index, new DeviceViewModel(device, SelectDevice));
+            Devices.Insert(index, new DeviceViewModel(device, SelectDevice, _main.IsPhone ? null : _main));
             _main.OnDeviceAppeared(device);
         }
 

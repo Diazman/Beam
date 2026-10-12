@@ -22,7 +22,7 @@ public class DirectConnectionTests
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
         var slow = new SlowFiles(); // the transfer takes a while
-        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 4);
 
@@ -60,7 +60,7 @@ public class DirectConnectionTests
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         var paths = new List<TransferPath>();
@@ -74,12 +74,242 @@ public class DirectConnectionTests
         Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task APcSendingToAPairedPhoneBringsThePhoneOntoItsNetwork(bool phonePaired)
+    {
+        // Same Wi-Fi, both set to Direct, the PC sends. The PC can't hear the phone announce itself on its network,
+        // so it needs the address the phone reports when it has joined.
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice(), hostHearsJoiner: false);
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        if (phonePaired)
+            pc.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = phone.Node.Identity.Fingerprint, DeviceId = phone.Node.Identity.DeviceId, Name = "Galaxy" }));
+        var problems = new List<string>();
+        pc.Node.Direct.Problem += problems.Add;
+
+        var paths = new List<TransferPath>();
+        var session = pc.Node.Send(phone.AsDevice(), new[] { pc.CreateFile("video.mp4", 400_000) });
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Empty(problems);
+        if (phonePaired)
+        {
+            Assert.Equal(1, air.Joined);
+            Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
+        }
+        else
+        {
+            Assert.Equal(0, air.Joined); // a phone that isn't paired isn't moved off its Wi-Fi by the PC
+            Assert.Equal(TransferPath.Network, paths.First(p => p != TransferPath.Unknown));
+        }
+    }
+
+    [Fact]
+    public async Task ConnectDirectlyChosenOnThePcDuringATransferMovesThePhoneOntoItsNetwork()
+    {
+        var air = new FakeDirectAir();
+        var slow = new SlowFiles();
+        await using var pc = new TestNode("Laptop", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice(), hostHearsJoiner: false);
+        var problems = new List<string>();
+        pc.Node.Direct.Problem += problems.Add;
+        var file = pc.CreateFile("video.mp4", 30L * 1024 * 1024, 2);
+
+        var session = pc.Node.Send(phone.AsDevice(), new[] { slow.Add(file) });
+        await Wait.UntilAsync(() => session.State == TransferState.Transferring && session.GetSnapshot().TransferredBytes > 1_000_000, because: "sending over Wi-Fi");
+        Assert.Equal(TransferPath.Network, session.Path);
+
+        Assert.True(await pc.Node.Direct.SwitchAsync(phone.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        await Wait.UntilAsync(() => session.Path == TransferPath.Direct, because: "moved to the direct link");
+        Assert.Empty(problems); // not "started, but Beam couldn't reach it"
+
+        // And back to Wi-Fi from either side, without losing the phone.
+        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.SameNetwork));
+        await Wait.UntilAsync(() => session.Path == TransferPath.Network, because: "back on Wi-Fi");
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
+    }
+
+    private static readonly DirectRoles PcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
+
+    /// <summary><paramref name="sender"/> sends to <paramref name="other"/> and the transfer goes over <paramref name="expected"/>.</summary>
+    private static async Task SendAsync(TestNode sender, TestNode other, TransferPath expected)
+    {
+        var paths = new List<TransferPath>();
+        var session = sender.Node.Send(other.AsDevice(), new[] { sender.CreateFile("photos.zip", 300_000) });
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(session);
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(expected, paths.First(p => p != TransferPath.Unknown));
+    }
+
+    private sealed class TwoComputers : IAsyncDisposable
+    {
+        public TwoComputers(bool deskShares = false, string? laptopJoinError = null, bool deskTrustsLaptop = false)
+        {
+            DeskLink = Air.Link(PcRoles, sharesInternet: deskShares);
+            LaptopLink = Air.Link(PcRoles, joinError: laptopJoinError);
+            Desk = new TestNode("Desk", directLink: DeskLink);
+            Laptop = new TestNode("Laptop", directLink: LaptopLink, kind: DeviceKinds.Laptop);
+            if (deskTrustsLaptop)
+                Desk.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = Laptop.Node.Identity.Fingerprint, DeviceId = Laptop.Node.Identity.DeviceId, Name = "Laptop" }));
+            Desk.Node.Direct.Approve = a => { lock (DeskAsked) DeskAsked.Add(a); return Task.FromResult(DeskAllows); };
+            Laptop.Node.Direct.Approve = a => { lock (LaptopAsked) LaptopAsked.Add(a); return Task.FromResult(true); };
+            Air.Connect(Laptop.Node, () => Laptop.AsDevice(), Desk.Node, () => Desk.AsDevice());
+        }
+
+        public FakeDirectAir Air { get; } = new();
+        public IDirectLink DeskLink { get; }
+        public IDirectLink LaptopLink { get; }
+        public TestNode Desk { get; }
+        public TestNode Laptop { get; }
+        public bool DeskAllows { get; set; } = true;
+        public List<DirectApproval> DeskAsked { get; } = new();
+        public List<DirectApproval> LaptopAsked { get; } = new();
+        public string DeskId => Desk.Node.Identity.DeviceId;
+        public string LaptopId => Laptop.Node.Identity.DeviceId;
+
+        public async ValueTask DisposeAsync()
+        {
+            await Laptop.DisposeAsync();
+            await Desk.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ComputersConnectDirectlyOnlyWhenAskedEvenWithDirectChosen()
+    {
+        await using var pcs = new TwoComputers(deskShares: true);
+        pcs.Desk.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pcs.Laptop.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+
+        await SendAsync(pcs.Laptop, pcs.Desk, TransferPath.Network);
+        Assert.Equal(0, pcs.Air.Joined);
+        Assert.True(pcs.Laptop.Node.Direct.CanConnectComputer(pcs.Desk.AsDevice())); // the button is offered instead
+    }
+
+    [Fact]
+    public async Task ConnectDirectlyJoinsTheOtherComputersNetworkWhichOnlyHosts()
+    {
+        await using var pcs = new TwoComputers(deskShares: true, deskTrustsLaptop: true);
+        Assert.False(pcs.Laptop.Node.Direct.JoinLeavesWithoutInternet(pcs.Desk.AsDevice())); // the desk shares its internet
+
+        Assert.True(await pcs.Laptop.Node.Direct.ConnectComputerAsync(pcs.DeskId));
+        Assert.Same(pcs.LaptopLink, pcs.Air.LastJoinLink); // the computer it was pressed on joins
+        Assert.Empty(pcs.DeskAsked); // trusted, and hosting doesn't disturb the desk's Wi-Fi
+        Assert.True(pcs.Laptop.Node.Direct.IsComputerLinked(pcs.DeskId));
+        await SendAsync(pcs.Desk, pcs.Laptop, TransferPath.Direct); // both directions use it
+
+        await pcs.Laptop.Node.Direct.DisconnectComputerAsync(pcs.DeskId);
+        Assert.False(pcs.Laptop.Node.Direct.IsComputerLinked(pcs.DeskId));
+        await Wait.UntilAsync(() => pcs.Air.Stopped >= 1, because: "the laptop left the desk's network");
+    }
+
+    [Fact]
+    public async Task AComputerThatIsntTrustedAsksBeforeStartingItsNetwork()
+    {
+        await using var pcs = new TwoComputers();
+        pcs.DeskAllows = false;
+        Assert.True(pcs.Laptop.Node.Direct.JoinLeavesWithoutInternet(pcs.Desk.AsDevice())); // the desk can't share internet
+        var problems = new List<string>();
+        pcs.Laptop.Node.Direct.Problem += problems.Add;
+
+        Assert.False(await pcs.Laptop.Node.Direct.ConnectComputerAsync(pcs.DeskId));
+        var asked = Assert.Single(pcs.DeskAsked);
+        Assert.False(asked.LeavesWiFi);
+        Assert.Equal(0, pcs.Air.Joined);
+        Assert.Contains(problems, p => p.Contains("didn't allow"));
+        Assert.False(pcs.Laptop.Node.Direct.IsComputerLinked(pcs.DeskId));
+    }
+
+    [Fact]
+    public async Task WhenThisComputerCantJoinTheOtherJoinsAfterItsUserAllows()
+    {
+        await using var pcs = new TwoComputers(laptopJoinError: "This computer has no Wi-Fi.", deskTrustsLaptop: true);
+
+        Assert.True(await pcs.Laptop.Node.Direct.ConnectComputerAsync(pcs.DeskId));
+        Assert.Same(pcs.DeskLink, pcs.Air.LastJoinLink); // roles swapped
+        var asked = Assert.Single(pcs.DeskAsked);
+        Assert.True(asked.LeavesWiFi); // the desk's user agreed to leave its Wi-Fi
+        await SendAsync(pcs.Laptop, pcs.Desk, TransferPath.Direct);
+    }
+
+    [Fact]
+    public async Task WhenBothPressAtOnceTheyEndUpOnOneLink()
+    {
+        await using var pcs = new TwoComputers(deskTrustsLaptop: true);
+        pcs.Laptop.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = pcs.Desk.Node.Identity.Fingerprint, DeviceId = pcs.DeskId, Name = "Desk" }));
+
+        var results = await Task.WhenAll(pcs.Laptop.Node.Direct.ConnectComputerAsync(pcs.DeskId), pcs.Desk.Node.Direct.ConnectComputerAsync(pcs.LaptopId));
+        Assert.All(results, Assert.True);
+        // The computer with the lower id joins, the other hosts.
+        var lowerJoins = string.CompareOrdinal(pcs.LaptopId, pcs.DeskId) < 0 ? pcs.LaptopLink : pcs.DeskLink;
+        Assert.Same(lowerJoins, pcs.Air.LastJoinLink);
+        Assert.Empty(pcs.DeskAsked.Where(a => a.LeavesWiFi));
+        Assert.Empty(pcs.LaptopAsked.Where(a => a.LeavesWiFi));
+    }
+
+    [Fact]
+    public async Task AnIdleComputerLinkDisconnectsByItself()
+    {
+        var (idle, lost) = (DirectManager.ComputerLinkIdleTimeout, DirectManager.ComputerLinkLostTimeout);
+        DirectManager.ComputerLinkIdleTimeout = TimeSpan.FromSeconds(1);
+        DirectManager.ComputerLinkLostTimeout = TimeSpan.FromSeconds(2);
+        try
+        {
+            await using var pcs = new TwoComputers(deskTrustsLaptop: true);
+            Assert.True(await pcs.Laptop.Node.Direct.ConnectComputerAsync(pcs.DeskId));
+            await Wait.UntilAsync(() => !pcs.Laptop.Node.Direct.IsComputerLinked(pcs.DeskId), because: "disconnected when idle", timeout: TimeSpan.FromSeconds(10));
+            await Wait.UntilAsync(() => !pcs.Desk.Node.Direct.IsComputerLinked(pcs.LaptopId), because: "the desk was told", timeout: TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            (DirectManager.ComputerLinkIdleTimeout, DirectManager.ComputerLinkLostTimeout) = (idle, lost);
+        }
+    }
+
+    [Fact]
+    public void ComputersAnnounceWhetherJoiningThemKeepsInternet()
+    {
+        var roles = PcRoles | DirectRoles.Wired | DirectRoles.SharesInternet;
+        Assert.Equal("host,joinpc,wired,share", DirectRolesText.Format(roles));
+        Assert.Equal(roles, DirectRolesText.Parse("host,joinpc,wired,share"));
+        Assert.Equal(DirectRoles.Host | DirectRoles.Join, DirectRolesText.Parse("host,join,somethingnew")); // unknown words are ignored
+    }
+
+    [Fact]
+    public async Task AComputerThatCanJoinOtherComputersStillHostsForAPhone()
+    {
+        // Phones (also older Beam versions, which only understand "host") always join the computer's network.
+        var air = new FakeDirectAir();
+        var pcRoles = PcRoles;
+        var phoneRoles = DirectRoles.Host | DirectRoles.Join;
+        await using var pc = new TestNode("Laptop", directLink: air.Link(pcRoles), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        Assert.Equal("host", DirectRolesText.Format(DirectRolesText.Parse("host,joinpc") & (DirectRoles.Host | DirectRoles.Join)));
+
+        // Chosen on the computer: it starts its network and the phone joins.
+        Assert.True(await pc.Node.Direct.SwitchAsync(phone.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        Assert.Equal(pcRoles, air.LastHost);
+        Assert.Equal(phoneRoles, air.LastJoiner);
+    }
+
     [Fact]
     public async Task WhenTheOtherDeviceCantConnectDirectlyTheNetworkIsUsed()
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Old laptop"); // no direct link (older Beam, or no Wi-Fi Direct)
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         var problems = new List<string>();
         phone.Node.Direct.Problem += problems.Add;
@@ -101,7 +331,7 @@ public class DirectConnectionTests
     {
         var air = new FakeDirectAir { HostError = "This computer's Wi-Fi can't create a direct connection." };
         await using var pc = new TestNode("Desktop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var problems = new List<string>();
         phone.Node.Direct.Problem += problems.Add;
@@ -116,7 +346,7 @@ public class DirectConnectionTests
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         var both = pc.AsDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, 1), new IPEndPoint(IPAddress.Loopback, 1) } };
 
@@ -194,7 +424,7 @@ public class PairingTests
         var air = new FakeDirectAir();
         var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: phoneLink);
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
         air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
 
         // The PC is set to Direct: it keeps its own network on for paired phones, with the same name every time.
@@ -247,7 +477,7 @@ public class PairingTests
         var air = new FakeDirectAir();
         var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: phoneLink);
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
         air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
 
         // The PC's Phone page runs its direct network (Connect directly); its code carries that network.
@@ -272,7 +502,7 @@ public class PairingTests
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
@@ -294,7 +524,7 @@ public class PairingTests
     {
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         pc.Node.Direct.Start();
@@ -319,7 +549,7 @@ public class PairingTests
             var air = new FakeDirectAir();
             await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
             var slow = new SlowFiles();
-            await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+            await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
             air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
             pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
             pc.Node.Direct.Start();
@@ -354,7 +584,7 @@ public class PairingTests
         // while the PC's network is still there to rejoin.
         var air = new FakeDirectAir();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
-        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         phone.Node.Transfers.IsDirectAddress = a => a.Equals(FakeDirectAir.DirectAddress) && air.LinkUp; // like a real adapter
         Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
