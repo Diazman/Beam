@@ -139,6 +139,45 @@ public class DirectConnectionTests
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
     }
 
+    [Fact]
+    public async Task APairedPhoneSendingJoinsThePcsNetworkItselfAndGoesDirectAgainAfterAWiFiDetour()
+    {
+        var air = new FakeDirectAir();
+        var slow = new SlowFiles();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
+        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: phoneLink, kind: DeviceKinds.Phone);
+        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        pc.Node.Direct.Start();
+        await Wait.UntilAsync(() => air.Hosted > 0, because: "PC's network on for paired phones");
+        phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
+        phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        var hosted = air.Hosted;
+
+        // The phone sees the PC's network: it joins it without asking the PC over the Wi-Fi first.
+        var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 6);
+        var first = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
+        await Wait.UntilAsync(() => first.Path == TransferPath.Direct, because: "direct from the start");
+        Assert.Equal(hosted, air.Hosted);
+        Assert.Equal(1, air.Joined);
+
+        // "Switch to Wi-Fi" on that transfer, then it finishes.
+        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.SameNetwork));
+        await Wait.UntilAsync(() => first.Path == TransferPath.Network, because: "on Wi-Fi");
+        await Wait.ForFinishAsync(first, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Completed, first.State);
+
+        // The next transfer follows the setting again: direct.
+        await Wait.UntilAsync(() => phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId) == ConnectionMethod.Direct, because: "back to the setting");
+        var paths = new List<TransferPath>();
+        var next = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("photo.jpg", 300_000) });
+        next.PathChanged += s => { lock (paths) paths.Add(s.Path); };
+        await Wait.ForFinishAsync(next);
+        Assert.Equal(TransferState.Completed, next.State);
+        Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
+    }
+
     private static readonly DirectRoles PcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
 
     /// <summary><paramref name="sender"/> sends to <paramref name="other"/> and the transfer goes over <paramref name="expected"/>.</summary>

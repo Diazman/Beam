@@ -15,7 +15,8 @@ namespace Beam.App.Platform;
 [SupportedOSPlatform("windows")]
 internal static class WindowsFirewall
 {
-    private const string DirectRuleName = "Beam (direct connection)";
+    private const string DirectRuleName = "Beam (nearby devices)";
+    private const string OldDirectRuleName = "Beam (direct connection)";
 
     /// <summary>True when Windows Firewall would stop phones on the direct network from reaching Beam.</summary>
     public static async Task<bool> BlocksDirectConnectionsAsync()
@@ -45,8 +46,44 @@ internal static class WindowsFirewall
     }
 
     /// <summary>
-    /// Removes Beam's block rules and allows Beam on direct networks (and private ones, if not already). Windows asks
-    /// the user for administrator permission. False if they said no or it failed.
+    /// True when this PC's network (its Wi-Fi or cable) is set as a "public" network in Windows and the firewall stops
+    /// devices on it from reaching Beam. Windows makes new networks public by default, and its first-run firewall prompt
+    /// only allows private ones, so on such a network nothing nearby could send to this computer.
+    /// </summary>
+    public static async Task<bool> BlocksLocalNetworkAsync()
+    {
+        var exe = Environment.ProcessPath;
+        if (exe == null) return false;
+        var script = $$"""
+            $p = '{{Escape(exe)}}'
+            $public = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object {
+              $_.NetworkCategory -eq 'Public' -and $_.InterfaceAlias -notlike 'Local Area Connection*' -and $_.InterfaceAlias -notlike 'vEthernet*' })
+            if ($public.Count -eq 0) { 'ok'; exit 0 }
+            $rules = @(Get-NetFirewallApplicationFilter -Program $p -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue |
+              Where-Object { $_.Direction -eq 'Inbound' -and $_.Enabled -eq 'True' -and ($_.Profile.ToString() -match 'Public|Any') })
+            if (@($rules | Where-Object { $_.Action -eq 'Block' }).Count -gt 0) { 'blocked'; exit 0 }
+            $nearby = @($rules | Where-Object { $_.Action -eq 'Allow' } | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue |
+              Where-Object { $_.RemoteAddress -contains 'Any' -or $_.RemoteAddress -contains 'LocalSubnet' })
+            if ($nearby.Count -gt 0) { 'ok' } else { 'lan' }
+            """;
+        try
+        {
+            var (exit, output) = await RunAsync(script, elevated: false).ConfigureAwait(false);
+            var result = output.Trim();
+            Log.Info($"Firewall check (this network): {result} (exit {exit})");
+            return exit == 0 && result is "blocked" or "lan";
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Firewall check failed", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes Beam's block rules and allows Beam for nearby devices: those on the same local network (also when Windows
+    /// calls it public) and on direct networks (and on private networks, if not already). Windows asks the user for
+    /// administrator permission. False if they said no or it failed.
     /// </summary>
     public static async Task<bool> AllowDirectConnectionsAsync()
     {
@@ -57,8 +94,9 @@ internal static class WindowsFirewall
             Get-NetFirewallApplicationFilter -Program $p -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue |
               Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' } | Remove-NetFirewallRule
             Get-NetFirewallRule -DisplayName '{{DirectRuleName}}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+            Get-NetFirewallRule -DisplayName '{{OldDirectRuleName}}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
             New-NetFirewallRule -DisplayName '{{DirectRuleName}}' -Direction Inbound -Action Allow -Program $p -Profile Any `
-              -RemoteAddress 192.168.137.0/24,192.168.49.0/24 | Out-Null
+              -RemoteAddress LocalSubnet,192.168.137.0/24,192.168.49.0/24 | Out-Null
             $private = @(Get-NetFirewallApplicationFilter -Program $p -ErrorAction SilentlyContinue | Get-NetFirewallRule -ErrorAction SilentlyContinue |
               Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and $_.DisplayName -ne '{{DirectRuleName}}' })
             if ($private.Count -eq 0) {

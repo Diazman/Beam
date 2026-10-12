@@ -462,7 +462,6 @@
   "Allow": "Разрешить",
   "Allow direct connections?": "Разрешить прямые подключения?",
   "Direct connections are still blocked": "Прямые подключения по-прежнему заблокированы",
-  "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Брандмауэр Windows блокирует телефоны, которые подключаются к этому компьютеру напрямую (без сети Wi-Fi). Разрешить Beam только прямые подключения? Windows один раз попросит разрешение. Другие общедоступные сети останутся заблокированными.",
   "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows не разрешил это изменение. Beam спросит снова при следующем прямом подключении.",
   "On the computer, open Beam and go to Phone, then scan the code shown there.": "На компьютере откройте Beam и перейдите в раздел «Телефон», затем отсканируйте показанный там код.",
   "Paired with {0}": "Связано с {0}",
@@ -558,5 +557,10 @@
   "{0} is connecting to you at the same time.": "{0} одновременно подключается к вам.",
   "{0} shares its internet, so this computer stays online.": "{0} раздаёт свой интернет, поэтому этот компьютер останется в сети.",
   "{0} wants to connect directly": "{0} хочет подключиться напрямую",
-  "{0} · Direct": "{0} · Напрямую"
+  "{0} · Direct": "{0} · Напрямую",
+  "Let nearby devices send to this computer?": "Разрешить устройствам поблизости отправлять файлы на этот компьютер?",
+  "Nearby devices are still blocked": "Устройства поблизости всё ещё заблокированы",
+  "Windows Firewall stops phones and computers that connect directly to this computer. Allow Beam for devices connected directly and on the same network? Windows will ask for permission once.": "Брандмауэр Windows блокирует телефоны и компьютеры, подключающиеся к этому компьютеру напрямую. Разрешить Beam для устройств, подключённых напрямую и находящихся в той же сети? Windows один раз запросит разрешение.",
+  "Windows didn't allow the change. Beam will ask again the next time it starts.": "Windows не разрешил изменение. Beam спросит снова при следующем запуске.",
+  "Windows treats this network as public, so its firewall stops phones and computers on it from sending files to this computer. Allow Beam for devices on the same network and on direct connections? Windows will ask for permission once.": "Windows считает эту сеть общедоступной, поэтому брандмауэр не даёт телефонам и компьютерам в ней отправлять файлы на этот компьютер. Разрешить Beam для устройств в той же сети и подключённых напрямую? Windows один раз запросит разрешение."
 }

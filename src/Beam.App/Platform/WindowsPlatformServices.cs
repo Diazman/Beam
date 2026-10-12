@@ -38,6 +38,8 @@ internal sealed partial class WindowsPlatformServices : IPlatformServices
 
     public Task<bool> AllowDirectThroughFirewallAsync() => WindowsFirewall.AllowDirectConnectionsAsync();
 
+    public Task<bool> FirewallBlocksLocalNetworkAsync() => WindowsFirewall.BlocksLocalNetworkAsync();
+
     public void OpenFolder(string path) => Shell("explorer.exe", $"\"{path}\"");
 
     public void RevealInFolder(string path)

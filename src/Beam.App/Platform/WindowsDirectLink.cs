@@ -33,6 +33,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private WiFiAdapter? _joinedAdapter; // this PC's Wi-Fi while it is on another computer's network
     private string? _joinedSsid;
     private string? _previousSsid; // the Wi-Fi to go back to
+    private string? _addedProfile; // a Wi-Fi profile Beam added to join by name (removed when leaving)
 #endif
     private DirectNetwork? _network;
 
@@ -183,28 +184,42 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             if (current == network.Ssid && _joinedAdapter != null) return await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
 
             WiFiAvailableNetwork? target = null;
-            for (var attempt = 0; attempt < 4 && target == null; attempt++)
+            var seen = 0;
+            for (var attempt = 0; attempt < 3 && target == null; attempt++)
             {
                 if (attempt > 0) await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
                 await adapter.ScanAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                seen = adapter.NetworkReport.AvailableNetworks.Count;
                 target = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == network.Ssid);
-            }
-
-            if (target == null)
-            {
-                Log.Warn($"Wi-Fi: {network.Ssid} not found in a scan");
-                throw new DirectLinkException(L.T("The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location."));
             }
 
             _previousSsid ??= current;
             Log.Info($"Wi-Fi: joining {network.Ssid}{(current != null ? $" (leaving {current} meanwhile)" : "")}");
-            var result = await adapter.ConnectAsync(target, WiFiReconnectionKind.Manual, new PasswordCredential { Password = network.Passphrase })
-                .AsTask(cancellationToken).ConfigureAwait(false);
-            if (result.ConnectionStatus != WiFiConnectionStatus.Success)
+            bool joined;
+            if (target != null)
             {
-                Log.Warn($"Wi-Fi: joining {network.Ssid} failed ({result.ConnectionStatus})");
+                var result = await adapter.ConnectAsync(target, WiFiReconnectionKind.Manual, new PasswordCredential { Password = network.Passphrase })
+                    .AsTask(cancellationToken).ConfigureAwait(false);
+                joined = result.ConnectionStatus == WiFiConnectionStatus.Success;
+                if (!joined) Log.Warn($"Wi-Fi: joining {network.Ssid} failed ({result.ConnectionStatus})");
+            }
+            else
+            {
+                // Windows 11 hides Wi-Fi scan results from desktop apps unless location access is on ({seen} networks
+                // seen): join by name through a Wi-Fi profile instead, which needs no scan.
+                Log.Info($"Wi-Fi: {network.Ssid} not in the scan ({seen} networks seen); joining it by name");
+                joined = await WlanProfiles.ConnectAsync(network.Ssid, network.Passphrase, cancellationToken).ConfigureAwait(false)
+                         && await WaitForSsidAsync(adapter, network.Ssid, cancellationToken).ConfigureAwait(false);
+                _addedProfile = network.Ssid;
+            }
+
+            if (!joined)
+            {
                 _ = ReturnToPreviousWiFiAsync(adapter);
-                throw new DirectLinkException(L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
+                if (Interlocked.Exchange(ref _addedProfile, null) is { } added) _ = WlanProfiles.RemoveAsync(added);
+                throw new DirectLinkException(seen == 0
+                    ? L.T("The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location.")
+                    : L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
             }
 
             _joinedAdapter = adapter;
@@ -256,6 +271,19 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             Log.Warn("Wi-Fi: reading the current network failed", ex);
             return null;
         }
+    }
+
+    private static async Task<bool> WaitForSsidAsync(WiFiAdapter adapter, string ssid, CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + 25_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (await ConnectedSsidAsync(adapter).ConfigureAwait(false) == ssid) return true;
+            await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        }
+
+        Log.Warn($"Wi-Fi: not on {ssid} after joining it by name");
+        return false;
     }
 
     /// <summary>The other computer's address on its network (its gateway; Windows hosts are 192.168.137.1).</summary>
@@ -316,6 +344,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         }
 
         _ = ReturnToPreviousWiFiAsync(adapter);
+        if (Interlocked.Exchange(ref _addedProfile, null) is { } added) _ = WlanProfiles.RemoveAsync(added);
     }
 
     /// <summary>Back to the Wi-Fi this PC was on before joining (Windows usually does this by itself; this makes sure).</summary>
@@ -330,9 +359,16 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             if (await ConnectedSsidAsync(adapter).ConfigureAwait(false) is { } now && now != _joinedSsid) return; // already back
             await adapter.ScanAsync().AsTask().ConfigureAwait(false);
             var network = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == previous);
-            if (network == null) return;
-            var result = await adapter.ConnectAsync(network, WiFiReconnectionKind.Automatic).AsTask().ConfigureAwait(false); // its saved profile
-            Log.Info($"Wi-Fi: back on {previous} ({result.ConnectionStatus})");
+            if (network != null)
+            {
+                var result = await adapter.ConnectAsync(network, WiFiReconnectionKind.Automatic).AsTask().ConfigureAwait(false); // its saved profile
+                Log.Info($"Wi-Fi: back on {previous} ({result.ConnectionStatus})");
+            }
+            else
+            {
+                // No scan results (location access off): connect with its saved profile by name.
+                Log.Info($"Wi-Fi: back on {previous} by name ({await WlanProfiles.ReconnectAsync(previous).ConfigureAwait(false)})");
+            }
         }
         catch (Exception ex)
         {

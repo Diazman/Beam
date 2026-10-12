@@ -78,7 +78,16 @@ public interface IPlatformServices
     /// <summary>True when the system firewall would stop devices on a direct connection from reaching Beam (Windows).</summary>
     Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(false);
 
-    /// <summary>Allows Beam through the firewall for direct connections (Windows asks for administrator permission).</summary>
+    /// <summary>
+    /// True when this device's network is a "public" one in Windows and the firewall stops devices on it from reaching
+    /// Beam (so nothing nearby could send to this computer).
+    /// </summary>
+    Task<bool> FirewallBlocksLocalNetworkAsync() => Task.FromResult(false);
+
+    /// <summary>
+    /// Allows Beam through the firewall for nearby devices: on the same network and on direct connections (Windows asks
+    /// for administrator permission).
+    /// </summary>
     Task<bool> AllowDirectThroughFirewallAsync() => Task.FromResult(true);
 
     /// <summary>Lets the user pass Beam's log on, for troubleshooting (desktop: opens the log folder).</summary>

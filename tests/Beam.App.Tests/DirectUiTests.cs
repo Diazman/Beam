@@ -141,6 +141,33 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
+    public async Task WhenWindowsBlocksTheLocalNetworkBeamOffersToAllowItAtStart()
+    {
+        // The home Wi-Fi is a "public" network in Windows: nothing nearby could send to this computer.
+        await using var app = new UiHarness("Laptop");
+        app.Platform.FirewallBlocksLocalNetwork = true;
+        await app.InitializeAsync();
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
+        var dialog = (ViewModels.Dialogs.ConfirmViewModel)app.ViewModel.Dialog!;
+        Assert.Equal("Let nearby devices send to this computer?", dialog.Title);
+        await UiHarness.PumpAsync();
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("firewall-local-network");
+        dialog.PrimaryCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => app.Platform.Calls.Contains("allow-firewall"), "allowed");
+    }
+
+    [Fact]
+    public void TheWiFiProfileForJoiningByNameIsValidXml()
+    {
+        var xml = Beam.App.Platform.WlanProfiles.ProfileXml("DIRECT-ab-Beam-Tom & Jerry's <PC>", "p<a>ss&\"word'");
+        var doc = System.Xml.Linq.XDocument.Parse(xml);
+        System.Xml.Linq.XNamespace ns = "http://www.microsoft.com/networking/WLAN/profile/v1";
+        Assert.Equal("DIRECT-ab-Beam-Tom & Jerry's <PC>", doc.Root!.Element(ns + "name")!.Value);
+        Assert.Equal("p<a>ss&\"word'", doc.Descendants(ns + "keyMaterial").Single().Value);
+    }
+
+    [AvaloniaFact]
     public async Task PhoneScansTheComputersCodeToPair()
     {
         await using var laptop = new UiHarness("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host));
