@@ -1056,7 +1056,21 @@ public sealed class DirectManager
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 DirectAddresses.Invalidate();
                 _discovery.RescanNetworks();
-                if (host != null) _discovery.AddUnicastTarget(host);
+                if (host != null)
+                {
+                    _discovery.AddUnicastTarget(host);
+                    // Reach the host at its address on this network from now on (e.g. to tell it "back to Wi-Fi"): this
+                    // device may have left the network where it knew the host's other addresses.
+                    if (_discovery.Find(peerId) is { } hostDevice)
+                    {
+                        var port = hostDevice.Endpoints.FirstOrDefault()?.Port ?? AppInfo.TransferPort;
+                        _discovery.ReportReachable(hostDevice with
+                        {
+                            Endpoints = new[] { new IPEndPoint(host, port) }.Concat(hostDevice.Endpoints.Where(e => !e.Address.Equals(host))).Take(4).ToList(),
+                        });
+                    }
+                }
+
                 // Tell the host where to find this device on its network: it reaches it right away, without waiting
                 // for discovery (which a phone on a computer's Wi-Fi can't always announce itself on).
                 var own = host != null ? OwnAddressNear(host) : null;

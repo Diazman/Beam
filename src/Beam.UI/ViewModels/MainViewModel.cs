@@ -264,6 +264,7 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
         }
 
         HandleCommandLine(commandLine);
+        _ = Dispatcher.UIThread.InvokeAsync(EnsureFirewallForLocalNetworkAsync);
 
         // Phones: notifications are how people learn that files are coming. Asked once, with the reason first.
         if (!Node.Settings.Current.NotificationPermissionAsked && !_platform.HasPermission(AppPermission.Notifications))
@@ -300,6 +301,31 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
     /// couldn't reach it. Asked right before this PC first starts its network in a run, never at startup.
     /// </summary>
+    /// <summary>
+    /// At start: Windows sees this PC's network as public and its firewall stops nearby devices from sending here (the
+    /// usual first-run prompt only allows private networks). Ask once per run to allow Beam for nearby devices.
+    /// </summary>
+    internal async Task EnsureFirewallForLocalNetworkAsync()
+    {
+        await _firewallGate.WaitAsync();
+        try
+        {
+            if (_firewallAskedThisRun || !await _platform.FirewallBlocksLocalNetworkAsync()) return;
+            _firewallAskedThisRun = true;
+            var allow = await ShowDialogAsync(new ConfirmViewModel(
+                L.T("Let nearby devices send to this computer?"),
+                L.T("Windows treats this network as public, so its firewall stops phones and computers on it from sending files to this computer. Allow Beam for devices on the same network and on direct connections? Windows will ask for permission once."),
+                L.T("Allow"), L.T("Not now")));
+            if (allow is true && !await _platform.AllowDirectThroughFirewallAsync())
+                await ShowDialogAsync(new ConfirmViewModel(L.T("Nearby devices are still blocked"),
+                    L.T("Windows didn't allow the change. Beam will ask again the next time it starts."), L.T("OK"), ""));
+        }
+        finally
+        {
+            _firewallGate.Release();
+        }
+    }
+
     internal async Task EnsureFirewallForDirectAsync()
     {
         await _firewallGate.WaitAsync();
@@ -310,7 +336,7 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
             if (!await _platform.FirewallBlocksDirectAsync()) return;
             var allow = await ShowDialogAsync(new ConfirmViewModel(
                 L.T("Allow direct connections?"),
-                L.T("Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked."),
+                L.T("Windows Firewall stops phones and computers that connect directly to this computer. Allow Beam for devices connected directly and on the same network? Windows will ask for permission once."),
                 L.T("Allow"), L.T("Not now")));
             if (allow is true && !await _platform.AllowDirectThroughFirewallAsync())
                 await ShowDialogAsync(new ConfirmViewModel(L.T("Direct connections are still blocked"),

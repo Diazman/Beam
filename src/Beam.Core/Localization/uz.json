@@ -378,7 +378,6 @@
   "Allow": "Ruxsat berish",
   "Allow direct connections?": "Toʻgʻridan-toʻgʻri ulanishlarga ruxsat berilsinmi?",
   "Direct connections are still blocked": "Toʻgʻridan-toʻgʻri ulanishlar hali ham bloklangan",
-  "Windows Firewall stops phones that connect directly to this computer (without a Wi-Fi network). Allow Beam on direct connections only? Windows will ask for permission once. Other public networks stay blocked.": "Windows xavfsizlik devori bu kompyuterga toʻgʻridan-toʻgʻri (Wi-Fi tarmogʻisiz) ulanadigan telefonlarni bloklaydi. Beam'ga faqat toʻgʻridan-toʻgʻri ulanishlarda ruxsat berilsinmi? Windows bir marta ruxsat soʻraydi. Boshqa umumiy tarmoqlar bloklangan qoladi.",
   "Windows didn't allow the change. Beam will ask again the next time you connect directly.": "Windows bu oʻzgarishga ruxsat bermadi. Keyingi safar toʻgʻridan-toʻgʻri ulanganda Beam yana soʻraydi.",
   "On the computer, open Beam and go to Phone, then scan the code shown there.": "Kompyuterda Beam'ni oching va Telefon boʻlimiga oʻting, soʻng u yerda koʻrsatilgan kodni skanerlang.",
   "Paired with {0}": "{0} bilan bogʻlandi",
@@ -470,5 +469,10 @@
   "{0} is connecting to you at the same time.": "{0} ayni paytda sizga ulanmoqda.",
   "{0} shares its internet, so this computer stays online.": "{0} internetini ulashadi, shuning uchun bu kompyuter internetda qoladi.",
   "{0} wants to connect directly": "{0} toʻgʻridan-toʻgʻri ulanmoqchi",
-  "{0} · Direct": "{0} · Toʻgʻridan-toʻgʻri"
+  "{0} · Direct": "{0} · Toʻgʻridan-toʻgʻri",
+  "Let nearby devices send to this computer?": "Yaqindagi qurilmalar bu kompyuterga fayl yubora olsinmi?",
+  "Nearby devices are still blocked": "Yaqindagi qurilmalar hali ham bloklangan",
+  "Windows Firewall stops phones and computers that connect directly to this computer. Allow Beam for devices connected directly and on the same network? Windows will ask for permission once.": "Windows brandmaueri bu kompyuterga toʻgʻridan-toʻgʻri ulanadigan telefon va kompyuterlarni bloklaydi. Beam’ga toʻgʻridan-toʻgʻri ulangan va bir xil tarmoqdagi qurilmalar uchun ruxsat berilsinmi? Windows bir marta ruxsat soʻraydi.",
+  "Windows didn't allow the change. Beam will ask again the next time it starts.": "Windows oʻzgartirishga ruxsat bermadi. Beam keyingi safar ishga tushganda yana soʻraydi.",
+  "Windows treats this network as public, so its firewall stops phones and computers on it from sending files to this computer. Allow Beam for devices on the same network and on direct connections? Windows will ask for permission once.": "Windows bu tarmoqni umumiy tarmoq deb hisoblaydi, shuning uchun brandmauer undagi telefon va kompyuterlarning bu kompyuterga fayl yuborishiga yoʻl qoʻymaydi. Beam’ga bir xil tarmoqdagi va toʻgʻridan-toʻgʻri ulangan qurilmalar uchun ruxsat berilsinmi? Windows bir marta ruxsat soʻraydi."
 }

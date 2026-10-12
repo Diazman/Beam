@@ -98,10 +98,15 @@ public sealed class FakePlatform : IPlatformServices
 
     public Task<bool> FirewallBlocksDirectAsync() => Task.FromResult(FirewallBlocks);
 
+    public bool FirewallBlocksLocalNetwork { get; set; }
+
+    public Task<bool> FirewallBlocksLocalNetworkAsync() => Task.FromResult(FirewallBlocksLocalNetwork);
+
     public Task<bool> AllowDirectThroughFirewallAsync()
     {
         Calls.Add("allow-firewall");
         FirewallBlocks = false;
+        FirewallBlocksLocalNetwork = false;
         return Task.FromResult(true);
     }
 

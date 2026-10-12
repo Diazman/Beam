@@ -284,9 +284,11 @@ public sealed class DiscoveryService : IDisposable
             {
                 break;
             }
-            catch (Exception ex) when (ex is ObjectDisposedException or SocketException && !ReferenceEquals(socket, _socket))
+            catch (Exception ex) when ((ex is ObjectDisposedException or SocketException && !ReferenceEquals(socket, _socket))
+                                       || ex is SocketException { SocketErrorCode: SocketError.OperationAborted } && !token.IsCancellationRequested)
             {
-                // Reopened on another network: listen on the new socket.
+                // Reopened on another network (the old socket's pending receive is cancelled): listen on the new socket.
+                await Task.Delay(50, CancellationToken.None).ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
             {
