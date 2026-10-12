@@ -1,0 +1,422 @@
+using System.Collections.Concurrent;
+using Beam.Core.Diagnostics;
+using Beam.Core.Nearby;
+#if WINDOWS_WINRT
+using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.Devices.Bluetooth;
+using Windows.Devices.Bluetooth.Advertisement;
+using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Radios;
+#endif
+
+namespace Beam.App.Platform;
+
+/// <summary>
+/// Bluetooth LE on Windows (WinRT, works in desktop apps without asking the user). Receive: a beacon (advertisement
+/// publisher, manufacturer data) plus Beam's GATT service, connectable, for the handshake; the GATT server needs a
+/// Bluetooth adapter that supports the peripheral role, which most do. Send: an advertisement watcher and a GATT client.
+/// The beacon and the service are two advertisements; Windows sends both from the adapter's address, and a sender that
+/// can't find the service at the beacon's address tries addresses that advertised the service recently.
+/// </summary>
+internal sealed class WindowsNearbyRadio : INearbyRadio
+{
+    private NearbyRadioState _state = NearbyRadioState.Unsupported;
+#if WINDOWS_WINRT
+    private readonly object _gate = new();
+    private readonly ConcurrentDictionary<string, byte[]> _writes = new();
+    private readonly ConcurrentDictionary<ulong, long> _serviceSeen = new();
+    private BluetoothAdapter? _adapter;
+    private Radio? _radio;
+    private BluetoothLEAdvertisementPublisher? _publisher;
+    private GattServiceProvider? _provider;
+    private INearbyResponder? _responder;
+    private BluetoothLEAdvertisementWatcher? _watcher;
+    private Action<NearbySighting>? _seen;
+    private int _generation;
+#endif
+
+    private WindowsNearbyRadio()
+    {
+    }
+
+    public static WindowsNearbyRadio? TryCreate()
+    {
+#if WINDOWS_WINRT
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) return null;
+        var radio = new WindowsNearbyRadio();
+        _ = radio.InitializeAsync();
+        return radio;
+#else
+        return null;
+#endif
+    }
+
+    public NearbyRadioState State => _state;
+
+#pragma warning disable CS0067 // raised only where WinRT is available
+    public event Action? StateChanged;
+#pragma warning restore CS0067
+
+    public Task<bool> RequestPermissionAsync() => Task.FromResult(true);
+
+#if WINDOWS_WINRT
+    private async Task InitializeAsync()
+    {
+        try
+        {
+            _adapter = await BluetoothAdapter.GetDefaultAsync();
+            if (_adapter == null || !_adapter.IsLowEnergySupported)
+            {
+                Log.Info("Nearby: no Bluetooth LE adapter");
+                return;
+            }
+
+            Log.Info($"Nearby: Bluetooth adapter (peripheral role {(_adapter.IsPeripheralRoleSupported ? "supported" : "not supported")}, " +
+                     $"central role {(_adapter.IsCentralRoleSupported ? "supported" : "not supported")})");
+            _radio = await _adapter.GetRadioAsync();
+            if (_radio != null) _radio.StateChanged += (_, _) => UpdateState();
+            UpdateState();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: Bluetooth unavailable: {ex.Message}");
+        }
+    }
+
+    private void UpdateState()
+    {
+        var state = _radio == null ? NearbyRadioState.Unsupported : _radio.State == RadioState.On ? NearbyRadioState.Ready : NearbyRadioState.Off;
+        if (state == _state) return;
+        _state = state;
+        StateChanged?.Invoke();
+    }
+
+    // ---- Receiving ----
+
+    public void StartAdvertising(byte[] beacon, INearbyResponder responder)
+    {
+        int generation;
+        lock (_gate)
+        {
+            StopAdvertisingLocked();
+            generation = ++_generation;
+            _responder = responder;
+            _publisher = new BluetoothLEAdvertisementPublisher();
+            _publisher.Advertisement.ManufacturerData.Add(new BluetoothLEManufacturerData(NearbyBeacon.CompanyId, beacon.AsBuffer()));
+            _publisher.StatusChanged += (_, args) =>
+            {
+                if (args.Status == BluetoothLEAdvertisementPublisherStatus.Aborted || args.Error != BluetoothError.Success)
+                    Log.Warn($"Nearby: beacon {args.Status} ({args.Error})");
+            };
+            _publisher.Start();
+        }
+
+        if (_adapter?.IsPeripheralRoleSupported == true) _ = StartServiceAsync(generation);
+        else Log.Warn("Nearby: this PC's Bluetooth can't accept connections (no peripheral role); senders need the same Wi-Fi");
+    }
+
+    private async Task StartServiceAsync(int generation)
+    {
+        try
+        {
+            var created = await GattServiceProvider.CreateAsync(NearbyUuids.Service);
+            if (created.Error != BluetoothError.Success)
+            {
+                Log.Warn($"Nearby: Beam's Bluetooth service couldn't start ({created.Error})");
+                return;
+            }
+
+            var provider = created.ServiceProvider;
+            var characteristic = await provider.Service.CreateCharacteristicAsync(NearbyUuids.Handshake, new GattLocalCharacteristicParameters
+            {
+                CharacteristicProperties = GattCharacteristicProperties.Read | GattCharacteristicProperties.Write,
+                ReadProtectionLevel = GattProtectionLevel.Plain,
+                WriteProtectionLevel = GattProtectionLevel.Plain,
+            });
+            if (characteristic.Error != BluetoothError.Success)
+            {
+                Log.Warn($"Nearby: Beam's Bluetooth service couldn't start ({characteristic.Error})");
+                return;
+            }
+
+            characteristic.Characteristic.WriteRequested += OnWriteRequested;
+            characteristic.Characteristic.ReadRequested += OnReadRequested;
+            lock (_gate)
+            {
+                if (generation != _generation)
+                {
+                    return; // stopped (or restarted) meanwhile
+                }
+
+                _provider = provider;
+                provider.AdvertisementStatusChanged += (_, args) =>
+                {
+                    if (args.Error != BluetoothError.Success) Log.Warn($"Nearby: Bluetooth service {args.Status} ({args.Error})");
+                };
+                provider.StartAdvertising(new GattServiceProviderAdvertisingParameters { IsConnectable = true, IsDiscoverable = true });
+            }
+
+            Log.Info("Nearby: Beam's Bluetooth service is on");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: Beam's Bluetooth service couldn't start: {ex.Message}");
+        }
+    }
+
+    private async void OnWriteRequested(GattLocalCharacteristic sender, GattWriteRequestedEventArgs args)
+    {
+        var deferral = args.GetDeferral();
+        try
+        {
+            var request = await args.GetRequestAsync();
+            if (request == null) return;
+            var key = args.Session.DeviceId.Id;
+            var data = request.Value.ToArray();
+            // A long write arrives in pieces (offsets); the request is complete once it has all its bytes.
+            var offset = (int)request.Offset;
+            var buffer = offset == 0 ? data : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, data);
+            if (buffer.Length >= NearbyHandshake.RequestLength)
+            {
+                _writes.TryRemove(key, out _);
+                _responder?.Request(key, buffer[..NearbyHandshake.RequestLength]);
+            }
+            else
+            {
+                _writes[key] = buffer;
+            }
+
+            if (request.Option == GattWriteOption.WriteWithResponse) request.Respond();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: Bluetooth write failed: {ex.Message}");
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    private static byte[] Place(byte[] existing, int offset, byte[] data)
+    {
+        if (offset > 1024) return existing;
+        var result = new byte[Math.Max(existing.Length, offset + data.Length)];
+        existing.CopyTo(result, 0);
+        data.CopyTo(result, offset);
+        return result;
+    }
+
+    private async void OnReadRequested(GattLocalCharacteristic sender, GattReadRequestedEventArgs args)
+    {
+        var deferral = args.GetDeferral();
+        try
+        {
+            var request = await args.GetRequestAsync();
+            if (request == null) return;
+            var value = _responder?.Response(args.Session.DeviceId.Id) ?? NearbyHandshake.Refuse("Not receiving.");
+            var offset = (int)request.Offset;
+            if (offset > value.Length) request.RespondWithProtocolError(GattProtocolError.InvalidOffset);
+            else request.RespondWithValue(value.AsSpan(offset).ToArray().AsBuffer());
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: Bluetooth read failed: {ex.Message}");
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    public void StopAdvertising()
+    {
+        lock (_gate)
+        {
+            _generation++;
+            StopAdvertisingLocked();
+        }
+    }
+
+    private void StopAdvertisingLocked()
+    {
+        try
+        {
+            _publisher?.Stop();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: stopping the beacon failed: {ex.Message}");
+        }
+
+        try
+        {
+            _provider?.StopAdvertising();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: stopping Beam's Bluetooth service failed: {ex.Message}");
+        }
+
+        _publisher = null;
+        _provider = null;
+        _writes.Clear();
+    }
+
+    // ---- Sending ----
+
+    public void StartScanning(Action<NearbySighting> seen)
+    {
+        lock (_gate)
+        {
+            _seen = seen;
+            if (_watcher != null) return;
+            _watcher = new BluetoothLEAdvertisementWatcher { ScanningMode = BluetoothLEScanningMode.Active };
+            _watcher.Received += OnReceived;
+            _watcher.Stopped += (_, args) =>
+            {
+                if (args.Error != BluetoothError.Success) Log.Warn($"Nearby: Bluetooth scanning stopped ({args.Error})");
+            };
+            _watcher.Start();
+        }
+
+        Log.Info("Nearby: looking for receivers over Bluetooth");
+    }
+
+    private void OnReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
+    {
+        try
+        {
+            if (args.Advertisement.ServiceUuids.Contains(NearbyUuids.Service)) _serviceSeen[args.BluetoothAddress] = Environment.TickCount64;
+            foreach (var data in args.Advertisement.ManufacturerData)
+            {
+                if (data.CompanyId != NearbyBeacon.CompanyId) continue;
+                if (NearbyBeacon.TryParse(data.Data.ToArray()) is { } beacon)
+                    _seen?.Invoke(new NearbySighting(args.BluetoothAddress.ToString("X12"), beacon, args.RawSignalStrengthInDBm));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Nearby: reading an advertisement failed: {ex.Message}");
+        }
+    }
+
+    public void StopScanning()
+    {
+        lock (_gate)
+        {
+            if (_watcher == null) return;
+            try
+            {
+                _watcher.Received -= OnReceived;
+                _watcher.Stop();
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Nearby: stopping the scan failed: {ex.Message}");
+            }
+
+            _watcher = null;
+        }
+    }
+
+    public async Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken)
+    {
+        var first = Convert.ToUInt64(address, 16);
+        var candidates = new List<ulong> { first };
+        candidates.AddRange(_serviceSeen.Where(s => s.Key != first && Environment.TickCount64 - s.Value < 30_000)
+            .OrderByDescending(s => s.Value).Select(s => s.Key).Take(3));
+        Exception? last = null;
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            BluetoothLEDevice? device = null;
+            try
+            {
+                device = await BluetoothLEDevice.FromBluetoothAddressAsync(candidate).AsTask(cancellationToken);
+                if (device == null) continue;
+                var services = await device.GetGattServicesForUuidAsync(NearbyUuids.Service, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
+                if (services.Status != GattCommunicationStatus.Success || services.Services.Count == 0)
+                {
+                    last = new IOException($"No Beam service at {candidate:X12} ({services.Status})");
+                    device.Dispose();
+                    continue;
+                }
+
+                var service = services.Services[0];
+                var characteristics = await service.GetCharacteristicsForUuidAsync(NearbyUuids.Handshake, BluetoothCacheMode.Uncached).AsTask(cancellationToken);
+                if (characteristics.Status != GattCommunicationStatus.Success || characteristics.Characteristics.Count == 0)
+                {
+                    last = new IOException($"No handshake at {candidate:X12} ({characteristics.Status})");
+                    service.Dispose();
+                    device.Dispose();
+                    continue;
+                }
+
+                if (candidate != first) Log.Info($"Nearby: Beam's service is at {candidate:X12}, not the beacon's {first:X12}");
+                return new Connection(device, service, characteristics.Characteristics[0]);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                last = ex;
+                device?.Dispose();
+            }
+        }
+
+        throw last ?? new IOException("The device isn't in range.");
+    }
+
+    private sealed class Connection : INearbyConnection
+    {
+        private readonly BluetoothLEDevice _device;
+        private readonly GattDeviceService _service;
+        private readonly GattCharacteristic _characteristic;
+
+        public Connection(BluetoothLEDevice device, GattDeviceService service, GattCharacteristic characteristic)
+        {
+            _device = device;
+            _service = service;
+            _characteristic = characteristic;
+        }
+
+        public async Task WriteAsync(byte[] data, CancellationToken cancellationToken)
+        {
+            var result = await _characteristic.WriteValueWithResultAsync(data.AsBuffer(), GattWriteOption.WriteWithResponse).AsTask(cancellationToken);
+            if (result.Status != GattCommunicationStatus.Success) throw new IOException($"Bluetooth write failed ({result.Status})");
+        }
+
+        public async Task<byte[]> ReadAsync(CancellationToken cancellationToken)
+        {
+            var result = await _characteristic.ReadValueAsync(BluetoothCacheMode.Uncached).AsTask(cancellationToken);
+            if (result.Status != GattCommunicationStatus.Success) throw new IOException($"Bluetooth read failed ({result.Status})");
+            return result.Value.ToArray();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _service.Dispose();
+            _device.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+#else
+    public void StartAdvertising(byte[] beacon, INearbyResponder responder)
+    {
+    }
+
+    public void StopAdvertising()
+    {
+    }
+
+    public void StartScanning(Action<NearbySighting> seen)
+    {
+    }
+
+    public void StopScanning()
+    {
+    }
+
+    public Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken) =>
+        Task.FromException<INearbyConnection>(new PlatformNotSupportedException());
+#endif
+}

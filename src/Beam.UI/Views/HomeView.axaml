@@ -48,6 +48,14 @@
 
           <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
 
+          <Border Classes="notice" IsVisible="{Binding HasBluetoothNotice}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="{Binding BluetoothNotice}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <Button Grid.Column="1" Classes="link" Content="{l:T 'Allow'}" Command="{Binding AllowBluetoothCommand}"
+                      IsVisible="{Binding BluetoothNeedsPermission}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            </Grid>
+          </Border>
+
           <Border Classes="notice warning" IsVisible="{Binding DiscoveryUnavailable}">
             <TextBlock Text="{Binding DiscoveryProblem}" TextWrapping="Wrap" />
           </Border>

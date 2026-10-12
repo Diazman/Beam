@@ -173,7 +173,7 @@ public sealed class UiHarness : IAsyncDisposable
 
     public UiHarness(string name = "Diaz's PC", bool firstRunDone = true, int width = 1180, int height = 760,
         string language = L.English, bool phone = false, Beam.Core.Direct.IDirectLink? directLink = null,
-        Beam.Core.Files.IExternalFiles? externalFiles = null)
+        Beam.Core.Files.IExternalFiles? externalFiles = null, Beam.Core.Nearby.INearbyRadio? nearbyRadio = null)
     {
         // Tests assert English text whatever the language of the machine running them.
         L.SetLanguage(language);
@@ -187,6 +187,7 @@ public sealed class UiHarness : IAsyncDisposable
             TransferPort = 0,
             Discovery = new DiscoveryOptions { Port = 0, UseMulticastAndBroadcast = false },
             DirectLink = directLink,
+            NearbyRadio = nearbyRadio,
             ExternalFiles = externalFiles,
             DeviceKind = phone ? DeviceKinds.Phone : DeviceKinds.Laptop,
         });

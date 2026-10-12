@@ -52,6 +52,22 @@ public sealed class PairingCode
         return string.IsNullOrEmpty(link) ? "beam:" + payload : link + Marker + payload;
     }
 
+    /// <summary>The code as plain JSON (sent over Bluetooth, where every byte counts).</summary>
+    public string ToJson() => JsonSerializer.Serialize(this, PairingJson.Default.PairingCode);
+
+    /// <summary>Reads <see cref="ToJson"/>; null when it isn't a valid code.</summary>
+    public static PairingCode? FromJson(string json)
+    {
+        try
+        {
+            return Validate(JsonSerializer.Deserialize(json, PairingJson.Default.PairingCode));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Reads a scanned code; null when it isn't a Beam pairing code (or is damaged).</summary>
     public static PairingCode? TryParse(string? scanned)
     {
@@ -67,25 +83,29 @@ public sealed class PairingCode
         {
             payload = payload.Replace('-', '+').Replace('_', '/');
             payload += new string('=', (4 - payload.Length % 4) % 4);
-            var code = JsonSerializer.Deserialize(Convert.FromBase64String(payload), PairingJson.Default.PairingCode);
-            if (code == null || string.IsNullOrWhiteSpace(code.DeviceId) || code.DeviceId.Length > 64) return null;
-            if (string.IsNullOrWhiteSpace(code.Fingerprint) || code.Fingerprint.Length > 128) return null;
-            code.Name = Settings.AppSettings.NormalizeDeviceName(code.Name);
-            code.Fingerprint = code.Fingerprint.ToLowerInvariant();
-            code.Addresses = code.Addresses.Where(a => TryParseEndPoint(a, out _)).Take(8).ToList();
-            if (string.IsNullOrEmpty(code.Ssid) || string.IsNullOrEmpty(code.Passphrase) || code.Ssid.Length > 32 || code.Passphrase.Length is < 8 or > 63)
-            {
-                code.Ssid = null;
-                code.Passphrase = null;
-                code.ConnectDirectly = false;
-            }
-
-            return code;
+            return Validate(JsonSerializer.Deserialize(Convert.FromBase64String(payload), PairingJson.Default.PairingCode));
         }
         catch (Exception ex) when (ex is FormatException or JsonException)
         {
             return null;
         }
+    }
+
+    private static PairingCode? Validate(PairingCode? code)
+    {
+        if (code == null || string.IsNullOrWhiteSpace(code.DeviceId) || code.DeviceId.Length > 64) return null;
+        if (string.IsNullOrWhiteSpace(code.Fingerprint) || code.Fingerprint.Length > 128) return null;
+        code.Name = Settings.AppSettings.NormalizeDeviceName(code.Name);
+        code.Fingerprint = code.Fingerprint.ToLowerInvariant();
+        code.Addresses = code.Addresses.Where(a => TryParseEndPoint(a, out _)).Take(8).ToList();
+        if (string.IsNullOrEmpty(code.Ssid) || string.IsNullOrEmpty(code.Passphrase) || code.Ssid.Length > 32 || code.Passphrase.Length is < 8 or > 63)
+        {
+            code.Ssid = null;
+            code.Passphrase = null;
+            code.ConnectDirectly = false;
+        }
+
+        return code;
     }
 
     public DirectNetwork? Network => Ssid != null && Passphrase != null ? new DirectNetwork(Ssid, Passphrase) : null;

@@ -28,6 +28,8 @@
                  ToolTip.Tip="Beam" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Receive'}"
+                       Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Phone'}"
                        Tag="{StaticResource IconPhone}" IsChecked="{Binding IsPhonePage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'History'}"

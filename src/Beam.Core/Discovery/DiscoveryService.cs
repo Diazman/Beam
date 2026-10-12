@@ -209,6 +209,12 @@ public sealed class DiscoveryService : IDisposable
         Upsert(device with { IsManual = true }, device.Endpoints.FirstOrDefault());
     }
 
+    /// <summary>Drops a device from the list (e.g. a Bluetooth placeholder now known by its real id).</summary>
+    public void Forget(string deviceId)
+    {
+        if (_devices.TryRemove(deviceId, out var removed)) DeviceLost?.Invoke(this, new DeviceEventArgs(removed.Device));
+    }
+
     public void Dispose()
     {
         NetworkChange.NetworkAddressChanged -= OnNetworkChanged;

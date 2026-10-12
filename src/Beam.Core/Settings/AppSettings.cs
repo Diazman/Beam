@@ -34,6 +34,9 @@ public sealed class KnownDirectNetwork
     public string Ssid { get; set; } = "";
 
     public string Passphrase { get; set; } = "";
+
+    /// <summary>Beam's port on the device (0: the usual one).</summary>
+    public int Port { get; set; }
 }
 
 /// <summary>A device the user chose to always accept files from.</summary>

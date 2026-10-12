@@ -55,6 +55,20 @@ public sealed class DirectManager
     private readonly ConcurrentDictionary<string, long> _nearbyOnlyDirect = new();
     private readonly ConcurrentDictionary<string, long> _autoJoinedAt = new();
     private int _availabilityRunning;
+    private volatile bool _receiving;
+    private volatile bool _rotatePending;
+
+    // Networks this device joined because the other device had Receive open: left again once sending to it is done.
+    private readonly ConcurrentDictionary<string, byte> _joinedReceivers = new();
+
+    /// <summary>After the last transfer to a receiver whose network this device joined, how long before leaving it.</summary>
+    internal static TimeSpan LeaveReceiverAfter { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Set by the nearby (Bluetooth) service: fetches the device's current network details again when joining the
+    /// remembered ones failed (its passphrase changed). True when there was something new to try.
+    /// </summary>
+    internal Func<DeviceInfo, CancellationToken, Task<bool>>? RefreshNetwork { get; set; }
 
     internal DirectManager(TransferService transfers, DiscoveryService discovery, SettingsStore settings, Func<string> selfId, IDirectLink? link,
         bool selfIsComputer = true)
@@ -70,6 +84,9 @@ public sealed class DirectManager
         _transfers.SessionFinished += OnSessionFinished;
         _transfers.DirectHandler = HandleRequestAsync;
     }
+
+    /// <summary>Stands for "Receive is open" keeping this device's network on.</summary>
+    private const string ReceiveUser = "receive";
 
     /// <summary>Stands for a phone's web browser (Phone page) using this device's direct network.</summary>
     private const string BrowserUser = "phone-browser";
@@ -105,11 +122,84 @@ public sealed class DirectManager
 
     private DirectRoles Traits()
     {
-        if (!_selfIsComputer) return DirectRoles.None;
-        var traits = DirectRoles.None;
+        var traits = _receiving && Roles.HasFlag(DirectRoles.Host) ? DirectRoles.Receiving : DirectRoles.None;
+        if (!_selfIsComputer) return traits;
         if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
         if (HostedNetwork?.SharesInternet == true || _link is IInternetSharing { CanShareInternet: true }) traits |= DirectRoles.SharesInternet;
         return traits;
+    }
+
+    /// <summary>This device can join another device's network (phones any; computers can always join as ordinary Wi-Fi).</summary>
+    private bool CanJoinAny => (Roles & (DirectRoles.Join | DirectRoles.JoinComputers)) != 0;
+
+    /// <summary>Receive is open: this device hosts its network for senders (Prefer direct connection) and says so.</summary>
+    public bool IsReceiving => _receiving;
+
+    /// <summary>
+    /// Receive was opened or closed. While open, a device set to prefer direct connections keeps its own network on,
+    /// and senders join it; closing turns it off (unless something else still uses it).
+    /// </summary>
+    public void SetReceiving(bool receiving)
+    {
+        if (_receiving == receiving) return;
+        _receiving = receiving;
+        Log.Info(receiving ? "Direct: Receive opened" : "Direct: Receive closed");
+        if (!receiving)
+        {
+            var removed = _linkedPeers.TryRemove(ReceiveUser, out _);
+            if (!WantsNetworkOn && _linkedPeers.TryRemove(AvailableUser, out _)) removed = true;
+            if (removed) StopLinkIfUnused(keepForRunningTransfers: true);
+            RotateIfPending();
+        }
+
+        UpdateAvailability();
+        _discovery.AnnounceNow();
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Starts this device's network for a sender found over Bluetooth (kept while Receive is open). Null when this
+    /// device can't host.
+    /// </summary>
+    public async Task<DirectNetwork?> HostForNearbyAsync(CancellationToken cancellationToken)
+    {
+        if (_link == null || !CanHost) return null;
+        var network = await HostOwnNetworkAsync(cancellationToken).ConfigureAwait(false);
+        if (_receiving) _linkedPeers[ReceiveUser] = 0;
+        DirectAddresses.Invalidate();
+        Changed?.Invoke();
+        return network;
+    }
+
+    /// <summary>
+    /// The network's passphrase went to a device that isn't trusted: give the network a new one once it is off, so
+    /// that device can't join it again later without asking.
+    /// </summary>
+    internal void RotateWhenOff() => _rotatePending = true;
+
+    private void RotateIfPending()
+    {
+        if (!_rotatePending || HostedNetwork != null) return;
+        _rotatePending = false;
+        var current = OwnNetwork();
+        var fresh = DirectNetwork.Create(_settings.Current.DeviceName);
+        _settings.Update(s => s.DirectNetworkPassphrase = fresh.Passphrase);
+        Log.Info($"Direct: new passphrase for {current.Ssid}");
+    }
+
+    /// <summary>
+    /// The receiver's details came over Bluetooth: remember its network and list it, ready to join when sending.
+    /// </summary>
+    public DeviceInfo AcceptNearby(PairingCode code)
+    {
+        var device = code.ToDevice() with { Endpoints = Array.Empty<IPEndPoint>(), DirectRoles = DirectRoles.Host | DirectRoles.Receiving };
+        var port = code.Addresses.Select(a => a.Split(':')).Where(p => p.Length == 2 && int.TryParse(p[1], out _)).Select(p => int.Parse(p[1])).FirstOrDefault();
+        if (code.Network is { } network) Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind, network, port);
+        foreach (var address in code.Addresses)
+            if (IPAddress.TryParse(address.Split(':')[0], out var ip)) _discovery.AddUnicastTarget(ip); // maybe on the same network after all
+        var existing = _discovery.Find(code.DeviceId);
+        if (existing is not { Endpoints.Count: > 0 }) _discovery.ReportReachable(device);
+        return _discovery.Find(code.DeviceId) ?? device;
     }
 
     /// <summary>This device can make direct links at all (Wi-Fi Direct hardware and OS support).</summary>
@@ -405,11 +495,11 @@ public sealed class DirectManager
     public bool IsNearbyOnlyDirectly(string deviceId) => _nearbyOnlyDirect.ContainsKey(deviceId);
 
     /// <summary>Keeps a paired device's direct network, so this device can join it later without any other network.</summary>
-    public void Remember(string deviceId, string name, string fingerprint, string kind, DirectNetwork network)
+    public void Remember(string deviceId, string name, string fingerprint, string kind, DirectNetwork network, int port = 0)
     {
-        if (!Roles.HasFlag(DirectRoles.Join) || string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(fingerprint)) return;
+        if (!CanJoinAny || string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(fingerprint)) return;
         var known = KnownNetworkFor(deviceId);
-        if (known != null && known.Ssid == network.Ssid && known.Passphrase == network.Passphrase && known.Name == name) return;
+        if (known != null && known.Ssid == network.Ssid && known.Passphrase == network.Passphrase && known.Name == name && known.Port == port) return;
         _settings.Update(s =>
         {
             s.KnownDirectNetworks.RemoveAll(k => k.DeviceId == deviceId);
@@ -421,6 +511,7 @@ public sealed class DirectManager
                 Kind = kind,
                 Ssid = network.Ssid,
                 Passphrase = network.Passphrase,
+                Port = port,
             });
         });
         Log.Info($"Direct: remembered {name}'s direct network {network.Ssid}");
@@ -456,14 +547,11 @@ public sealed class DirectManager
         HostedNetwork = null;
     }
 
-    /// <summary>
-    /// A PC set to Direct keeps its own network on, so paired phones can find and join it with no Wi-Fi network around.
-    /// (Only devices that can't join others' networks, i.e. PCs: a phone keeping a network on would cost battery.)
-    /// </summary>
+    /// <summary>Keeps this device's network on while <see cref="WantsNetworkOn"/>, and turns it off after.</summary>
     private void UpdateAvailability()
     {
-        if (_link == null || !Roles.HasFlag(DirectRoles.Host) || Roles.HasFlag(DirectRoles.Join)) return;
-        if (_settings.Current.Connection == ConnectionMethod.Direct)
+        if (_link == null || !Roles.HasFlag(DirectRoles.Host)) return;
+        if (WantsNetworkOn)
         {
             if (Interlocked.Exchange(ref _availabilityRunning, 1) == 0) _ = Task.Run(KeepAvailableAsync);
         }
@@ -473,11 +561,17 @@ public sealed class DirectManager
         }
     }
 
+    /// <summary>
+    /// Prefer direct connection is on and Receive is open: the network stays on for senders to join. (Not otherwise:
+    /// a network left on costs battery and confuses the next start.)
+    /// </summary>
+    private bool WantsNetworkOn => _link != null && Roles.HasFlag(DirectRoles.Host) && _settings.Current.Connection == ConnectionMethod.Direct && _receiving;
+
     private async Task KeepAvailableAsync()
     {
         try
         {
-            while (!_stopping.IsCancellationRequested && _settings.Current.Connection == ConnectionMethod.Direct)
+            while (!_stopping.IsCancellationRequested && WantsNetworkOn)
             {
                 try
                 {
@@ -486,7 +580,7 @@ public sealed class DirectManager
                     var network = await HostOwnNetworkAsync(timeout.Token).ConfigureAwait(false);
                     if (_linkedPeers.TryAdd(AvailableUser, 0))
                     {
-                        Log.Info($"Direct: {network.Ssid} is on for paired phones");
+                        Log.Info($"Direct: {network.Ssid} is on for senders (Receive)");
                         DirectAddresses.Invalidate();
                         Changed?.Invoke();
                     }
@@ -496,8 +590,10 @@ public sealed class DirectManager
                     Log.Warn($"Direct: keeping the direct network on failed: {ex.Message}");
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(60), _stopping.Token).ConfigureAwait(false);
+                for (var i = 0; i < 60 && WantsNetworkOn; i++) await Task.Delay(TimeSpan.FromSeconds(1), _stopping.Token).ConfigureAwait(false);
             }
+
+            if (!WantsNetworkOn && _linkedPeers.TryRemove(AvailableUser, out _)) StopLinkIfUnused(keepForRunningTransfers: true);
         }
         catch (OperationCanceledException)
         {
@@ -641,11 +737,35 @@ public sealed class DirectManager
     {
         var peerId = session.PeerId;
         if (IsComputerLinked(peerId) || _transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished)) return;
+        if (_joinedReceivers.ContainsKey(peerId)) _ = LeaveReceiverLaterAsync(peerId, session.PeerName);
         if (_peerMethod.TryGetValue(peerId, out var method) && method != _settings.Current.Connection && _peerMethod.TryRemove(peerId, out _))
         {
             Log.Info($"Direct: transfers with {session.PeerName} done; back to the Connection setting ({_settings.Current.Connection})");
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Sending to a device with Receive open is done: after a while with nothing more to send, leave its network, so
+    /// this device is back on its own Wi-Fi (and internet).
+    /// </summary>
+    private async Task LeaveReceiverLaterAsync(string peerId, string peerName)
+    {
+        try
+        {
+            await Task.Delay(LeaveReceiverAfter, _stopping.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (_transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished) || IsComputerLinked(peerId)) return;
+        if (!_joinedReceivers.TryRemove(peerId, out _)) return;
+        _peerMethod.TryRemove(peerId, out _);
+        if (!_linkedPeers.TryRemove(peerId, out _)) return;
+        Log.Info($"Direct: done sending to {peerName}; leaving its network");
+        StopLinkIfUnused();
     }
 
     /// <summary>The Connection setting changed: forget per-device choices and switch running transfers.</summary>
@@ -736,7 +856,12 @@ public sealed class DirectManager
             if (HasDirectPath(current)) return;
             var link = _link ?? throw new DirectLinkException(L.T("This device can't connect directly."));
             IPAddress? host = null;
-            var known = Roles.HasFlag(DirectRoles.Join) ? KnownNetworkFor(peer.Id) : null;
+            // Computers use a remembered network only to reach a device they can't reach otherwise, or one with Receive
+            // open; between two computers "Connect directly" asks the other side each time.
+            var known = Roles.HasFlag(DirectRoles.Join) || (CanJoinAny && (current.Endpoints.Count == 0 || current.DirectRoles.HasFlag(DirectRoles.Receiving)))
+                ? KnownNetworkFor(peer.Id)
+                : null;
+            var joinedKnown = false;
             var plan = PlanFor(peer);
             // Join the PC's known network straight away when there's no shared network to ask over, and when the direct
             // link was just lost (the phone usually fell back to its normal Wi-Fi, where asking the PC fails or is slow).
@@ -749,9 +874,11 @@ public sealed class DirectManager
                 Log.Info($"Direct: {(rejoining ? "rejoining" : "joining")} {peer.Name}'s known network {known.Ssid}");
                 try
                 {
+                    if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
                     host = await link.JoinAsync(new DirectNetwork(known.Ssid, known.Passphrase) { HostIsComputer = IsComputer(known.Kind, current.Platform) }, token)
                         .ConfigureAwait(false);
                     plan = Plan.None;
+                    joinedKnown = true;
                 }
                 catch (DirectLinkException ex) when ((rejoining || inSight) && !viaKnownNetwork && plan == Plan.JoinPeer && current.Endpoints.Count > 0
                                                     && !token.IsCancellationRequested)
@@ -763,7 +890,7 @@ public sealed class DirectManager
 
             switch (plan)
             {
-                case Plan.None when known != null && host != null:
+                case Plan.None when joinedKnown:
                     break;
 
                 case Plan.JoinPeer:
@@ -772,6 +899,7 @@ public sealed class DirectManager
                     var reply = await RequestAsync(peer, new DirectRequestMessage { Action = DirectActions.Host }, token).ConfigureAwait(false);
                     if (!reply.Ok || string.IsNullOrEmpty(reply.Ssid) || string.IsNullOrEmpty(reply.Passphrase))
                         throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't start a direct connection.", peer.Name), declined: reply.Declined);
+                    if (current.DirectRoles.HasFlag(DirectRoles.Receiving)) _joinedReceivers[peer.Id] = 0;
                     var network = new DirectNetwork(reply.Ssid, reply.Passphrase) { HostIsComputer = IsComputer(current.Kind, current.Platform) };
                     Remember(peer.Id, peer.Name, peer.Fingerprint, peer.Kind, network);
                     if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
@@ -828,6 +956,14 @@ public sealed class DirectManager
     {
         var current = _discovery.Find(peer.Id) ?? peer;
         if (HasDirectPath(current)) return;
+        if (current.Endpoints.Count == 0 && KnownNetworkFor(peer.Id) != null && CanJoinAny)
+        {
+            // Not on this device's network at all (found over Bluetooth, or its network is in range): joining its
+            // network is the only way to reach it, whatever the Connection setting says.
+            await ConnectOnlyWayAsync(current, token).ConfigureAwait(false);
+            return;
+        }
+
         // Only when Direct is chosen (in Settings, or for this device): with Same Wi-Fi, Beam never goes looking for
         // the other device's own network.
         if (MethodFor(peer.Id) != ConnectionMethod.Direct) return;
@@ -868,6 +1004,25 @@ public sealed class DirectManager
                 Report(ex);
             }
         }
+    }
+
+    private async Task ConnectOnlyWayAsync(DeviceInfo peer, CancellationToken token)
+    {
+        try
+        {
+            await ConnectAsync(peer, viaKnownNetwork: true, token).ConfigureAwait(false);
+        }
+        catch (DirectLinkException ex) when (!ex.Declined && RefreshNetwork is { } refresh && !token.IsCancellationRequested)
+        {
+            // Its passphrase may have changed since: ask it again over Bluetooth, then try once more.
+            Log.Info($"Direct: joining {peer.Name}'s network failed ({ex.Message}); asking it for its current details");
+            if (!await refresh(peer, token).ConfigureAwait(false)) throw;
+            await ConnectAsync(peer, viaKnownNetwork: true, token).ConfigureAwait(false);
+        }
+
+        if (peer.DirectRoles.HasFlag(DirectRoles.Receiving) || _discovery.Find(peer.Id)?.DirectRoles.HasFlag(DirectRoles.Receiving) == true)
+            _joinedReceivers[peer.Id] = 0;
+        _directFailures.TryRemove(peer.Id, out _);
     }
 
     private void DirectFailed(string peerId) =>
@@ -951,7 +1106,8 @@ public sealed class DirectManager
         DirectAddresses.Invalidate();
         // The host's address on the new network is known: try Beam's port there right away instead of waiting for
         // discovery (which can take several seconds after a network change).
-        var port = (_discovery.Find(peer.Id) ?? peer).Endpoints.FirstOrDefault()?.Port ?? AppInfo.TransferPort;
+        var port = (_discovery.Find(peer.Id) ?? peer).Endpoints.FirstOrDefault()?.Port
+                   ?? (KnownNetworkFor(peer.Id) is { Port: > 0 } known ? known.Port : AppInfo.TransferPort);
         var deadline = Environment.TickCount64 + (long)FindTimeout.TotalMilliseconds;
         var next = 0L;
         while (Environment.TickCount64 < deadline)
@@ -1056,11 +1212,13 @@ public sealed class DirectManager
                     _hostRequestedBy[peerId] = Environment.TickCount64;
                 }
 
-                if (!IsTrusted(peerFingerprint) && !await AskAsync(new DirectApproval(peerName, LeavesWiFi: false, KeepsInternet: true)).ConfigureAwait(false))
+                // With Receive open the network is on for senders anyway: nothing to ask.
+                if (!_receiving && !IsTrusted(peerFingerprint) && !await AskAsync(new DirectApproval(peerName, LeavesWiFi: false, KeepsInternet: true)).ConfigureAwait(false))
                     throw new DirectLinkException(L.T("{0} didn't allow the direct connection.", _settings.Current.DeviceName), declined: true);
                 var network = await HostOwnNetworkAsync(token).ConfigureAwait(false);
                 _linkedPeers[peerId] = 0;
-                if (fromComputer && _selfIsComputer && _computerPlan.TryAdd(peerId, Plan.HostForPeer))
+                if (_receiving) _linkedPeers[ReceiveUser] = 0;
+                else if (fromComputer && _selfIsComputer && _computerPlan.TryAdd(peerId, Plan.HostForPeer))
                     _ = WatchComputerLinkAsync(peerId, pressedHere: false);
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 Log.Info($"Direct: started {network.Ssid} for {peerName}");
@@ -1180,6 +1338,7 @@ public sealed class DirectManager
             _link.Stop();
             HostedNetwork = null;
             Log.Info("Direct: link stopped");
+            RotateIfPending();
         }
         catch (Exception ex)
         {
@@ -1238,6 +1397,8 @@ public sealed class DirectManager
         var mine = Roles;
         var theirs = peer.DirectRoles;
         var peerIsComputer = IsComputer(peer.Kind, peer.Platform);
+        // Receive is open there: it hosts, whoever sends to it joins (a phone, or a computer as ordinary Wi-Fi).
+        if (theirs.HasFlag(DirectRoles.Receiving) && theirs.HasFlag(DirectRoles.Host) && CanJoinAny) return Plan.JoinPeer;
         // Two computers: only through "Connect directly" (where the computer it was pressed on joins), never by themselves.
         if (_selfIsComputer && peerIsComputer) return _computerPlan.TryGetValue(peer.Id, out var asked) ? asked : Plan.None;
         var canJoinPeer = CanJoin(peerIsComputer) && theirs.HasFlag(DirectRoles.Host);

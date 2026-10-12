@@ -17,6 +17,7 @@ namespace Beam.App.ViewModels;
 public enum Page
 {
     Home,
+    Receive,
     Phone,
     History,
     Settings,
@@ -53,6 +54,7 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
 
         Home = new HomeViewModel(node, ui, this);
         Phone = new PhoneViewModel(node, ui, this);
+        Receive = new ReceiveViewModel(node, this);
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
 
@@ -136,6 +138,8 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
 
     public PhoneViewModel Phone { get; }
 
+    public ReceiveViewModel Receive { get; }
+
     public HistoryViewModel History { get; }
 
     public SettingsViewModel Settings { get; }
@@ -143,6 +147,7 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     public object CurrentPage => _page switch
     {
         Page.Phone => Phone,
+        Page.Receive => Receive,
         Page.History => History,
         Page.Settings => Settings,
         Page.Transfers => _transfersPage ??= new TransfersPage(this),
@@ -157,6 +162,15 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
         set
         {
             if (value) Navigate(Page.Home);
+        }
+    }
+
+    public bool IsReceivePage
+    {
+        get => _page == Page.Receive;
+        set
+        {
+            if (value) Navigate(Page.Receive);
         }
     }
 
@@ -236,6 +250,7 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     /// <summary>Shows the first-run screen if needed, then starts networking.</summary>
     public async Task InitializeAsync(CommandLine commandLine)
     {
+        if (_page == Page.Home) Node.Nearby.SetLooking(true);
         if (_platform.SupportsStartWithSystem && Node.Settings.Current.StartWithWindows != _platform.GetStartWithSystem())
             Node.Settings.Update(s => s.StartWithWindows = _platform.GetStartWithSystem());
 
@@ -378,12 +393,17 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
         if (_page == Page.Settings && page != Page.Settings) Settings.SaveName();
         if (_page == page) return;
         if (_page == Page.Phone) Phone.OnHidden();
+        if (_page == Page.Receive && page != Page.Receive) Receive.OnHidden();
+        if (page != Page.Home) Node.Nearby.SetLooking(false);
         _page = page;
         if (page == Page.Phone) Phone.OnShown();
+        if (page == Page.Receive) Receive.OnShown();
+        if (page == Page.Home) Node.Nearby.SetLooking(true);
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageKind));
         OnPropertyChanged(nameof(IsHomePage));
         OnPropertyChanged(nameof(IsPhonePage));
+        OnPropertyChanged(nameof(IsReceivePage));
         OnPropertyChanged(nameof(IsHistoryPage));
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsTransfersPage));
@@ -392,6 +412,8 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
     /// <summary>Starts sending to one device. Returns false (after telling the user why) if it couldn't start.</summary>
     public async Task<bool> StartSendAsync(DeviceInfo device, IReadOnlyList<string> paths)
     {
+        if (await ResolveAsync(device) is not { } target) return false;
+        device = target;
         try
         {
             Node.Send(device, paths);
@@ -407,11 +429,35 @@ public sealed class MainViewModel : ObservableObject, IComputerLinks, IIncomingT
         }
     }
 
+    /// <summary>
+    /// A device heard only over Bluetooth: get its details first (Bluetooth handshake; it starts its own Wi-Fi). Null,
+    /// after telling the user why, when that fails.
+    /// </summary>
+    private async Task<DeviceInfo?> ResolveAsync(DeviceInfo device)
+    {
+        if (!Beam.Core.Nearby.NearbyService.IsPlaceholder(device)) return device;
+        if (IsPhone && !await EnsurePermissionAsync(AppPermission.NearbyDevices)) return null; // to join its Wi-Fi
+        try
+        {
+            return await Node.Nearby.ResolveAsync(device, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Couldn't reach {device.Name} over Bluetooth: {ex.Message}");
+            await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't send to {0}", device.Name),
+                ex is Beam.Core.Direct.DirectLinkException ? ex.Message : L.T("{0} didn't answer over Bluetooth. Move closer and try again.", device.Name),
+                L.T("OK"), ""));
+            return null;
+        }
+    }
+
     internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);
 
     /// <summary>Sends text to one device. Returns false (after telling the user why) if it couldn't start.</summary>
     public async Task<bool> StartSendTextAsync(DeviceInfo device, string text)
     {
+        if (await ResolveAsync(device) is not { } target) return false;
+        device = target;
         try
         {
             Node.SendText(device, text);

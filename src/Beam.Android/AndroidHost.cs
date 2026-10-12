@@ -53,6 +53,7 @@ internal static class AndroidHost
             ExternalFiles = new ContentFiles(Context.ContentResolver!),
             DeviceKind = DeviceKinds.Phone,
             DirectLink = directLink,
+            NearbyRadio = new AndroidNearbyRadio(Context),
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>
@@ -114,6 +115,20 @@ internal static class AndroidHost
         Interlocked.Exchange(ref _permission, waiting)?.TrySetResult(false);
         var code = Interlocked.Increment(ref _permissionRequest);
         activity.RunOnUiThread(() => activity.RequestPermissions(new[] { permission }, code));
+        return waiting.Task;
+    }
+
+    /// <summary>Asks for several permissions at once (one system prompt when they form one group, like Nearby devices).</summary>
+    public static Task<bool> RequestPermissionsAsync(params string[] permissions)
+    {
+        Activity? activity = null;
+        if (_activity?.TryGetTarget(out activity) != true || activity == null) return Task.FromResult(false);
+        var missing = permissions.Where(p => activity.CheckSelfPermission(p) != Permission.Granted).ToArray();
+        if (missing.Length == 0) return Task.FromResult(true);
+        var waiting = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref _permission, waiting)?.TrySetResult(false);
+        var code = Interlocked.Increment(ref _permissionRequest);
+        activity.RunOnUiThread(() => activity.RequestPermissions(missing, code));
         return waiting.Task;
     }
 

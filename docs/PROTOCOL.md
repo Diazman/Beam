@@ -74,3 +74,29 @@ receiver → Result {completed:1}                      the text was shown (or co
   other device otherwise. Protocol-1 receivers would reject the unknown frame type.
 - Receivers show text from trusted devices without asking (copied to the clipboard with a notification); otherwise they
   show it and let the user copy it or, for a single `http(s)` link, open it. Other URI schemes are never opened.
+
+## Nearby over Bluetooth LE (Receive / Send without a shared network)
+
+A device with **Receive** open advertises a beacon. A device with **Send** open lists the beacons it hears.
+Sending to one first runs a handshake over GATT. The handshake hands the sender what a pairing QR code would: the
+receiver's id, name, certificate fingerprint, addresses, and its own network's name and passphrase. From there the
+sender joins that network and connects as usual (TLS, checked against the fingerprint; the receiver still approves).
+
+**Beacon** (manufacturer data, company id `0xFFFF`, at most 20 bytes):
+`"Bm"`, version `1`, flags (`1` its network is on, `2` computer, `4` can start a network),
+the first 6 bytes of SHA-256 of the device id, then the start of the name (UTF-8).
+Windows also advertises the GATT service separately; Android puts the service UUID in the scan response.
+
+**GATT**: service `8b2f6a10-4c1e-4d7b-9e55-3b0e5a1c7d01`, characteristic `8b2f6a11-…` (write, then read).
+
+1. The sender writes 72 bytes: version `1`, a fresh P-256 public key (65 bytes, uncompressed), and its own 6-byte id hash.
+   The id hash is a hint only: it tells the receiver whether the sender is a paired device.
+2. The sender reads until the answer isn't "working" (`[1, 0]`, sent while the receiver starts its network).
+   A refusal is `[1, 2, message…]`. A ready answer is `[1, 1]`, then the receiver's fresh P-256 key (65 bytes),
+   an IV (16), the ciphertext, and an HMAC (32).
+3. Keys: ECDH → SHA-256 → HKDF-SHA256 (salt = sender key ‖ receiver key, info `beam-nearby-v1`) → 32 bytes for
+   AES-256-CBC and 32 bytes for HMAC-SHA256. The HMAC covers everything before it (encrypt-then-MAC).
+   The plaintext is the pairing code as JSON.
+
+A device seen before must answer with the same fingerprint, or the sender refuses to connect.
+When the passphrase went to an unpaired sender, the receiver gives its network a new passphrase once the network is off.
