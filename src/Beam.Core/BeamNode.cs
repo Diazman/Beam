@@ -263,7 +263,7 @@ public sealed class BeamNode : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return; // safe to call more than once
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
-        Direct.Stop();
+        await Direct.StopAsync().ConfigureAwait(false);
         Discovery.Dispose();
         await PhoneLink.DisposeAsync().ConfigureAwait(false);
         await Transfers.DisposeAsync().ConfigureAwait(false);

@@ -43,6 +43,7 @@ public sealed class DiscoveryService : IDisposable
     private readonly ConcurrentDictionary<string, long> _lastReplyTo = new();
     private readonly ConcurrentDictionary<IPEndPoint, byte> _unicastTargets = new();
     private readonly ConcurrentDictionary<IPEndPoint, string> _failingTargets = new();
+    private readonly ConcurrentDictionary<string, string> _failingSends = new();
     private readonly object _sendGate = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _wake = new(0);
@@ -452,19 +453,21 @@ public sealed class DiscoveryService : IDisposable
                     {
                         socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, nic.Address.GetAddressBytes());
                         socket.SendTo(data, new IPEndPoint(_options.MulticastGroup, _options.Port));
+                        _failingSends.TryRemove($"Multicast on {nic.Address}", out _);
                     }
                     catch (Exception ex)
                     {
-                        Log.Warn($"Multicast on {nic.Address} failed: {ex.Message}");
+                        WarnOnce($"Multicast on {nic.Address}", ex.Message);
                     }
 
                     try
                     {
                         if (nic.Broadcast != null) socket.SendTo(data, new IPEndPoint(nic.Broadcast, _options.Port));
+                        _failingSends.TryRemove($"Broadcast on {nic.Address}", out _);
                     }
                     catch (Exception ex)
                     {
-                        Log.Warn($"Broadcast on {nic.Address} failed: {ex.Message}");
+                        WarnOnce($"Broadcast on {nic.Address}", ex.Message);
                         // The phone's own network is "unreachable": the socket is stuck on a network Beam left.
                         if (ex is SocketException { SocketErrorCode: SocketError.NetworkUnreachable } && OperatingSystem.IsAndroid()) reopen = true;
                     }
@@ -479,6 +482,14 @@ public sealed class DiscoveryService : IDisposable
             ReopenSocket();
             _interfacesRefreshedAt = 0; // join the multicast group again on the next tick
         }
+    }
+
+    /// <summary>Logs a failure once until it changes or the send works again (e.g. Android blocking a background app's network).</summary>
+    private void WarnOnce(string what, string error)
+    {
+        if (_failingSends.TryGetValue(what, out var known) && known == error) return;
+        _failingSends[what] = error;
+        Log.Warn($"{what} failed: {error}");
     }
 
     private void SendTo(DiscoveryPacket packet, IPEndPoint target) => SendTo(packet.Serialize(), target);

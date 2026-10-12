@@ -22,7 +22,7 @@ namespace Beam.App.Platform;
 /// To reach another computer directly, this PC's Wi-Fi can also join that computer's network (never a phone's: phones
 /// join the PC), and goes back to the Wi-Fi it was on when the link stops.
 /// </summary>
-internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInternetSharing
+internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInternetSharing, IAsyncDisposable
 {
     private readonly Func<string> _deviceName;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -36,13 +36,17 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private string? _addedProfile; // a Wi-Fi profile Beam added to join by name (removed when leaving)
 #endif
     private DirectNetwork? _network;
+    private long _ops; // order of start/stop requests, so a late stop doesn't undo a newer start
+    private long _lastStartOp;
 
     private WindowsDirectLink(Func<string> deviceName) => _deviceName = deviceName;
 
     public DirectRoles Roles => DirectRoles.Host | DirectRoles.JoinComputers;
 
+#if WINDOWS_WINRT
     private bool _canShare;
     private long _canShareCheckedAt = long.MinValue / 2;
+#endif
 
     /// <summary>
     /// This PC's network would share its internet: it is online and Windows can run its Mobile hotspot from here (and the
@@ -89,10 +93,34 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
 #endif
     }
 
+    /// <summary>How long starting this PC's network may take before Beam gives up (so one stuck attempt can't block the rest).</summary>
+    private static readonly TimeSpan HostTimeout = TimeSpan.FromSeconds(45);
+
+    private static readonly TimeSpan JoinTimeout = TimeSpan.FromSeconds(100);
+
     public async Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _lastStartOp = Interlocked.Increment(ref _ops);
         try
+        {
+            // On a pool thread (not the window's), with a time limit: Windows' Wi-Fi calls can hang.
+            return await Task.Run(() => HostCoreAsync(preferred, cancellationToken), cancellationToken)
+                .WaitAsync(HostTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Log.Warn("Direct network: Windows didn't finish starting it in time");
+            throw new DirectLinkException(L.T("This computer's Wi-Fi didn't start the direct connection in time. Make sure Wi-Fi is turned on."));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<DirectNetwork> HostCoreAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
+    {
         {
 #if WINDOWS_WINRT
             if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
@@ -108,6 +136,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
                 return _network;
             }
 
+            Log.Info($"Wi-Fi Direct: starting {network.Ssid}");
             var publisher = new WiFiDirectAdvertisementPublisher();
             var advertisement = publisher.Advertisement;
             advertisement.IsAutonomousGroupOwnerEnabled = true;
@@ -161,18 +190,32 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             throw new DirectLinkException(L.T("This device can't connect directly."));
 #endif
         }
+    }
+
+    /// <summary>Joins another computer's direct network with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
+    public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _lastStartOp = Interlocked.Increment(ref _ops);
+        try
+        {
+            return await Task.Run(() => JoinCoreAsync(network, cancellationToken), cancellationToken)
+                .WaitAsync(JoinTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Log.Warn($"Wi-Fi: joining {network.Ssid} didn't finish in time");
+            throw new DirectLinkException(L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
+        }
         finally
         {
             _gate.Release();
         }
     }
 
-    /// <summary>Joins another computer's direct network with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
-    public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
+    private async Task<IPAddress?> JoinCoreAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
 #if WINDOWS_WINRT
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
         {
             if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
                 throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
@@ -230,32 +273,66 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host}");
             return host;
         }
-        finally
-        {
-            _gate.Release();
-        }
 #else
         await Task.CompletedTask.ConfigureAwait(false);
         throw new DirectLinkException(L.T("This device can't connect directly."));
 #endif
     }
 
-    public void Stop()
+    /// <summary>Beam is closing: stop the network now and wait for it (the caller limits how long).</summary>
+    public async ValueTask DisposeAsync()
     {
-        _gate.Wait();
+        Interlocked.Increment(ref _ops);
+        var locked = await _gate.WaitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false); // stop anyway if something hangs
         try
         {
 #if WINDOWS_WINRT
             StopPublisher();
-            StopHotspotAsync().GetAwaiter().GetResult();
+            await StopHotspotAsync().ConfigureAwait(false);
             LeaveJoinedNetwork();
 #endif
             _network = null;
         }
         finally
         {
-            _gate.Release();
+            if (locked) _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Stops this PC's network (and leaves another computer's) in the background: never blocks the caller (often the
+    /// window), and is skipped when the network was started again after the stop was asked for.
+    /// </summary>
+    public void Stop()
+    {
+        var op = Interlocked.Increment(ref _ops);
+        _ = Task.Run(async () =>
+        {
+            if (!await _gate.WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false))
+            {
+                Log.Warn("Direct network: couldn't stop it (still busy)");
+                return;
+            }
+
+            try
+            {
+                if (Volatile.Read(ref _lastStartOp) > op) return; // started again meanwhile: keep it
+#if WINDOWS_WINRT
+                StopPublisher();
+                await StopHotspotAsync().ConfigureAwait(false);
+                LeaveJoinedNetwork();
+#endif
+                _network = null;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Direct network: stopping failed", ex);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        });
     }
 
 #if WINDOWS_WINRT
@@ -402,8 +479,16 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             var manager = NetworkOperatorTetheringManager.CreateFromConnectionProfile(profile);
             if (manager.TetheringOperationalState != TetheringOperationalState.Off)
             {
-                Log.Info($"Hotspot: already {manager.TetheringOperationalState} (turned on in Windows); using a Wi-Fi Direct network");
-                return false;
+                if (!File.Exists(HotspotMarker))
+                {
+                    Log.Info($"Hotspot: already {manager.TetheringOperationalState} (turned on in Windows); using a Wi-Fi Direct network");
+                    return false;
+                }
+
+                // Beam's own, left on by an earlier run (closed or crashed before stopping it): start it afresh.
+                Log.Info("Hotspot: Beam's hotspot from an earlier run is still on; restarting it");
+                await manager.StopTetheringAsync().AsTask(cancellationToken).WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+                DeleteHotspotMarker();
             }
 
             NetworkOperatorTetheringOperationResult result;
@@ -430,6 +515,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             }
 
             _hotspot = manager;
+            WriteHotspotMarker(network.Ssid);
             Log.Info($"Hotspot {network.Ssid} started, sharing this PC's internet ({profile.ProfileName})");
             return true;
         }
@@ -444,11 +530,41 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         }
     }
 
+    /// <summary>Exists while Beam's hotspot is on, so the next run knows a hotspot still on is Beam's own.</summary>
+    private static string HotspotMarker =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Beam", "hotspot-on");
+
+    private static void WriteHotspotMarker(string ssid)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(HotspotMarker)!);
+            File.WriteAllText(HotspotMarker, ssid);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Hotspot: couldn't note that it's on", ex);
+        }
+    }
+
+    private static void DeleteHotspotMarker()
+    {
+        try
+        {
+            File.Delete(HotspotMarker);
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
     private async Task StopHotspotAsync()
     {
         var manager = _hotspot;
         _hotspot = null;
         if (manager == null) return;
+        DeleteHotspotMarker();
         try
         {
             if (manager.TetheringOperationalState != TetheringOperationalState.Off)

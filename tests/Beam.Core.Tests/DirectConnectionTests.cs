@@ -178,6 +178,21 @@ public class DirectConnectionTests
         Assert.Equal(TransferPath.Direct, paths.First(p => p != TransferPath.Unknown));
     }
 
+    [Fact]
+    public async Task ClosingBeamTurnsItsNetworkOffEvenWhileAPhoneUsesIt()
+    {
+        // It stayed on after Beam closed, and the next start found "a hotspot already on".
+        var air = new FakeDirectAir();
+        var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct)); // the PC hosts for the phone
+        Assert.Equal(0, air.Stopped);
+
+        await pc.DisposeAsync();
+        Assert.True(air.Stopped >= 1, "the PC's network was left on");
+    }
+
     private static readonly DirectRoles PcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
 
     /// <summary><paramref name="sender"/> sends to <paramref name="other"/> and the transfer goes over <paramref name="expected"/>.</summary>
