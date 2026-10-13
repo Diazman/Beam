@@ -93,6 +93,10 @@ public class NearbyTests
             Assert.DoesNotContain(phone.Node.Discovery.Devices, NearbyService.IsPlaceholder);
             Assert.DoesNotContain(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == device.Id); // found, not trusted
 
+            // Bluetooth keeps listing it (as a computer that can join others' networks).
+            await Task.Delay(300);
+            Assert.True(phone.Node.Discovery.Find(device.Id)!.DirectRoles.HasFlag(DirectRoles.JoinComputers));
+
             // Sending: the phone starts its network and asks the PC over Bluetooth to join it.
             var file = phone.CreateFile("photo.jpg", 300_000);
             var session = phone.Node.Send(device, new[] { file });

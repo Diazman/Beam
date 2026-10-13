@@ -393,7 +393,7 @@ public sealed class NearbyService : INearbyResponder
                 Name = known.Name,
                 Fingerprint = known.Fingerprint,
                 Kind = string.IsNullOrEmpty(known.Kind) ? KindOf(beacon) : known.Kind,
-                DirectRoles = DirectRoles.Host | DirectRoles.Receiving,
+                DirectRoles = RolesOf(beacon),
             });
         }
         else
@@ -405,12 +405,18 @@ public sealed class NearbyService : INearbyResponder
                 Fingerprint = "",
                 Kind = KindOf(beacon),
                 Platform = BluetoothPlatform,
-                DirectRoles = DirectRoles.Host | DirectRoles.Receiving,
+                DirectRoles = RolesOf(beacon),
             });
         }
 
         if (isNew) Changed?.Invoke();
     }
+
+    /// <summary>What a device heard over Bluetooth can do (a computer joins others' networks as ordinary Wi-Fi).</summary>
+    private static DirectRoles RolesOf(NearbyBeacon beacon) =>
+        DirectRoles.Receiving
+        | (beacon.Flags.HasFlag(NearbyBeaconFlags.CanHost) ? DirectRoles.Host : DirectRoles.None)
+        | (beacon.Flags.HasFlag(NearbyBeaconFlags.Computer) ? DirectRoles.JoinComputers : DirectRoles.Join);
 
     private static string KindOf(NearbyBeacon beacon) => beacon.Flags.HasFlag(NearbyBeaconFlags.Computer) ? DeviceKinds.Desktop : DeviceKinds.Phone;
 
