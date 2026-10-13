@@ -128,27 +128,23 @@ public class DirectConnectionTests
     }
 
     [Fact]
-    public async Task APairedPhoneSendingJoinsThePcsNetworkItselfAndGoesDirectAgainAfterAWiFiDetour()
+    public async Task APhoneSendingToAComputerHostsAndGoesDirectAgainAfterAWiFiDetour()
     {
         var air = new FakeDirectAir();
         var slow = new SlowFiles();
-        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
-        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
-        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: phoneLink, kind: DeviceKinds.Phone);
-        pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
-        pc.Node.Nearby.SetReceiving(true);
-        await pc.Node.Direct.HostForNearbyAsync(CancellationToken.None); // as when a sender asks for it over Bluetooth
-        phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
+        var pcRoles = DirectRoles.Host | DirectRoles.JoinComputers;
+        await using var pc = new TestNode("Laptop", directLink: air.Link(pcRoles), kind: DeviceKinds.Laptop);
+        var phoneRoles = DirectRoles.Host | DirectRoles.Join;
+        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
-        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
-        var hosted = air.Hosted;
+        air.Connect(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
 
-        // The phone sees the PC's network: it joins it without asking the PC over the Wi-Fi first.
+        // The phone prefers direct: it starts its network, the PC joins (no prompt on the PC).
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 6);
         var first = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
         await Wait.UntilAsync(() => first.Path == TransferPath.Direct, because: "direct from the start");
-        Assert.Equal(hosted, air.Hosted);
-        Assert.Equal(1, air.Joined);
+        Assert.Equal(phoneRoles, air.LastHost);
+        Assert.Equal(pcRoles, air.LastJoiner);
 
         // "Switch to Wi-Fi" on that transfer, then it finishes.
         Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.SameNetwork));
@@ -204,8 +200,6 @@ public class DirectConnectionTests
             Laptop = new TestNode("Laptop", directLink: LaptopLink, kind: DeviceKinds.Laptop);
             if (deskTrustsLaptop)
                 Desk.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = Laptop.Node.Identity.Fingerprint, DeviceId = Laptop.Node.Identity.DeviceId, Name = "Laptop" }));
-            Desk.Node.Direct.Approve = a => { lock (DeskAsked) DeskAsked.Add(a); return Task.FromResult(DeskAllows); };
-            Laptop.Node.Direct.Approve = a => { lock (LaptopAsked) LaptopAsked.Add(a); return Task.FromResult(true); };
             Air.Connect(Laptop.Node, () => Laptop.AsDevice(), Desk.Node, () => Desk.AsDevice());
         }
 
@@ -214,9 +208,6 @@ public class DirectConnectionTests
         public IDirectLink LaptopLink { get; }
         public TestNode Desk { get; }
         public TestNode Laptop { get; }
-        public bool DeskAllows { get; set; } = true;
-        public List<DirectApproval> DeskAsked { get; } = new();
-        public List<DirectApproval> LaptopAsked { get; } = new();
         public string DeskId => Desk.Node.Identity.DeviceId;
         public string LaptopId => Laptop.Node.Identity.DeviceId;
 
@@ -241,7 +232,6 @@ public class DirectConnectionTests
             await SendAsync(pcs.Laptop, pcs.Desk, TransferPath.Direct);
             Assert.Same(pcs.DeskLink, pcs.Air.LastHostLink);
             Assert.Same(pcs.LaptopLink, pcs.Air.LastJoinLink);
-            Assert.Empty(pcs.DeskAsked);
 
             // Done sending: the laptop goes back to its own Wi-Fi.
             await Wait.UntilAsync(() => pcs.Air.Stopped >= 1, because: "the laptop left the desk's network");

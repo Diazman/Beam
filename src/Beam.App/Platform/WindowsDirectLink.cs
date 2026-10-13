@@ -125,6 +125,12 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         {
 #if WINDOWS_WINRT
             await EnsureWifiOnAsync().ConfigureAwait(false);
+            if (_joinedAdapter != null)
+            {
+                Log.Info($"Wi-Fi: leaving {_joinedSsid} before starting this PC's own network");
+                LeaveJoinedNetwork();
+            }
+
             if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
                 && (preferred == null || preferred == _network)) return _network;
             if (_hotspot?.TetheringOperationalState == TetheringOperationalState.On && _network != null
@@ -220,6 +226,16 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
 #if WINDOWS_WINRT
         {
             await EnsureWifiOnAsync().ConfigureAwait(false);
+            // This PC's own network must go first: every Windows hotspot is 192.168.137.1, so with its own still on, this
+            // PC would reach itself at the other's address.
+            if (_publisher != null || _hotspot != null)
+            {
+                Log.Info($"Wi-Fi: stopping this PC's own network {_network?.Ssid} before joining {network.Ssid}");
+                StopPublisher();
+                await StopHotspotAsync().ConfigureAwait(false);
+                _network = null;
+            }
+
             if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
                 throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
             var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);

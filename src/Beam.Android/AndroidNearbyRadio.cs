@@ -173,14 +173,14 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
 
     private void Deliver(string key, byte[] buffer)
     {
-        if (buffer.Length < NearbyHandshake.RequestLength)
+        if (NearbyHandshake.ExpectedLength(buffer) is not { } length || buffer.Length < length)
         {
             _writes[key] = buffer;
             return;
         }
 
         _writes.TryRemove(key, out _);
-        _responder?.Request(key, buffer[..NearbyHandshake.RequestLength]);
+        _responder?.Request(key, buffer[..length]);
     }
 
     private static byte[] Place(byte[] existing, int offset, byte[] data)

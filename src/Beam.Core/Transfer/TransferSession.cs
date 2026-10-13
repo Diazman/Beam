@@ -63,6 +63,9 @@ public sealed class TransferSession
     private readonly List<FileFailure> _failures = new();
     private CancellationTokenSource _cts = new();
     private long _totalBytes;
+    private long _transferStartedAt;
+    private long _bytesAtStart;
+    private readonly List<TransferPath> _paths = new();
     private long _transferredBytes;
     private int _totalFiles;
     private int _completedFiles;
@@ -268,11 +271,25 @@ public sealed class TransferSession
         return true;
     }
 
+    /// <summary>For the log: how much went how fast, and over which connections ("Direct", "Network → Direct").</summary>
+    public string RateSummary()
+    {
+        lock (_gate)
+        {
+            var bytes = _transferredBytes - _bytesAtStart;
+            var seconds = _transferStartedAt == 0 ? 0 : (Environment.TickCount64 - _transferStartedAt) / 1000.0;
+            var rate = seconds > 0.5 ? $"{bytes / seconds / 1_000_000:0.0} MB/s" : "-";
+            var paths = _paths.Count == 0 ? "unknown" : string.Join(" → ", _paths);
+            return $"{bytes / 1_000_000.0:0.0} MB in {seconds:0.0} s, {rate}, over {paths}";
+        }
+    }
+
     internal void SetPath(TransferPath path, bool switching = false)
     {
         lock (_gate)
         {
             if (_path == path && _switchingPath == switching) return;
+            if (path != TransferPath.Unknown && path != _path) _paths.Add(path);
             _path = path;
             _switchingPath = switching;
         }
@@ -335,6 +352,11 @@ public sealed class TransferSession
             if (IsFinalState(_state) && IsFinalState(state)) return; // first final state wins
             if (_state == state && error == null) return;
             _state = state;
+            if (state == TransferState.Transferring && _transferStartedAt == 0)
+            {
+                _transferStartedAt = Environment.TickCount64;
+                _bytesAtStart = _transferredBytes;
+            }
             if (error != null || !IsFinalState(state)) _error = error;
             if (IsFinalState(state))
             {

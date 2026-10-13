@@ -414,7 +414,7 @@ internal sealed class IncomingTransfer
                         _service.ResumeStore.Delete(record, deleteParts: true);
                         session.SetCurrentFile(null);
                         session.SetState(snapshot.FailedFiles > 0 ? TransferState.CompletedWithErrors : TransferState.Completed);
-                        Log.Info($"Received {session.Title} from {PeerName}: {snapshot.CompletedFiles} ok, {snapshot.FailedFiles} failed, {snapshot.SkippedFiles} skipped");
+                        Log.Info($"Received {session.Title} from {PeerName}: {snapshot.CompletedFiles} ok, {snapshot.FailedFiles} failed, {snapshot.SkippedFiles} skipped ({session.RateSummary()})");
                         return;
                     }
 

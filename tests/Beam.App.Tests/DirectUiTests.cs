@@ -35,8 +35,8 @@ public class DirectUiTests
         Assert.DoesNotContain("Connect directly", phone.VisibleTexts());
         phone.Screenshot("direct-01-over-wifi");
 
-        // Choosing Direct connection in Settings moves the running transfer onto a direct link.
-        phone.ViewModel.Settings.UseDirect = true;
+        // Turning on "Prefer direct connection" (Send page) moves the running transfer onto a direct link.
+        home.PreferDirect = true;
         await UiHarness.WaitForAsync(() => card.PathText == "Direct connection", "switched to direct", 25000);
         Assert.True(card.IsDirectPath);
         Assert.False(card.CanSwitchToDirect);
@@ -59,29 +59,23 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task SettingsOfferTheConnectionMethod()
+    public async Task TheConnectionChoiceIsOnSendAndReceiveNotInSettings()
     {
         await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true, directLink: new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.Join));
         await phone.InitializeAsync();
-        var settings = phone.ViewModel.Settings;
         phone.ViewModel.IsSettingsPage = true;
         await UiHarness.PumpAsync(100);
-        Assert.True(settings.UseSameNetwork);
-        Assert.True(settings.DirectSupported);
+        Assert.DoesNotContain("How devices connect", phone.VisibleTexts());
+        phone.ViewModel.IsHomePage = true;
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Prefer direct connection", phone.VisibleTexts());
 
-        settings.UseDirect = true;
-        Assert.Equal(ConnectionMethod.Direct, phone.Node.Settings.Current.Connection);
-        Assert.False(settings.UseSameNetwork);
-        Assert.Contains("Direct connection (Beta)", phone.VisibleTexts());
-        Assert.Empty(phone.TextOutsideWindow());
-        phone.Screenshot("direct-03-settings");
-
+        // A phone that can't connect directly doesn't offer it.
         await using var oldPhone = new UiHarness("Old phone", width: 400, height: 860, phone: true);
         await oldPhone.InitializeAsync();
-        Assert.False(oldPhone.ViewModel.Settings.DirectSupported);
-        oldPhone.ViewModel.IsSettingsPage = true;
         await UiHarness.PumpAsync(100);
-        Assert.Contains("This phone can't connect directly. Direct connections need Android 10 or newer.", oldPhone.VisibleTexts());
+        Assert.False(oldPhone.ViewModel.Home.CanConnectDirectly);
+        Assert.DoesNotContain("Prefer direct connection", oldPhone.VisibleTexts());
     }
 
     [AvaloniaFact]
@@ -114,9 +108,17 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
 
+        // Turning "Let senders connect directly" off turns it off too; back on, it starts again only when asked.
+        receive.AllowDirect = false;
+        await UiHarness.WaitForAsync(() => air.Stopped > 0 && !receive.NetworkOn, "own Wi-Fi off with the switch");
+        Assert.Null(await app.Node.Direct.HostForNearbyAsync(CancellationToken.None));
+        receive.AllowDirect = true;
+        await app.Node.Direct.HostForNearbyAsync(CancellationToken.None);
+        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on again");
+
         // Leaving Receive turns it off (at once here; after a few minutes in the app).
         app.ViewModel.ShowHomeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => air.Stopped > 0, "own Wi-Fi off");
+        await UiHarness.WaitForAsync(() => air.Stopped > 1, "own Wi-Fi off");
         Assert.False(app.Node.Nearby.IsReceiving);
 
         // Turned off: senders aren't offered a direct connection.

@@ -36,12 +36,6 @@ public enum DirectRoles
 
 }
 
-/// <summary>
-/// A request that needs this device's user to agree: another device asks this computer to start its own network for it,
-/// or (<see cref="LeavesWiFi"/>) to leave its Wi-Fi and join the other computer's network.
-/// </summary>
-public sealed record DirectApproval(string PeerName, bool LeavesWiFi, bool KeepsInternet);
-
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
 public interface IInternetSharing
 {
