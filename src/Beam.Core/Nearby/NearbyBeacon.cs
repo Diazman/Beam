@@ -6,7 +6,8 @@ namespace Beam.Core.Nearby;
 /// <summary>
 /// What a device with Receive open says over Bluetooth LE, in a legacy advertisement's manufacturer data (20 bytes at
 /// most, which every Windows and Android Bluetooth stack accepts next to the flags it adds): "Bm", version, flags, a short hash of the device id
-/// (so a sender can tell a device it already knows) and the start of its name. No secrets: anyone nearby can read it.
+/// (so a sender can tell a device it already knows), a checksum (a garbled read is dropped, not listed as a strange
+/// device) and the start of its name. No secrets: anyone nearby can read it.
 /// </summary>
 public sealed record NearbyBeacon(byte[] IdHash, string Name, NearbyBeaconFlags Flags)
 {
@@ -14,8 +15,8 @@ public sealed record NearbyBeacon(byte[] IdHash, string Name, NearbyBeaconFlags 
     public const ushort CompanyId = 0xFFFF;
 
     public const int MaxPayload = 20;
-    private const int HeaderLength = 10;
-    private const byte Version = 1;
+    private const int HeaderLength = 11;
+    private const byte Version = 2;
 
     /// <summary>The first 6 bytes of SHA-256 of the device id.</summary>
     public static byte[] HashOf(string deviceId) => SHA256.HashData(Encoding.UTF8.GetBytes(deviceId))[..6];
@@ -36,13 +37,15 @@ public sealed record NearbyBeacon(byte[] IdHash, string Name, NearbyBeaconFlags 
         bytes[3] = (byte)Flags;
         IdHash.AsSpan(0, 6).CopyTo(bytes.AsSpan(4));
         name.AsSpan(0, length).CopyTo(bytes.AsSpan(HeaderLength));
+        bytes[10] = Checksum(bytes);
         return bytes;
     }
 
     /// <summary>Reads manufacturer data; null when it isn't a Beam beacon this version understands.</summary>
     public static NearbyBeacon? TryParse(ReadOnlySpan<byte> data)
     {
-        if (data.Length < HeaderLength || data.Length > 64 || data[0] != 'B' || data[1] != 'm' || data[2] != Version) return null;
+        if (data.Length <= HeaderLength || data.Length > MaxPayload || data[0] != 'B' || data[1] != 'm' || data[2] != Version) return null;
+        if (data[10] != Checksum(data)) return null;
         string name;
         try
         {
@@ -53,7 +56,22 @@ public sealed record NearbyBeacon(byte[] IdHash, string Name, NearbyBeaconFlags 
             name = "";
         }
 
+        if (string.IsNullOrWhiteSpace(name)) return null;
         return new NearbyBeacon(data.Slice(4, 6).ToArray(), name, (NearbyBeaconFlags)data[3]);
+    }
+
+    /// <summary>CRC-8 (polynomial 0x07) of everything but the checksum byte itself.</summary>
+    private static byte Checksum(ReadOnlySpan<byte> data)
+    {
+        byte crc = 0;
+        for (var i = 0; i < data.Length; i++)
+        {
+            if (i == 10) continue;
+            crc ^= data[i];
+            for (var bit = 0; bit < 8; bit++) crc = (byte)((crc & 0x80) != 0 ? (crc << 1) ^ 0x07 : crc << 1);
+        }
+
+        return crc;
     }
 }
 

@@ -565,11 +565,12 @@
   "{0} didn't answer.": "{0} не ответил.",
   "{0} isn't nearby anymore. Open Receive on it and try again.": "{0} больше нет поблизости. Откройте на нём «Получить» и попробуйте снова.",
   "Connect to the other device directly first: faster, and no router needed. If that isn't possible, Beam uses the Wi-Fi network.": "Сначала подключаться к другому устройству напрямую: быстрее, и роутер не нужен. Если это невозможно, Beam использует сеть Wi-Fi.",
-  "Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.": "Собственная сеть Wi-Fi включается, когда отправитель хочет прямое подключение или у вас нет общей сети Wi-Fi.",
   "Let senders connect directly": "Разрешить отправителям подключаться напрямую",
   "Senders connect over the shared Wi-Fi.": "Отправители подключаются через общую сеть Wi-Fi.",
   "Turn on Wi-Fi to connect directly.": "Включите Wi-Fi, чтобы подключиться напрямую.",
-  "When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.": "Когда отправитель предпочитает прямое подключение, это устройство включает собственную сеть Wi-Fi, а Beam сам передаёт отправителю её пароль. Быстрее, и не нужны ни роутер, ни интернет.",
   "{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.": "{0} не разрешает отправителям подключаться напрямую. Beam использует сеть Wi-Fi.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} не разрешает отправителям подключаться напрямую. Подключите оба устройства к одной сети Wi-Fi."
+  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} не разрешает отправителям подключаться напрямую. Подключите оба устройства к одной сети Wi-Fi.",
+  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "Включите геолокацию, чтобы подключиться напрямую. Android требует её для прямых подключений; Beam не использует ваше местоположение.",
+  "Starting its own Wi-Fi…": "Включается собственная сеть Wi-Fi…",
+  "While Receive is open, this device keeps its own Wi-Fi on. Senders that prefer a direct connection join it; Beam gives them its password by itself. Faster, and no router or internet needed.": "Пока открыт раздел «Получить», это устройство держит включённой собственную сеть Wi-Fi. Отправители, предпочитающие прямое подключение, подключаются к ней; Beam сам передаёт им пароль. Быстрее, и не нужны ни роутер, ни интернет."
 }

@@ -79,27 +79,23 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task ReceiveStartsThisComputersWiFiWhenASenderWantsIt()
+    public async Task ReceiveKeepsThisComputersWiFiOnWhileSendersMayConnectDirectly()
     {
         var air = new FakeDirectAir();
         await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: new FakeNearbyAir().Radio());
         await app.InitializeAsync();
         var receive = app.ViewModel.Receive;
 
+        // Receive open, "Let senders connect directly" on: its own Wi-Fi goes on right away, and phones are warned it
+        // has no internet.
         app.ViewModel.IsReceivePage = true;
-        await UiHarness.PumpAsync(200);
-        Assert.Equal(0, air.Hosted); // nothing started until a sender asks
+        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on");
         Assert.True(app.Node.Nearby.IsReceiving);
         Assert.True(receive.AllowDirect);
+        await UiHarness.PumpAsync(100);
         Assert.Contains("Ready to receive", app.VisibleTexts());
         Assert.Contains("Let senders connect directly", app.VisibleTexts());
         Assert.Contains("Devices nearby can find it over Bluetooth, even without a shared Wi-Fi.", app.VisibleTexts());
-        Assert.Contains("Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.", app.VisibleTexts());
-
-        // A sender asks: its own Wi-Fi starts, and phones are warned it has no internet.
-        await app.Node.Direct.HostForNearbyAsync(CancellationToken.None);
-        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on");
-        await UiHarness.PumpAsync(100);
         Assert.Contains("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
         Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("receive-01-direct");
@@ -108,12 +104,11 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
 
-        // Turning "Let senders connect directly" off turns it off too; back on, it starts again only when asked.
+        // Turning "Let senders connect directly" off turns it off too; back on, it goes on again.
         receive.AllowDirect = false;
         await UiHarness.WaitForAsync(() => air.Stopped > 0 && !receive.NetworkOn, "own Wi-Fi off with the switch");
         Assert.Null(await app.Node.Direct.HostForNearbyAsync(CancellationToken.None));
         receive.AllowDirect = true;
-        await app.Node.Direct.HostForNearbyAsync(CancellationToken.None);
         await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on again");
 
         // Leaving Receive turns it off (at once here; after a few minutes in the app).

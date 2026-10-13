@@ -424,17 +424,28 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
     }
 
-    private bool _bluetoothAsked;
+    private bool _radiosChecked;
 
     /// <summary>
-    /// Send or Receive opened with Bluetooth off: turn it on (Windows does it; Android shows its one-tap prompt), once
-    /// per run so a "no" isn't asked again and again.
+    /// Send or Receive opened: get what direct connections need, once per run so a "no" isn't asked again and again. On
+    /// phones: the Nearby devices permissions (Wi-Fi and Bluetooth). Then Bluetooth on: Windows turns it on itself;
+    /// Android shows its one-tap prompt.
     /// </summary>
-    internal void EnsureBluetoothOn()
+    internal async void EnsureBluetoothOn()
     {
-        if (_bluetoothAsked || Node.Nearby.State != Beam.Core.Nearby.NearbyRadioState.Off) return;
-        _bluetoothAsked = true;
-        _ = Node.Nearby.TurnOnAsync();
+        if (_radiosChecked) return;
+        _radiosChecked = true;
+        try
+        {
+            if (IsPhone && Node.Direct.IsSupported && !_platform.HasPermission(AppPermission.NearbyDevices))
+                await EnsurePermissionAsync(AppPermission.NearbyDevices);
+            if (Node.Nearby.State == Beam.Core.Nearby.NearbyRadioState.NeedsPermission) await Node.Nearby.RequestPermissionAsync();
+            if (Node.Nearby.State == Beam.Core.Nearby.NearbyRadioState.Off) await Node.Nearby.TurnOnAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Getting Wi-Fi and Bluetooth ready failed: {ex.Message}");
+        }
     }
 
     internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);

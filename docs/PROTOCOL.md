@@ -83,8 +83,9 @@ receiver's id, name, certificate fingerprint, addresses, and its own network's n
 sender joins that network and connects as usual (TLS, checked against the fingerprint; the receiver still approves).
 
 **Beacon** (manufacturer data, company id `0xFFFF`, at most 20 bytes):
-`"Bm"`, version `1`, flags (`1` its network is on, `2` computer, `4` can start a network),
-the first 6 bytes of SHA-256 of the device id, then the start of the name (UTF-8).
+`"Bm"`, version `2`, flags (`1` its network is on, `2` computer, `4` can start a network),
+the first 6 bytes of SHA-256 of the device id, a CRC-8 (polynomial 0x07) over all other bytes, then the start of the
+name (UTF-8, not empty). Beacons that fail the check are ignored (garbled reads used to show up as extra devices).
 Windows also advertises the GATT service separately; Android puts the service UUID in the scan response.
 
 **GATT**: service `8b2f6a10-4c1e-4d7b-9e55-3b0e5a1c7d01`, characteristic `8b2f6a11-…` (write, then read).

@@ -138,12 +138,34 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             StopPublisher();
             await StopHotspotAsync().ConfigureAwait(false);
             var network = preferred ?? DirectNetwork.Create(_deviceName());
-            if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
+            // A Wi-Fi Direct network first: phones join it reliably. Windows' Mobile hotspot (which shares this PC's
+            // internet) only when that can't start: phones' join requests to it often went unanswered.
+            try
             {
-                _network = network with { SharesInternet = true };
-                return _network;
+                return await StartPublisherAsync(network, cancellationToken).ConfigureAwait(false);
             }
+            catch (DirectLinkException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                Log.Info($"Wi-Fi Direct: {network.Ssid} didn't start ({ex.Message}); trying the Mobile hotspot");
+                if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
+                {
+                    _network = network with { SharesInternet = true };
+                    return _network;
+                }
 
+                throw;
+            }
+#else
+            await Task.CompletedTask.ConfigureAwait(false);
+            throw new DirectLinkException(L.T("This device can't connect directly."));
+#endif
+        }
+    }
+
+#if WINDOWS_WINRT
+    private async Task<DirectNetwork> StartPublisherAsync(DirectNetwork network, CancellationToken cancellationToken)
+    {
+        {
             Log.Info($"Wi-Fi Direct: starting {network.Ssid}");
             var publisher = new WiFiDirectAdvertisementPublisher();
             var advertisement = publisher.Advertisement;
@@ -193,12 +215,9 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             _network = network;
             Log.Info($"Wi-Fi Direct network {network.Ssid} started");
             return network;
-#else
-            await Task.CompletedTask.ConfigureAwait(false);
-            throw new DirectLinkException(L.T("This device can't connect directly."));
-#endif
         }
     }
+#endif
 
     /// <summary>Joins another computer's direct network with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
     public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
@@ -459,24 +478,26 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             {
                 var result = await adapter.ConnectAsync(network, WiFiReconnectionKind.Automatic).AsTask().ConfigureAwait(false); // its saved profile
                 Log.Info($"Wi-Fi: back on {previous} ({result.ConnectionStatus})");
+                if (result.ConnectionStatus == WiFiConnectionStatus.Success) return;
             }
-            else
-            {
-                // No scan results (location access off): connect with its saved profile by name.
-                Log.Info($"Wi-Fi: back on {previous} by name ({await WlanProfiles.ReconnectAsync(previous).ConfigureAwait(false)})");
-            }
+
+            // No scan results (location access off), or Windows turned the connection down: its saved profile by name.
+            Log.Info($"Wi-Fi: back on {previous} by name ({await WlanProfiles.ReconnectAsync(previous).ConfigureAwait(false)})");
         }
         catch (Exception ex)
         {
-            Log.Warn($"Wi-Fi: going back to {previous} failed", ex);
+            Log.Warn($"Wi-Fi: going back to {previous} failed ({ex.Message}); trying its saved profile by name");
+            try
+            {
+                Log.Info($"Wi-Fi: back on {previous} by name ({await WlanProfiles.ReconnectAsync(previous).ConfigureAwait(false)})");
+            }
+            catch (Exception again)
+            {
+                Log.Warn($"Wi-Fi: going back to {previous} by name failed: {again.Message}");
+            }
         }
     }
 
-    /// <summary>
-    /// Starts Windows' Mobile hotspot as <paramref name="network"/>, sharing this PC's internet. False (and the plain
-    /// Wi-Fi Direct network is used) when there's no internet, the Wi-Fi can't share it while staying connected, the
-    /// user's own hotspot is already on, or Windows refuses.
-    /// </summary>
     /// <summary>Wi-Fi is switched off (airplane mode, or in quick settings): Beam turns it on itself.</summary>
     private static async Task EnsureWifiOnAsync()
     {
@@ -531,6 +552,11 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         }
     }
 
+    /// <summary>
+    /// Starts Windows' Mobile hotspot as <paramref name="network"/>, sharing this PC's internet (when its Wi-Fi Direct
+    /// network can't start). False when there's no internet, the Wi-Fi can't share it while staying connected, the user's
+    /// own hotspot is already on, or Windows refuses.
+    /// </summary>
     private async Task<bool> TryStartHotspotAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
         try

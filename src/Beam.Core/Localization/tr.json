@@ -477,11 +477,12 @@
   "{0} didn't answer.": "{0} yanıt vermedi.",
   "{0} isn't nearby anymore. Open Receive on it and try again.": "{0} artık yakında değil. Onda Al'ı açıp tekrar deneyin.",
   "Connect to the other device directly first: faster, and no router needed. If that isn't possible, Beam uses the Wi-Fi network.": "Önce diğer cihaza doğrudan bağlanır: daha hızlıdır ve modem gerekmez. Bu mümkün değilse Beam Wi-Fi ağını kullanır.",
-  "Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.": "Kendi Wi-Fi'si, bir gönderen doğrudan bağlantı istediğinde veya ortak bir Wi-Fi olmadığında açılır.",
   "Let senders connect directly": "Gönderenlerin doğrudan bağlanmasına izin ver",
   "Senders connect over the shared Wi-Fi.": "Gönderenler ortak Wi-Fi üzerinden bağlanır.",
   "Turn on Wi-Fi to connect directly.": "Doğrudan bağlanmak için Wi-Fi'yi açın.",
-  "When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.": "Bir gönderen doğrudan bağlantıyı tercih ettiğinde bu cihaz kendi Wi-Fi'sini açar ve Beam şifresini gönderene kendisi iletir. Daha hızlıdır, modem veya internet gerekmez.",
   "{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. Beam bunun yerine Wi-Fi ağını kullanır.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. İki cihazı da aynı Wi-Fi'ye bağlayın."
+  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. İki cihazı da aynı Wi-Fi'ye bağlayın.",
+  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "Doğrudan bağlanmak için Konum'u açın. Android doğrudan bağlantılar için buna ihtiyaç duyar; Beam konumunuzu kullanmaz.",
+  "Starting its own Wi-Fi…": "Kendi Wi-Fi'si açılıyor…",
+  "While Receive is open, this device keeps its own Wi-Fi on. Senders that prefer a direct connection join it; Beam gives them its password by itself. Faster, and no router or internet needed.": "Al açıkken bu cihaz kendi Wi-Fi'sini açık tutar. Doğrudan bağlantıyı tercih eden gönderenler ona katılır; Beam şifresini onlara kendisi verir. Daha hızlıdır, modem veya internet gerekmez."
 }
