@@ -46,6 +46,12 @@ public sealed class DirectManager
     private readonly ConcurrentDictionary<string, byte> _upgrading = new();
     private readonly ConcurrentDictionary<string, byte> _linkedPeers = new();
 
+    // Devices that asked over the network for this device's network, or to join theirs: the certificate each asked with
+    // (only that device may end the link it asked for), and the unpaired ones, which keep the network on only while
+    // Receive is open or their files are still coming.
+    private readonly ConcurrentDictionary<string, string> _linkOwners = new();
+    private readonly ConcurrentDictionary<string, byte> _unpairedUsers = new();
+
     private readonly SemaphoreSlim _setup = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConcurrentDictionary<string, long> _nearbyOnlyDirect = new();
@@ -185,7 +191,8 @@ public sealed class DirectManager
         Log.Info(receiving ? "Direct: Receive opened" : "Direct: Receive closed");
         if (!receiving)
         {
-            if (_linkedPeers.TryRemove(ReceiveUser, out _)) StopLinkIfUnused(keepForRunningTransfers: true);
+            var released = ReleaseUnpairedUsers();
+            if (_linkedPeers.TryRemove(ReceiveUser, out _) || released) StopLinkIfUnused(keepForRunningTransfers: true);
             RotateIfPending();
         }
 
@@ -328,6 +335,8 @@ public sealed class DirectManager
 
         Log.Info("Direct: senders may no longer connect directly; turning this device's network off");
         foreach (var peer in _linkedPeers.Keys.ToList()) _linkedPeers.TryRemove(peer, out _);
+        _linkOwners.Clear();
+        _unpairedUsers.Clear();
         _joinedReceivers.Clear();
         StopLinkIfUnused();
     }
@@ -472,6 +481,8 @@ public sealed class DirectManager
     {
         _stopping.Cancel();
         _linkedPeers.Clear();
+        _linkOwners.Clear();
+        _unpairedUsers.Clear();
         if (_link == null) return;
         try
         {
@@ -618,6 +629,7 @@ public sealed class DirectManager
     {
         var peerId = session.PeerId;
         if (_transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished)) return;
+        if (!_receiving && ReleaseUnpairedUsers()) StopLinkIfUnused(keepForRunningTransfers: true);
         if (_joinedReceivers.ContainsKey(peerId)) _ = LeaveReceiverLaterAsync(peerId, session.PeerName);
         if (_peerMethod.TryGetValue(peerId, out var method) && method != _settings.Current.Connection && _peerMethod.TryRemove(peerId, out _))
         {
@@ -1128,18 +1140,51 @@ public sealed class DirectManager
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(serviceToken);
         timeout.CancelAfter(SetupTimeout);
         var token = timeout.Token;
+        // Anyone on the network can connect and present a self-signed certificate, and the device id in its hello is
+        // only what it says: refuse an id that this device knows with another certificate, so nobody can act for a
+        // device this one knows (stop its link, replace its remembered network).
+        if (!ClaimsOwnId(peerId, peerFingerprint))
+        {
+            Log.Warn($"Direct: refused {request.Action} from \"{peerName}\": its certificate isn't the one known for {peerId}");
+            throw NotAllowed();
+        }
+
         switch (request.Action)
         {
             case DirectActions.Host:
             {
                 if (_link == null || !Roles.HasFlag(DirectRoles.Host)) throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (!_settings.Current.AllowDirectSenders) throw NotAllowed();
-                // A sender wants to connect directly: this device (the receiver) starts its network, without asking. It
-                // doesn't disturb this device's own Wi-Fi, and the files themselves still need this device's approval.
+                // A sender wants to connect directly: this device (the receiver) starts its network, without asking (it
+                // doesn't disturb this device's own Wi-Fi, and the files themselves still need this device's approval);
+                // but only for a paired device, while Receive is open, or for a device whose files the user accepted.
+                var trusted = IsTrusted(peerId, peerFingerprint);
+                var accepted = IsReceivingFrom(peerFingerprint);
+                if (!trusted && !accepted && !_receiving)
+                {
+                    Log.Info($"Direct: {peerName} asked for this device's network; refused (not paired, Receive isn't open, no transfer from it)");
+                    throw NotAllowed();
+                }
+
+                // Starting it would take this device off the network it joined for another device (an unpaired device
+                // mustn't break a link someone else uses, even one whose files were accepted).
+                if (!trusted && _joinedReceivers.Keys.Any(k => k != peerId))
+                {
+                    Log.Info($"Direct: {peerName} asked for this device's network; refused (this device is on another device's network)");
+                    throw NotAllowed();
+                }
+
                 var network = await HostOwnNetworkAsync(token).ConfigureAwait(false);
+                if (!trusted)
+                {
+                    RotateWhenOff(); // like over Bluetooth: an unpaired device can't use the passphrase later
+                    _unpairedUsers[peerId] = 0;
+                }
+
+                _linkOwners[peerId] = peerFingerprint;
                 _linkedPeers[peerId] = 0;
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
-                Log.Info($"Direct: started {network.Ssid} for {peerName}");
+                Log.Info($"Direct: started {network.Ssid} for {peerName}{(trusted ? " (paired)" : "")}");
                 return new DirectResponseMessage { Ok = true, Ssid = network.Ssid, Passphrase = network.Passphrase };
             }
 
@@ -1148,6 +1193,22 @@ public sealed class DirectManager
                 if (_link == null || !CanJoinAny)
                     throw new DirectLinkException(L.T("This device can't connect directly."));
                 if (!_settings.Current.AllowDirectSenders) throw NotAllowed();
+                // Joining takes this device off its own Wi-Fi onto a network the other device chose: only for a paired
+                // device, or one whose files the user accepted and that are still coming (not just because Receive is open).
+                var joinTrusted = IsTrusted(peerId, peerFingerprint);
+                if (!joinTrusted && !IsReceivingFrom(peerFingerprint))
+                {
+                    Log.Warn($"Direct: {peerName} asked this device to join {request.Ssid}; refused (not paired, no transfer from it)");
+                    throw NotAllowed();
+                }
+
+                // Joining ends this device's own network and any other link: not for an unpaired device while others use it.
+                if (!joinTrusted && LinkUsedByOthers(peerId))
+                {
+                    Log.Warn($"Direct: {peerName} asked this device to join {request.Ssid}; refused (its direct link is in use by another device)");
+                    throw NotAllowed();
+                }
+
                 if (string.IsNullOrEmpty(request.Ssid) || string.IsNullOrEmpty(request.Passphrase)) throw new DirectLinkException("Missing network details.");
                 // Allowed by "Let senders connect directly"; this device leaves the network again once the transfer is done.
                 if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
@@ -1156,6 +1217,7 @@ public sealed class DirectManager
                 Remember(peerId, peerName, peerFingerprint, peerKind, joining);
                 var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 HostedNetwork = null; // joining stops this device's own network
+                _linkOwners[peerId] = peerFingerprint;
                 _linkedPeers[peerId] = 0;
                 _joinedReceivers[peerId] = Environment.TickCount64;
                 _ = LeaveReceiverLaterAsync(peerId, peerName, UnusedJoinTimeout);
@@ -1184,20 +1246,109 @@ public sealed class DirectManager
             }
 
             case DirectActions.Prefer:
-                // A phone that joined this device's own network (e.g. after scanning its code) keeps it on.
-                if (Decode(request.Method) == ConnectionMethod.Direct && Roles.HasFlag(DirectRoles.Host)) _linkedPeers[peerId] = 0;
+            {
+                if (!OwnsLink(peerId, peerFingerprint))
+                {
+                    Log.Warn($"Direct: refused {request.Action} from \"{peerName}\": the link for {peerId} was set up with another certificate");
+                    throw NotAllowed();
+                }
+
+                // A phone that joined this device's own network (e.g. after scanning its code) keeps it on: only while it
+                // is on (this doesn't start anything), and an unpaired one only as long as Receive is open or its files come.
+                var trusted = IsTrusted(peerId, peerFingerprint);
+                if (Decode(request.Method) == ConnectionMethod.Direct && Roles.HasFlag(DirectRoles.Host) && HostedNetwork != null
+                    && (trusted || _receiving || IsReceivingFrom(peerFingerprint)))
+                {
+                    if (!trusted) _unpairedUsers[peerId] = 0;
+                    _linkOwners.TryAdd(peerId, peerFingerprint);
+                    _linkedPeers[peerId] = 0;
+                }
+
                 SetPeerMethod(peerId, Decode(request.Method));
                 return new DirectResponseMessage { Ok = true };
+            }
 
             case DirectActions.Stop:
+                // Only the device the link was set up for can end it (not one that never used it, nor one using its id).
+                if (!OwnsLink(peerId, peerFingerprint))
+                {
+                    Log.Warn($"Direct: refused {request.Action} from \"{peerName}\": the link for {peerId} was set up with another certificate");
+                    throw NotAllowed();
+                }
+
                 SetPeerMethod(peerId, ConnectionMethod.SameNetwork);
-                _linkedPeers.TryRemove(peerId, out _);
-                StopLinkIfUnused();
+                _linkOwners.TryRemove(peerId, out _);
+                _unpairedUsers.TryRemove(peerId, out _);
+                if (_linkedPeers.TryRemove(peerId, out _)) StopLinkIfUnused();
                 return new DirectResponseMessage { Ok = true };
 
             default:
                 return new DirectResponseMessage { Ok = false, Message = "Unknown request." };
         }
+    }
+
+    /// <summary>
+    /// The certificate presented is the one this device knows for <paramref name="peerId"/> (paired, remembered, or
+    /// announced), or the id is new here. Device ids are only claimed in the hello; the certificate is what's proven.
+    /// </summary>
+    private bool ClaimsOwnId(string peerId, string fingerprint)
+    {
+        if (string.IsNullOrEmpty(peerId) || string.IsNullOrEmpty(fingerprint)) return false;
+        bool Same(string? known) => string.Equals(known, fingerprint, StringComparison.OrdinalIgnoreCase);
+        // Strongest first: paired by the user, then remembered from an earlier link. Wi-Fi announcements are anyone's to
+        // send (the last one wins), so they only count for a device known no other way.
+        var settings = _settings.Current;
+        var paired = settings.TrustedDevices.Where(t => t.DeviceId == peerId && !string.IsNullOrEmpty(t.Fingerprint)).Select(t => t.Fingerprint).ToList();
+        if (paired.Count > 0) return paired.Any(Same);
+        var remembered = settings.KnownDirectNetworks.FirstOrDefault(k => k.DeviceId == peerId && !string.IsNullOrEmpty(k.Fingerprint));
+        if (remembered != null) return Same(remembered.Fingerprint);
+        var announced = _discovery.Find(peerId)?.Fingerprint;
+        return string.IsNullOrEmpty(announced) || Same(announced);
+    }
+
+    /// <summary>
+    /// The direct link (this device's network, or one it joined) is used by a device other than <paramref name="peerId"/>:
+    /// one it was set up for, the Phone page, or a transfer running over it.
+    /// </summary>
+    private bool LinkUsedByOthers(string peerId) =>
+        _linkedPeers.Keys.Any(k => k != peerId && k != ReceiveUser)
+        || _transfers.Sessions.Any(s => !s.IsFinished && s.Path == TransferPath.Direct && s.PeerId != peerId);
+
+    /// <summary>No link was set up for <paramref name="peerId"/> with another certificate.</summary>
+    private bool OwnsLink(string peerId, string fingerprint) =>
+        !_linkOwners.TryGetValue(peerId, out var owner) || string.Equals(owner, fingerprint, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Paired with this device (its code was scanned here, or "always accept" was chosen for it).</summary>
+    private bool IsTrusted(string peerId, string fingerprint) =>
+        !string.IsNullOrEmpty(fingerprint)
+        && _settings.Current.TrustedDevices.Any(t => string.Equals(t.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)
+                                                     && (string.IsNullOrEmpty(t.DeviceId) || t.DeviceId == peerId));
+
+    /// <summary>The user accepted files from this device and they are still coming (or paused while switching paths).</summary>
+    private bool IsReceivingFrom(string fingerprint) =>
+        !string.IsNullOrEmpty(fingerprint)
+        && _transfers.Sessions.Any(s => s.Direction == TransferDirection.Receive && !s.IsFinished
+                                        && s.State is TransferState.Transferring or TransferState.Interrupted
+                                        && string.Equals(s.PeerFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Receive is closed: unpaired devices that got this device's network while it was open (or while their files came)
+    /// no longer keep it on once nothing from them is running. True when one let go.
+    /// </summary>
+    private bool ReleaseUnpairedUsers()
+    {
+        if (_receiving) return false;
+        var released = false;
+        foreach (var peer in _unpairedUsers.Keys.ToList())
+        {
+            if (_transfers.Sessions.Any(s => s.PeerId == peer && !s.IsFinished)) continue;
+            _unpairedUsers.TryRemove(peer, out _);
+            _linkOwners.TryRemove(peer, out _);
+            released |= _linkedPeers.TryRemove(peer, out _);
+        }
+
+        if (released) Log.Info("Direct: Receive is closed; unpaired senders no longer keep this device's network on");
+        return released;
     }
 
     /// <summary>Before this device's network starts or it joins another's (e.g. letting Beam through the firewall there).</summary>

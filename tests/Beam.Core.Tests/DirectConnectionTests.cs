@@ -63,6 +63,7 @@ public class DirectConnectionTests
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Node.Nearby.SetReceiving(true); // the receiver has Receive open, where "Let senders connect directly" is
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         var paths = new List<TransferPath>();
 
@@ -84,6 +85,7 @@ public class DirectConnectionTests
         await using var pc = new TestNode("Laptop", directLink: air.Link(pcRoles), kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
+        phone.Node.Nearby.SetReceiving(true);
         pc.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         var problems = new List<string>();
         pc.Node.Direct.Problem += problems.Add;
@@ -139,6 +141,7 @@ public class DirectConnectionTests
         await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Node.Nearby.SetReceiving(true);
 
         // The phone prefers direct: the PC (the receiver) starts its network without asking, the phone joins it.
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 6);
@@ -171,6 +174,7 @@ public class DirectConnectionTests
         var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Trust(phone); // paired
         Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct)); // the PC hosts for the phone
         Assert.Equal(0, air.Stopped);
 
@@ -227,6 +231,7 @@ public class DirectConnectionTests
         try
         {
             await using var pcs = new TwoComputers(deskShares: true);
+            pcs.Desk.Node.Nearby.SetReceiving(true);
             pcs.Laptop.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
 
             // The sender's choice decides: the receiver starts its network without asking, the sender joins it.
@@ -293,6 +298,7 @@ public class DirectConnectionTests
         await using var pc = new TestNode("Laptop", directLink: air.Link(pcRoles), kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
         air.Connect(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
+        phone.Node.Nearby.SetReceiving(true);
 
         // Chosen on the computer (the sender): the phone starts its network and the computer joins.
         Assert.True(await pc.Node.Direct.SwitchAsync(phone.Node.Identity.DeviceId, ConnectionMethod.Direct));
@@ -329,6 +335,7 @@ public class DirectConnectionTests
         await using var pc = new TestNode("Desktop", directLink: air.Link(DirectRoles.Host));
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Trust(phone);
         var problems = new List<string>();
         phone.Node.Direct.Problem += problems.Add;
 
@@ -583,6 +590,7 @@ public class PairingTests
         await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         phone.Node.Transfers.IsDirectAddress = a => a.Equals(FakeDirectAir.DirectAddress) && air.LinkUp; // like a real adapter
+        pc.Trust(phone); // paired
         Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
         Assert.Equal(1, air.Hosted);
         Assert.Equal(1, air.Joined);

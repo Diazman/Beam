@@ -15,6 +15,9 @@ public sealed class FakeDirectAir
 
     public string? HostError { get; init; }
 
+    /// <summary>Joining fails from now on (e.g. the network went out of range while it is still listed).</summary>
+    public bool FailJoins { get; set; }
+
     public int Hosted => Volatile.Read(ref _hosted);
 
     public int Joined => Volatile.Read(ref _joined);
@@ -92,7 +95,7 @@ public sealed class FakeDirectAir
         };
     }
 
-    private sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
+    public sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
     {
         public bool CanShareInternet { get; init; }
 
@@ -109,8 +112,16 @@ public sealed class FakeDirectAir
 
         public DirectRoles Roles { get; }
 
+        /// <summary>How often this device was asked to start its network / join one.</summary>
+        public int HostCalls => Volatile.Read(ref _hostCalls);
+
+        public int JoinCalls => Volatile.Read(ref _joinCalls);
+
+        private int _hostCalls, _joinCalls;
+
         public Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref _hostCalls);
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
             Interlocked.Increment(ref _air._hosted);
             _air.LastHost = Roles;
@@ -120,8 +131,10 @@ public sealed class FakeDirectAir
 
         public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref _joinCalls);
             await Task.Delay(100, cancellationToken);
             if (JoinError != null) throw new DirectLinkException(JoinError);
+            if (_air.FailJoins) throw new DirectLinkException("The network isn't in range.");
             if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
             _air.LastJoin = network;
             Interlocked.Increment(ref _air._joined);
