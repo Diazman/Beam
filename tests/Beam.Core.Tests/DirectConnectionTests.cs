@@ -52,6 +52,7 @@ public class DirectConnectionTests
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
         Assert.Equal(TransferState.Completed, session.State);
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "video.mp4")));
+        await Wait.UntilAsync(() => pc.Node.History.Entries.Any(e => e.Direction == TransferDirection.Receive), because: "the receiver recorded it");
         Assert.Single(pc.Node.History.Entries, e => e.Direction == TransferDirection.Receive);
     }
 
