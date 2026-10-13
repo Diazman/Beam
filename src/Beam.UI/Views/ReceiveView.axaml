@@ -56,7 +56,7 @@
           <StackPanel Spacing="4">
             <TextBlock Classes="h3" Text="{l:T 'Let senders connect directly'}" TextWrapping="Wrap" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.'}" />
+                       Text="{l:T 'While Receive is open, this device keeps its own Wi-Fi on. Senders that prefer a direct connection join it; Beam gives them its password by itself. Faster, and no router or internet needed.'}" />
           </StackPanel>
           <ToggleSwitch Grid.Column="1" IsChecked="{Binding AllowDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
         </Grid>

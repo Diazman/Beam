@@ -214,6 +214,7 @@ public sealed class DirectManager
             {
                 while (WantsNetworkOn && !_stopping.IsCancellationRequested)
                 {
+                    var hosted = false;
                     if (HostedNetwork == null && _joinedReceivers.IsEmpty)
                     {
                         try
@@ -221,6 +222,7 @@ public sealed class DirectManager
                             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
                             timeout.CancelAfter(TimeSpan.FromSeconds(60));
                             var network = await HostOwnNetworkAsync(timeout.Token).ConfigureAwait(false);
+                            hosted = true;
                             if (WantsNetworkOn)
                             {
                                 _linkedPeers[ReceiveUser] = 0;
@@ -235,8 +237,12 @@ public sealed class DirectManager
                         }
                     }
 
+                    // Check again later; at once when the network went off after it was on (e.g. the switch was turned off
+                    // and on again), but not right after a failed start.
                     var until = Environment.TickCount64 + (long)KeepOnInterval.TotalMilliseconds;
-                    while (WantsNetworkOn && Environment.TickCount64 < until) await Task.Delay(250, _stopping.Token).ConfigureAwait(false);
+                    var wasOn = hosted || HostedNetwork != null;
+                    while (WantsNetworkOn && Environment.TickCount64 < until && !(wasOn && HostedNetwork == null && _joinedReceivers.IsEmpty))
+                        await Task.Delay(250, _stopping.Token).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)
@@ -246,7 +252,7 @@ public sealed class DirectManager
             finally
             {
                 Volatile.Write(ref _keepingOn, 0);
-                if (WantsNetworkOn) KeepNetworkOnWhileReceiving(); // turned back on just as the loop ended
+                if (WantsNetworkOn && !_stopping.IsCancellationRequested) KeepNetworkOnWhileReceiving(); // turned back on just as the loop ended
             }
         });
     }
@@ -275,9 +281,14 @@ public sealed class DirectManager
     {
         if (!_rotatePending || HostedNetwork != null) return;
         _rotatePending = false;
-        var current = OwnNetwork();
-        var fresh = DirectNetwork.Create(_settings.Current.DeviceName);
-        _settings.Update(s => s.DirectNetworkPassphrase = fresh.Passphrase);
+        DirectNetwork current;
+        lock (_ownNetworkGate)
+        {
+            current = OwnNetworkLocked();
+            var fresh = DirectNetwork.Create(_settings.Current.DeviceName);
+            _settings.Update(s => s.DirectNetworkPassphrase = fresh.Passphrase);
+        }
+
         Log.Info($"Direct: new passphrase for {current.Ssid}");
     }
 
@@ -396,6 +407,13 @@ public sealed class DirectManager
 
     /// <summary>This device's own direct network: created once and kept, so paired devices can find it again.</summary>
     public DirectNetwork OwnNetwork()
+    {
+        lock (_ownNetworkGate) return OwnNetworkLocked();
+    }
+
+    private readonly object _ownNetworkGate = new();
+
+    private DirectNetwork OwnNetworkLocked()
     {
         var current = _settings.Current;
         if (!string.IsNullOrEmpty(current.DirectNetworkName) && !string.IsNullOrEmpty(current.DirectNetworkPassphrase))

@@ -477,12 +477,12 @@
   "{0} didn't answer.": "{0} javob bermadi.",
   "{0} isn't nearby anymore. Open Receive on it and try again.": "{0} endi yaqinda emas. Unda Qabul qilishni oching va qayta urinib ko'ring.",
   "Connect to the other device directly first: faster, and no router needed. If that isn't possible, Beam uses the Wi-Fi network.": "Avval boshqa qurilmaga to'g'ridan-to'g'ri ulanadi: tezroq va router kerak emas. Agar buning iloji bo'lmasa, Beam Wi-Fi tarmog'idan foydalanadi.",
-  "Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.": "O'z Wi-Fi'si yuboruvchi to'g'ridan-to'g'ri ulanishni xohlaganda yoki umumiy Wi-Fi bo'lmaganda yoqiladi.",
   "Let senders connect directly": "Yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat berish",
   "Senders connect over the shared Wi-Fi.": "Yuboruvchilar umumiy Wi-Fi orqali ulanadi.",
   "Turn on Wi-Fi to connect directly.": "To'g'ridan-to'g'ri ulanish uchun Wi-Fi'ni yoqing.",
-  "When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.": "Yuboruvchi to'g'ridan-to'g'ri ulanishni afzal ko'rganda bu qurilma o'z Wi-Fi'sini yoqadi va Beam uning parolini yuboruvchiga o'zi beradi. Tezroq, router yoki internet kerak emas.",
   "{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Beam o'rniga Wi-Fi tarmog'idan foydalanadi.",
   "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Ikkala qurilmani bir xil Wi-Fi'ga ulang.",
-  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "To'g'ridan-to'g'ri ulanish uchun Joylashuvni yoqing. Android to'g'ridan-to'g'ri ulanishlar uchun buni talab qiladi; Beam joylashuvingizdan foydalanmaydi."
+  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "To'g'ridan-to'g'ri ulanish uchun Joylashuvni yoqing. Android to'g'ridan-to'g'ri ulanishlar uchun buni talab qiladi; Beam joylashuvingizdan foydalanmaydi.",
+  "Starting its own Wi-Fi…": "O'z Wi-Fi'si yoqilmoqda…",
+  "While Receive is open, this device keeps its own Wi-Fi on. Senders that prefer a direct connection join it; Beam gives them its password by itself. Faster, and no router or internet needed.": "Qabul qilish ochiq ekan, bu qurilma o'z Wi-Fi'sini yoniq tutadi. To'g'ridan-to'g'ri ulanishni afzal ko'rgan yuboruvchilar unga ulanadi; Beam parolini ularga o'zi beradi. Tezroq, router yoki internet kerak emas."
 }

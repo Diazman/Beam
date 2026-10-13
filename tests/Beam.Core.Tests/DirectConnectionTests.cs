@@ -128,7 +128,7 @@ public class DirectConnectionTests
     }
 
     [Fact]
-    public async Task APhoneSendingToAComputerHostsAndGoesDirectAgainAfterAWiFiDetour()
+    public async Task APhoneSendingToAComputerJoinsItsNetworkAndGoesDirectAgainAfterAWiFiDetour()
     {
         var air = new FakeDirectAir();
         var slow = new SlowFiles();
@@ -137,14 +137,14 @@ public class DirectConnectionTests
         var phoneRoles = DirectRoles.Host | DirectRoles.Join;
         await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(phoneRoles), kind: DeviceKinds.Phone);
         phone.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
-        air.Connect(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
+        air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
 
-        // The phone prefers direct: it starts its network, the PC joins (no prompt on the PC).
+        // The phone prefers direct: the PC (the receiver) starts its network without asking, the phone joins it.
         var file = phone.CreateFile("video.mp4", 30L * 1024 * 1024, 6);
         var first = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
         await Wait.UntilAsync(() => first.Path == TransferPath.Direct, because: "direct from the start");
-        Assert.Equal(phoneRoles, air.LastHost);
-        Assert.Equal(pcRoles, air.LastJoiner);
+        Assert.Equal(pcRoles, air.LastHost);
+        Assert.Equal(phoneRoles, air.LastJoiner);
 
         // "Switch to Wi-Fi" on that transfer, then it finishes.
         Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.SameNetwork));

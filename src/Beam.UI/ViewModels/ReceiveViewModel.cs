@@ -14,9 +14,9 @@ namespace Beam.App.ViewModels;
 
 /// <summary>
 /// The Receive page. While it is open this device is ready to receive: senders on the same Wi-Fi see it as usual and
-/// senders without a shared network find it over Bluetooth. With "Let senders connect directly" a sender that prefers
-/// a direct connection makes it start its own Wi-Fi; the sender gets its name and passphrase from Beam (over the shared
-/// Wi-Fi or Bluetooth), never from the user.
+/// senders without a shared network find it over Bluetooth. With "Let senders connect directly" its own Wi-Fi is on
+/// while Receive is open; a sender gets its name and passphrase from Beam (over the shared Wi-Fi or Bluetooth), never
+/// from the user.
 /// </summary>
 public sealed class ReceiveViewModel : ObservableObject
 {
@@ -108,7 +108,7 @@ public sealed class ReceiveViewModel : ObservableObject
                     : L.T("Its own Wi-Fi {0} is on. Senders connect to it directly.", network.Ssid);
             if (!CanConnectDirectly) return L.T("This device can't start its own Wi-Fi: senders need the same Wi-Fi.");
             return AllowDirect
-                ? L.T("Its own Wi-Fi starts when a sender wants a direct connection, or has no shared Wi-Fi.")
+                ? L.T("Starting its own Wi-Fi…")
                 : L.T("Senders connect over the shared Wi-Fi.");
         }
     }
