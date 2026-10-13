@@ -483,5 +483,6 @@
   "Turn on Wi-Fi to connect directly.": "Doğrudan bağlanmak için Wi-Fi'yi açın.",
   "When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.": "Bir gönderen doğrudan bağlantıyı tercih ettiğinde bu cihaz kendi Wi-Fi'sini açar ve Beam şifresini gönderene kendisi iletir. Daha hızlıdır, modem veya internet gerekmez.",
   "{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. Beam bunun yerine Wi-Fi ağını kullanır.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. İki cihazı da aynı Wi-Fi'ye bağlayın."
+  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. İki cihazı da aynı Wi-Fi'ye bağlayın.",
+  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "Doğrudan bağlanmak için Konum'u açın. Android doğrudan bağlantılar için buna ihtiyaç duyar; Beam konumunuzu kullanmaz."
 }

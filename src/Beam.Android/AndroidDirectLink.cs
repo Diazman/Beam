@@ -89,6 +89,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         {
             var channel = await PrepareAsync().ConfigureAwait(false);
             await EnsureWifiOnAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureLocationOnAsync(cancellationToken).ConfigureAwait(false);
             if (await GroupInfoAsync(channel).ConfigureAwait(false) is { IsGroupOwner: true } existing
                 && !string.IsNullOrEmpty(existing.NetworkName) && !string.IsNullOrEmpty(existing.Passphrase))
                 return new DirectNetwork(existing.NetworkName, existing.Passphrase);
@@ -129,6 +130,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         {
             var channel = await PrepareAsync().ConfigureAwait(false);
             await EnsureWifiOnAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureLocationOnAsync(cancellationToken).ConfigureAwait(false);
             if (await GroupInfoAsync(channel).ConfigureAwait(false) is { } current && current.NetworkName == network.Ssid
                 && await ConnectionInfoAsync(channel).ConfigureAwait(false) is { GroupFormed: true, GroupOwnerAddress: { } existing })
                 return IPAddress.Parse(existing.HostAddress!);
@@ -414,6 +416,37 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
         if (!wifi.IsWifiEnabled) throw new DirectLinkException(L.T("Turn on Wi-Fi to connect directly."));
         await Task.Delay(1500, cancellationToken).ConfigureAwait(false); // Wi-Fi needs a moment before it can join or host
+    }
+
+    /// <summary>
+    /// Up to Android 12, Wi-Fi Direct and joining a network for an app only work with Location turned on (the phone's
+    /// Location switch, not just the permission): with it off they fail with "error" or never answer. Apps can't switch
+    /// it on, so Beam opens the Location settings and waits a little.
+    /// </summary>
+    private async Task EnsureLocationOnAsync(CancellationToken cancellationToken)
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(33)) return;
+        if (_context.GetSystemService(Context.LocationService) is not global::Android.Locations.LocationManager location || location.IsLocationEnabled) return;
+        if (AndroidHost.CurrentActivity is { } activity)
+        {
+            Log.Info("Location: it is off (Android needs it on for direct connections); asking the user to turn it on");
+            activity.RunOnUiThread(() =>
+            {
+                try
+                {
+                    activity.StartActivity(new Intent(global::Android.Provider.Settings.ActionLocationSourceSettings));
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Location: couldn't open its settings: {ex.Message}");
+                }
+            });
+            for (var i = 0; i < 60 && !location.IsLocationEnabled; i++) await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!location.IsLocationEnabled)
+            throw new DirectLinkException(L.T("Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location."));
+        Log.Info("Location: on");
     }
 
     /// <summary>Asks for the permission Wi-Fi Direct needs (Nearby devices on Android 13+, location before) and opens the channel.</summary>

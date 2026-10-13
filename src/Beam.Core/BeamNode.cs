@@ -333,6 +333,7 @@ public sealed class BeamNode : IAsyncDisposable
         Discovery.Discoverable = settings.Discoverable;
         Discovery.AnnounceNow();
         if (!settings.AllowDirectSenders) Direct.OnDirectSendersNotAllowed();
+        else Direct.OnDirectSendersAllowed();
         if (settings.Connection != _connection)
         {
             _connection = settings.Connection;

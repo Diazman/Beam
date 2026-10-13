@@ -428,10 +428,8 @@ public sealed class NearbyService : INearbyResponder
     {
         if (!IsPlaceholder(device)) return device;
         var hash = device.Id[PlaceholderPrefix.Length..];
-        // A phone sending to a computer hosts itself (see the direct manager): the computer needn't start its network.
-        var flags = !_selfIsComputer && device.Kind is DeviceKinds.Desktop or DeviceKinds.Laptop
-            ? NearbyHandshake.RequestFlags.SenderHosts
-            : NearbyHandshake.RequestFlags.None;
+        // The receiver hosts: it starts its network (if it isn't on yet) and hands over its details.
+        var flags = NearbyHandshake.RequestFlags.None;
         var (code, _) = await HandshakeAsync(hash, device.Name, flags, null, cancellationToken).ConfigureAwait(false);
         var resolved = _direct.AcceptNearby(code);
         _discovery.Forget(device.Id);

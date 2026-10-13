@@ -22,6 +22,13 @@ public class NearbyTests
         Assert.Equal(beacon.Flags, read.Flags);
         Assert.StartsWith("Dilshodjon", read.Name);
         Assert.Null(NearbyBeacon.TryParse(new byte[] { 1, 2, 3 }));
+        // A garbled read (one byte off) is dropped, not listed as some other device.
+        for (var i = 3; i < bytes.Length; i++)
+        {
+            var garbled = (byte[])bytes.Clone();
+            garbled[i] ^= 0x10;
+            Assert.Null(NearbyBeacon.TryParse(garbled));
+        }
     }
 
     [Fact]

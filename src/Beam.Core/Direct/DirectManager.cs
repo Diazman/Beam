@@ -54,7 +54,7 @@ public sealed class DirectManager
     private volatile bool _rotatePending;
 
     // Networks this device joined (to send to their host, or to receive from it): left again once that is done.
-    private readonly ConcurrentDictionary<string, byte> _joinedReceivers = new();
+    private readonly ConcurrentDictionary<string, long> _joinedReceivers = new(); // peer -> when joined (a later join replaces it)
 
     /// <summary>After the last transfer to a receiver whose network this device joined, how long before leaving it.</summary>
     internal static TimeSpan LeaveReceiverAfter { get; set; } = TimeSpan.FromSeconds(60);
@@ -88,7 +88,7 @@ public sealed class DirectManager
         var host = await _link.JoinAsync(network with { HostIsComputer = IsComputer(sender.Kind, null) }, cancellationToken).ConfigureAwait(false);
         HostedNetwork = null;
         _linkedPeers[sender.DeviceId] = 0;
-        _joinedReceivers[sender.DeviceId] = 0;
+        _joinedReceivers[sender.DeviceId] = Environment.TickCount64;
         _ = LeaveReceiverLaterAsync(sender.DeviceId, sender.Name, UnusedJoinTimeout);
         SetPeerMethod(sender.DeviceId, ConnectionMethod.Direct);
         DirectAddresses.Invalidate();
@@ -165,7 +165,7 @@ public sealed class DirectManager
         var traits = _receiving && Roles.HasFlag(DirectRoles.Host) ? DirectRoles.Receiving : DirectRoles.None;
         if (!_selfIsComputer) return traits;
         if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
-        if (HostedNetwork?.SharesInternet == true || _link is IInternetSharing { CanShareInternet: true }) traits |= DirectRoles.SharesInternet;
+        if (HostedNetwork?.SharesInternet == true) traits |= DirectRoles.SharesInternet;
         return traits;
     }
 
@@ -189,8 +189,66 @@ public sealed class DirectManager
             RotateIfPending();
         }
 
+        KeepNetworkOnWhileReceiving();
         _discovery.AnnounceNow();
         Changed?.Invoke();
+    }
+
+    private int _keepingOn;
+
+    /// <summary>How often the network kept on for Receive is checked (and started again if it went off).</summary>
+    internal static TimeSpan KeepOnInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Receive is open (or was left only a few minutes ago) and "Let senders connect directly" is on: this device's own
+    /// network stays on, so senders join it straight away. Not while this device is on another device's network.
+    /// </summary>
+    private bool WantsNetworkOn => _receiving && _link != null && CanHost && _settings.Current.AllowDirectSenders;
+
+    internal void KeepNetworkOnWhileReceiving()
+    {
+        if (!WantsNetworkOn || Interlocked.Exchange(ref _keepingOn, 1) == 1) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (WantsNetworkOn && !_stopping.IsCancellationRequested)
+                {
+                    if (HostedNetwork == null && _joinedReceivers.IsEmpty)
+                    {
+                        try
+                        {
+                            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
+                            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+                            var network = await HostOwnNetworkAsync(timeout.Token).ConfigureAwait(false);
+                            if (WantsNetworkOn)
+                            {
+                                _linkedPeers[ReceiveUser] = 0;
+                                Log.Info($"Direct: {network.Ssid} is on for senders (Receive, senders may connect directly)");
+                                DirectAddresses.Invalidate();
+                                Changed?.Invoke();
+                            }
+                        }
+                        catch (Exception ex) when (!_stopping.IsCancellationRequested)
+                        {
+                            Log.Warn($"Direct: keeping this device's network on failed: {ex.GetType().Name}: {ex.Message}");
+                        }
+                    }
+
+                    var until = Environment.TickCount64 + (long)KeepOnInterval.TotalMilliseconds;
+                    while (WantsNetworkOn && Environment.TickCount64 < until) await Task.Delay(250, _stopping.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // closing
+            }
+            finally
+            {
+                Volatile.Write(ref _keepingOn, 0);
+                if (WantsNetworkOn) KeepNetworkOnWhileReceiving(); // turned back on just as the loop ended
+            }
+        });
     }
 
     /// <summary>
@@ -245,6 +303,9 @@ public sealed class DirectManager
     /// "Let senders connect directly" was turned off: this device's own network goes off (and it leaves a network it
     /// joined to receive), unless a transfer still runs over it.
     /// </summary>
+    /// <summary>"Let senders connect directly" was turned on: with Receive open, the network goes on.</summary>
+    internal void OnDirectSendersAllowed() => KeepNetworkOnWhileReceiving();
+
     internal void OnDirectSendersNotAllowed()
     {
         if (HostedNetwork == null && _joinedReceivers.IsEmpty) return;
@@ -553,6 +614,8 @@ public sealed class DirectManager
     /// </summary>
     private async Task LeaveReceiverLaterAsync(string peerId, string peerName, TimeSpan? after = null)
     {
+        // Only for the join that is current now: a later join (the link dropped and came back) gets its own timer.
+        if (!_joinedReceivers.TryGetValue(peerId, out var joinedAt)) return;
         try
         {
             await Task.Delay(after ?? LeaveReceiverAfter, _stopping.Token).ConfigureAwait(false);
@@ -563,7 +626,8 @@ public sealed class DirectManager
         }
 
         if (_transfers.Sessions.Any(s => s.PeerId == peerId && !s.IsFinished)) return;
-        if (!_joinedReceivers.TryRemove(peerId, out _)) return;
+        if (!_joinedReceivers.TryGetValue(peerId, out var now) || now != joinedAt) return;
+        if (!((ICollection<KeyValuePair<string, long>>)_joinedReceivers).Remove(new KeyValuePair<string, long>(peerId, joinedAt))) return;
         _peerMethod.TryRemove(peerId, out _);
         if (!_linkedPeers.TryRemove(peerId, out _)) return;
         Log.Info($"Direct: nothing more to transfer with {peerName}; leaving its network");
@@ -668,8 +732,6 @@ public sealed class DirectManager
             var plan = PlanFor(peer);
             Log.Info($"Direct: connecting to {peer.Name}: {Describe(plan)} (its roles: {DirectRolesText.Format(current.DirectRoles)}; " +
                      $"addresses: {(current.Endpoints.Count == 0 ? "none" : string.Join(", ", current.Endpoints))})");
-            // This phone hosts for a computer: its network is what they use, not the computer's.
-            if (plan == Plan.HostForPeer && !_selfIsComputer && current.Endpoints.Count > 0) known = null;
             // Join the PC's known network straight away when there's no shared network to ask over, and when the direct
             // link was just lost (the phone usually fell back to its normal Wi-Fi, where asking the PC fails or is slow).
             var rejoining = _linkedPeers.ContainsKey(peer.Id);
@@ -742,7 +804,7 @@ public sealed class DirectManager
             }
 
             _linkedPeers[peer.Id] = 0;
-            if (joinedTheirs) _joinedReceivers[peer.Id] = 0;
+            if (joinedTheirs) _joinedReceivers[peer.Id] = Environment.TickCount64;
             await FindOnDirectLinkAsync(peer, host, token).ConfigureAwait(false);
             Log.Info($"Direct: connected to {peer.Name} directly");
             Changed?.Invoke();
@@ -1030,7 +1092,7 @@ public sealed class DirectManager
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
-            Log.Warn($"Direct: {request.Action} for {peerName} failed: {ex.Message}");
+            Log.Warn($"Direct: {request.Action} for {peerName} failed: {ex.GetType().Name}: {ex.Message}");
             response = new DirectResponseMessage
             {
                 Ok = false,
@@ -1077,7 +1139,7 @@ public sealed class DirectManager
                 var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 HostedNetwork = null; // joining stops this device's own network
                 _linkedPeers[peerId] = 0;
-                _joinedReceivers[peerId] = 0;
+                _joinedReceivers[peerId] = Environment.TickCount64;
                 _ = LeaveReceiverLaterAsync(peerId, peerName, UnusedJoinTimeout);
                 SetPeerMethod(peerId, ConnectionMethod.Direct);
                 DirectAddresses.Invalidate();
@@ -1220,20 +1282,16 @@ public sealed class DirectManager
     }
 
     /// <summary>
-    /// How to connect to <paramref name="peer"/> (the device this one sends to). A phone and a computer: the phone hosts
-    /// (its Wi-Fi Direct group, which the computer joins in seconds without any prompt; a phone joining a computer's
-    /// hotspot needs Android's approval and fails on some phones), whichever of them sends. Otherwise the receiver
-    /// hosts and the sender joins; when the receiver can't host, this device hosts and the receiver joins.
+    /// How to connect to <paramref name="peer"/> (the device this one sends to): the receiver hosts and the sender joins
+    /// its network, whatever both devices are (a computer joins as ordinary Wi-Fi). Only when the receiver can't host
+    /// does this device host and the receiver join.
     /// </summary>
     private Plan PlanFor(DeviceInfo peer)
     {
         var theirs = peer.DirectRoles;
-        var peerIsComputer = IsComputer(peer.Kind, peer.Platform);
-        var canJoinPeer = theirs.HasFlag(DirectRoles.Host) && CanJoinAny;
+        if (theirs.HasFlag(DirectRoles.Host) && CanJoinAny) return Plan.JoinPeer;
         var canHostForPeer = Roles.HasFlag(DirectRoles.Host) && (theirs & (DirectRoles.Join | DirectRoles.JoinComputers)) != 0;
-        if (!_selfIsComputer && peerIsComputer && canHostForPeer) return Plan.HostForPeer;
-        if (_selfIsComputer && !peerIsComputer && canJoinPeer) return Plan.JoinPeer;
-        return canJoinPeer ? Plan.JoinPeer : canHostForPeer ? Plan.HostForPeer : Plan.None;
+        return canHostForPeer ? Plan.HostForPeer : Plan.None;
     }
 
     private static string Describe(Plan plan) => plan switch

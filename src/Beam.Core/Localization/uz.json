@@ -483,5 +483,6 @@
   "Turn on Wi-Fi to connect directly.": "To'g'ridan-to'g'ri ulanish uchun Wi-Fi'ni yoqing.",
   "When a sender prefers a direct connection, this device starts its own Wi-Fi and Beam gives the sender its password by itself. Faster, and no router or internet needed.": "Yuboruvchi to'g'ridan-to'g'ri ulanishni afzal ko'rganda bu qurilma o'z Wi-Fi'sini yoqadi va Beam uning parolini yuboruvchiga o'zi beradi. Tezroq, router yoki internet kerak emas.",
   "{0} doesn't let senders connect directly. Beam uses the Wi-Fi network instead.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Beam o'rniga Wi-Fi tarmog'idan foydalanadi.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Ikkala qurilmani bir xil Wi-Fi'ga ulang."
+  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Ikkala qurilmani bir xil Wi-Fi'ga ulang.",
+  "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "To'g'ridan-to'g'ri ulanish uchun Joylashuvni yoqing. Android to'g'ridan-to'g'ri ulanishlar uchun buni talab qiladi; Beam joylashuvingizdan foydalanmaydi."
 }
