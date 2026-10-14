@@ -15,13 +15,25 @@ using Windows.Security.Credentials;
 namespace Beam.App.Platform;
 
 /// <summary>
-/// The PC side of a direct link: a small WPA2 network (DIRECT-xx-Beam-…) that the phone joins with the passphrase it
-/// got from the PC's code or over Beam's encrypted connection. When this PC has internet and its Wi-Fi can share it
-/// while staying connected, the network is Windows' Mobile hotspot, which shares that internet: phones then have no
-/// reason to switch to another Wi-Fi mid-transfer. Otherwise it is a Wi-Fi Direct group with "legacy" access (no
-/// internet). Windows hands out 192.168.137.x on both, which is how Beam recognizes the direct path.
-/// To reach another computer directly, this PC's Wi-Fi can also join that computer's network (never a phone's: phones
-/// join the PC), and goes back to the Wi-Fi it was on when the link stops.
+/// The PC side of a direct link.
+/// <para>
+/// Hosting (this PC sends): a small WPA2 network (DIRECT-xx-Beam-…) that receivers join with the session's passphrase,
+/// which they got over Beam's authenticated connection or the encrypted Bluetooth handshake. It is a Wi-Fi Direct
+/// group with "legacy" access (WiFiDirectAdvertisementPublisher, no internet for its clients). Only when that can't
+/// start is Windows' Mobile hotspot used instead (sharing this PC's internet). The two are never on at the same time:
+/// Microsoft documents that the Mobile hotspot and Wi-Fi Direct legacy group-owner mode can't run together and the
+/// hotspot takes precedence; a hotspot turned on in Windows makes the publisher fail with ResourceInUse, and Beam then
+/// says so instead of touching the user's hotspot. Windows hands out 192.168.137.x on both. "Started" from the publisher
+/// is not taken as usable: Beam.Core waits for this PC's address on the network, then for the receiver to report in.
+/// </para>
+/// <para>
+/// Joining (this PC receives): the PC's Wi-Fi adapter joins the sender's network as an ordinary Wi-Fi client by name
+/// and passphrase (WiFiAdapter.ConnectAsync, or a temporary WLAN profile when Windows hides scan results). That works
+/// for another PC's network and for an Android phone's Wi-Fi Direct group (Android 10+ groups created with a name and
+/// passphrase accept such legacy clients). One Wi-Fi adapter can only be on one network: while joined, the PC is off
+/// its usual Wi-Fi (a cable keeps its internet). Leaving goes back to the Wi-Fi it was on, and never disconnects a
+/// network Beam didn't join.
+/// </para>
 /// </summary>
 internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInternetSharing, IAsyncDisposable
 {
@@ -31,7 +43,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private WiFiDirectAdvertisementPublisher? _publisher;
     private NetworkOperatorTetheringManager? _hotspot;
     private NetworkOperatorTetheringAccessPointConfiguration? _userHotspotSettings; // restored when Beam's hotspot stops
-    private WiFiAdapter? _joinedAdapter; // this PC's Wi-Fi while it is on another computer's network
+    private WiFiAdapter? _joinedAdapter; // this PC's Wi-Fi while it is on another device's direct network
     private string? _joinedSsid;
     private string? _previousSsid; // the Wi-Fi to go back to
     private string? _addedProfile; // a Wi-Fi profile Beam added to join by name (removed when leaving)
@@ -268,7 +280,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     }
 #endif
 
-    /// <summary>Joins another computer's direct network with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
+    /// <summary>Joins a sender's direct network (a PC's or a phone's) with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
     public Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
         var attempt = 0L;
@@ -281,7 +293,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             () =>
             {
                 Log.Warn($"Wi-Fi: joining {network.Ssid} didn't finish in time");
-                return new DirectLinkException(L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
+                return new DirectLinkException(L.T("This computer couldn't join the sender's direct network. Move the devices closer together and try again."));
             },
             undoLateResult: _ => UndoAttemptAsync(attempt), // joined after all, too late: leave again
             cancellationToken);
@@ -307,7 +319,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
                 throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
             var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);
             var adapter = adapters.FirstOrDefault()
-                          ?? throw new DirectLinkException(L.T("This computer has no Wi-Fi, so it can't join the other computer's network."));
+                          ?? throw new DirectLinkException(L.T("This computer has no Wi-Fi, so it can't join the sender's direct network."));
 
             var current = await ConnectedSsidAsync(adapter).ConfigureAwait(false);
             if (current == network.Ssid && _joinedAdapter != null) return await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
@@ -370,8 +382,8 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         {
             await AbandonJoinAsync(adapter, network.Ssid).ConfigureAwait(false);
             throw new DirectLinkException(seen == 0
-                ? L.T("The other computer's network isn't in range. Move the computers closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location.")
-                : L.T("This computer couldn't join the other computer's network. Move the computers closer together and try again."));
+                ? L.T("The sender's direct network isn't in range. Move the devices closer together; if it still isn't found, turn on location access for desktop apps in Windows Settings → Privacy & security → Location.")
+                : L.T("This computer couldn't join the sender's direct network. Move the devices closer together and try again."));
         }
 
         _joinedAdapter = adapter;
@@ -423,7 +435,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     }
 
     /// <summary>
-    /// Stops this PC's network (and leaves another computer's) in the background: never blocks the caller (often the
+    /// Stops this PC's network (and leaves another device's) in the background: never blocks the caller (often the
     /// window), and is skipped when the network was started again after the stop was asked for.
     /// </summary>
     public void Stop()
@@ -473,7 +485,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         return false;
     }
 
-    /// <summary>The other computer's address on its network (its gateway; Windows hosts are 192.168.137.1).</summary>
+    /// <summary>The host's address on its network (its gateway: Windows hosts are 192.168.137.1, Android groups 192.168.49.1).</summary>
     private static async Task<IPAddress> WaitForHostAsync(WiFiAdapter adapter, CancellationToken cancellationToken)
     {
         var id = adapter.NetworkAdapter.NetworkAdapterId;
@@ -488,10 +500,11 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             await Task.Delay(300, cancellationToken).ConfigureAwait(false);
         }
 
-        return IPAddress.Parse("192.168.137.1");
+        Log.Warn("Wi-Fi: no gateway on the joined network after 15 s");
+        return IPAddress.Parse("192.168.137.1"); // a Windows host's (an Android group's gateway is always reported)
     }
 
-    /// <summary>Windows dropped the other computer's network (it stopped, or went out of range).</summary>
+    /// <summary>Windows dropped the sender's network (it stopped, or went out of range).</summary>
     private async void OnNetworkStatusChanged(object? sender)
     {
         var adapter = _joinedAdapter;

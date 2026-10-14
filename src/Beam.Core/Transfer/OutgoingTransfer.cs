@@ -21,6 +21,7 @@ internal sealed class OutgoingTransfer
     private readonly TransferSession _session;
     private readonly IReadOnlyList<string> _sourcePaths;
     private readonly Func<DeviceInfo> _target;
+    private readonly SendOptions? _options;
     private Manifest? _manifest;
     private List<OfferEntry>? _offer;
     private bool _accepted;
@@ -29,8 +30,10 @@ internal sealed class OutgoingTransfer
     /// <summary>Until when (TickCount64) reconnect failures don't count: the user is switching the connection method.</summary>
     private long _switchingUntil;
 
-    public OutgoingTransfer(TransferService service, TransferSession session, IReadOnlyList<string> sourcePaths, Func<DeviceInfo> target)
+    public OutgoingTransfer(TransferService service, TransferSession session, IReadOnlyList<string> sourcePaths, Func<DeviceInfo> target,
+        SendOptions? options = null)
     {
+        _options = options;
         _service = service;
         _session = session;
         _sourcePaths = sourcePaths;
@@ -145,9 +148,10 @@ internal sealed class OutgoingTransfer
 
     private async Task RunAttemptAsync(CancellationToken token)
     {
-        if (_service.BeforeConnect is { } prepare) await prepare(_target(), token).ConfigureAwait(false);
-        var target = _target();
+        // Connecting covers the preparation too (a direct session's setup, whose stage the session itself reports).
         if (!_accepted) _session.SetState(TransferState.Connecting);
+        if ((_options?.BeforeConnect ?? _service.BeforeConnect) is { } prepare) await prepare(_target(), token).ConfigureAwait(false);
+        var target = _target();
 
         await using var connection = await SecureTransport.ConnectAsync(
             _service.Identity,
@@ -155,7 +159,22 @@ internal sealed class OutgoingTransfer
             target.Endpoints,
             string.IsNullOrEmpty(target.Fingerprint) ? null : target.Fingerprint,
             PeerName,
-            token).ConfigureAwait(false);
+            token,
+            _options?.LocalAddressFor).ConfigureAwait(false);
+
+        // A direct session: nothing (not even the list of files) goes anywhere but the verified direct endpoint.
+        if (_options is { RequiredEndpoint: { } required } && _options.RequiresEndpoint?.Invoke() != false)
+        {
+            var allowed = required();
+            if (allowed == null || !connection.RemoteEndPoint.Address.Equals(allowed.Address) || connection.RemoteEndPoint.Port != allowed.Port)
+            {
+                Log.Warn($"Transfer {_session.Id} to {PeerName}: connected at {connection.RemoteEndPoint}, not the verified direct endpoint " +
+                         $"{allowed?.ToString() ?? "(none)"}; nothing sent");
+                throw new TransferException(TransferErrorKind.DirectFailed,
+                    L.T("The direct connection to {0} couldn't be verified, so nothing was sent.", PeerName),
+                    $"connected at {connection.RemoteEndPoint}, verified {allowed?.ToString() ?? "none"}");
+            }
+        }
 
         await connection.Channel.SendAsync(FrameType.Offer,
             new OfferMessage { TransferId = _session.Id, Entries = _offer!, Resume = _accepted }, token).ConfigureAwait(false);

@@ -56,6 +56,26 @@ public static class DirectActions
 
     /// <summary>"I no longer need the direct link."</summary>
     public const string Stop = "stop";
+
+    // Sender-hosted sessions (one per receiver, identified by SessionId; later messages carry its Nonce):
+
+    /// <summary>Sender → receiver (control channel): "will you take a direct session from me?" Nothing is started yet.</summary>
+    public const string Propose = "propose";
+
+    /// <summary>Sender → receiver (control channel): this session's network name and passphrase; join it.</summary>
+    public const string Offer = "offer";
+
+    /// <summary>Receiver → sender, over the direct network: "I joined; my Beam is at this port."</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Sender → receiver, over the direct network: confirms both ends of the route before any file data.</summary>
+    public const string Verify = "verify";
+
+    /// <summary>Either side: the session is over (done, cancelled or failed); leave or stop what was set up for it.</summary>
+    public const string End = "end";
+
+    /// <summary>Receiver → sender (control channel): joining failed at <see cref="DirectRequestMessage.Stage"/>.</summary>
+    public const string Failed = "failed";
 }
 
 public sealed class DirectRequestMessage
@@ -68,6 +88,37 @@ public sealed class DirectRequestMessage
 
     /// <summary>For <see cref="DirectActions.Prefer"/>: "direct" or "network".</summary>
     public string? Method { get; set; }
+
+    /// <summary>Sender-hosted sessions: which session (128 random bits, hex).</summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>Sender-hosted sessions: proves a message belongs to the current setup of the session.</summary>
+    public string? Nonce { get; set; }
+
+    /// <summary>Propose/Offer: the device this is meant for (a receiver refuses one meant for another device).</summary>
+    public string? ReceiverId { get; set; }
+
+    /// <summary>Over Bluetooth (no TLS): who the sender says it is; checked later on the direct network's TLS connection.</summary>
+    public string? SenderId { get; set; }
+
+    public string? SenderName { get; set; }
+
+    public string? SenderFingerprint { get; set; }
+
+    /// <summary>Offer: how long the details are good for, in seconds (relative, so the devices' clocks don't matter).</summary>
+    public int TtlSeconds { get; set; }
+
+    /// <summary>Offer: the sender is a computer (phones join its network as ordinary Wi-Fi).</summary>
+    public bool HostIsComputer { get; set; }
+
+    /// <summary>Offer: the sender's Beam port; Ready: the receiver's Beam port.</summary>
+    public int Port { get; set; }
+
+    /// <summary>Failed: where it failed (e.g. "join").</summary>
+    public string? Stage { get; set; }
+
+    /// <summary>Failed/End: why, for the other device's user.</summary>
+    public string? Message { get; set; }
 }
 
 public sealed class DirectResponseMessage

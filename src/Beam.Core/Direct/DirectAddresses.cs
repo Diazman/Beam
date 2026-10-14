@@ -51,6 +51,22 @@ public static class DirectAddresses
         }
     }
 
+    /// <summary>
+    /// This device hosts a usable direct network: it has the host's address (.1) on a Wi-Fi Direct subnet (Windows
+    /// 192.168.137.1, Android 192.168.49.1), or an address on a Wi-Fi Direct adapter. A platform reporting "started"
+    /// before the adapter has an address is not usable yet.
+    /// </summary>
+    public static bool HasHostedDirectNetwork()
+    {
+        foreach (var (address, _, direct) in LocalAdapters())
+        {
+            if (direct && (address >> 16) != 0xA9FE) return true; // not 169.254.x (no address handed out yet)
+            if ((address & 0xFF) == 1 && KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network)) return true;
+        }
+
+        return false;
+    }
+
     /// <summary>This device's own address (not loopback): connecting to it would reach this device itself.</summary>
     public static bool IsOwnAddress(IPAddress address)
     {

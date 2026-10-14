@@ -11,6 +11,22 @@ using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
 
+/// <summary>How one outgoing transfer connects (a direct session's; null for the shared network's usual way).</summary>
+internal sealed class SendOptions
+{
+    /// <summary>Runs before each connection attempt instead of <see cref="TransferService.BeforeConnect"/>.</summary>
+    public Func<DeviceInfo, CancellationToken, Task>? BeforeConnect { get; init; }
+
+    /// <summary>Whether the transfer must go to <see cref="RequiredEndpoint"/> right now (Direct mode).</summary>
+    public Func<bool>? RequiresEndpoint { get; init; }
+
+    /// <summary>The only endpoint this transfer may send to while required (checked before anything is sent); null: none yet.</summary>
+    public Func<IPEndPoint?>? RequiredEndpoint { get; init; }
+
+    /// <summary>The local address each connection leaves from (this device's address on the direct network).</summary>
+    public Func<IPEndPoint, IPAddress?>? LocalAddressFor { get; init; }
+}
+
 /// <summary>
 /// Runs the TCP listener that accepts incoming transfers and starts outgoing ones.
 /// Each transfer is an independent connection, so several can run at the same time.
@@ -123,13 +139,24 @@ public sealed class TransferService : IAsyncDisposable
     }
 
     /// <summary>Starts sending files and folders to a device. Progress is reported through the returned session.</summary>
-    public TransferSession Send(DeviceInfo target, IReadOnlyList<string> paths, Func<DeviceInfo>? refreshTarget = null)
+    public TransferSession Send(DeviceInfo target, IReadOnlyList<string> paths, Func<DeviceInfo>? refreshTarget = null) =>
+        Send(target, paths, refreshTarget, null);
+
+    /// <summary>
+    /// Like <see cref="Send(DeviceInfo, IReadOnlyList{string}, Func{DeviceInfo}?)"/>, with <paramref name="options"/> for a
+    /// direct session (its own preparation before each connection, and the one endpoint the files may go to).
+    /// <paramref name="configure"/> runs on the session before it starts.
+    /// </summary>
+    internal TransferSession Send(DeviceInfo target, IReadOnlyList<string> paths, Func<DeviceInfo>? refreshTarget, SendOptions? options,
+        Action<TransferSession>? configure = null)
     {
         if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
         var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, target.Id, target.Name, target.Fingerprint);
         session.SetDescription(paths.Select(DisplayName).Where(n => n.Length > 0).ToList());
+        session.SourcePaths = paths;
+        configure?.Invoke(session);
         Register(session);
-        var transfer = new OutgoingTransfer(this, session, paths, refreshTarget ?? (() => target));
+        var transfer = new OutgoingTransfer(this, session, paths, refreshTarget ?? (() => target), options);
         transfer.Start();
         return session;
     }

@@ -14,9 +14,9 @@ namespace Beam.App.ViewModels;
 
 /// <summary>
 /// The Receive page. While it is open this device is ready to receive: senders on the same Wi-Fi see it as usual and
-/// senders without a shared network find it over Bluetooth. With "Let senders connect directly" its own Wi-Fi is on
-/// while Receive is open; a sender gets its name and passphrase from Beam (over the shared Wi-Fi or Bluetooth), never
-/// from the user.
+/// senders without a shared network find it over Bluetooth. Opening it starts no network: with "Let senders connect
+/// directly", a sender that sends directly starts its own network when it sends, and this device joins it (with this
+/// device's approval when the sender isn't paired).
 /// </summary>
 public sealed class ReceiveViewModel : ObservableObject
 {
@@ -51,14 +51,14 @@ public sealed class ReceiveViewModel : ObservableObject
         ? L.T("Open Send in Beam on the other device and pick this phone.")
         : L.T("Open Send in Beam on the other device and pick this computer.");
 
-    /// <summary>Let senders connect directly: this device starts its own Wi-Fi when a sender asks for it.</summary>
+    /// <summary>Let senders connect directly: this device joins a sender's direct network when it sends.</summary>
     public bool AllowDirect
     {
         get => _node.Settings.Current.AllowDirectSenders;
         set => _ = SetAllowDirectAsync(value);
     }
 
-    public bool CanConnectDirectly => _node.Direct.CanHost;
+    public bool CanConnectDirectly => _node.Direct.IsSupported;
 
     private async Task SetAllowDirectAsync(bool value)
     {
@@ -94,21 +94,18 @@ public sealed class ReceiveViewModel : ObservableObject
         Refresh();
     }
 
-    // ---- Its own Wi-Fi ----
+    // ---- Direct connections ----
 
+    /// <summary>This device's own network is on (only for the Phone page or an older sender; Receive starts none).</summary>
     public bool NetworkOn => _node.Direct.HostedNetwork != null;
 
     public string NetworkText
     {
         get
         {
-            if (_node.Direct.HostedNetwork is { } network)
-                return network.SharesInternet
-                    ? L.T("Its own Wi-Fi {0} is on and shares this computer's internet. Senders connect to it directly.", network.Ssid)
-                    : L.T("Its own Wi-Fi {0} is on. Senders connect to it directly.", network.Ssid);
-            if (!CanConnectDirectly) return L.T("This device can't start its own Wi-Fi: senders need the same Wi-Fi.");
+            if (!CanConnectDirectly) return L.T("This device can't connect directly: senders need the same Wi-Fi.");
             return AllowDirect
-                ? L.T("Starting its own Wi-Fi…")
+                ? L.T("Senders that send directly start their own Wi-Fi when they send, and this device joins it.")
                 : L.T("Senders connect over the shared Wi-Fi.");
         }
     }

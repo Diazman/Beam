@@ -29,6 +29,9 @@ public static class NearbyHandshake
 
         /// <summary>The receiver joined the sender's network; the text is its address there (may be empty).</summary>
         Joined = 3,
+
+        /// <summary>The receiver accepts the proposed direct session (sender-hosted); the text is empty.</summary>
+        Accepted = 4,
     }
 
     /// <summary>What the sender asks for with its request.</summary>
@@ -83,7 +86,7 @@ public static class NearbyHandshake
         {
             if (response.Length < 2 || response[0] != Version) throw new CryptographicException("Not a Beam handshake answer.");
             var status = (Status)response[1];
-            if (status == Status.Joined) return (status, Encoding.UTF8.GetString(response, 2, response.Length - 2));
+            if (status is Status.Joined or Status.Accepted) return (status, Encoding.UTF8.GetString(response, 2, response.Length - 2));
             if (status != Status.Ready) return (status, response.Length > 2 ? Encoding.UTF8.GetString(response, 2, response.Length - 2) : null);
             if (response.Length < 2 + PointLength + IvLength + 16 + MacLength) throw new CryptographicException("Answer too short.");
             var theirs = response.AsSpan(2, PointLength).ToArray();
@@ -138,12 +141,17 @@ public static class NearbyHandshake
     public static byte[] Working() => new[] { Version, (byte)Status.Working };
 
     /// <summary>The receiver joined the sender's network and is at <paramref name="address"/> there.</summary>
-    public static byte[] Joined(string address)
+    public static byte[] Joined(string address) => Plain(Status.Joined, address);
+
+    /// <summary>The receiver accepts the proposed sender-hosted session.</summary>
+    public static byte[] Accepted() => Plain(Status.Accepted, "");
+
+    private static byte[] Plain(Status status, string value)
     {
-        var text = Encoding.UTF8.GetBytes(address);
+        var text = Encoding.UTF8.GetBytes(value);
         var answer = new byte[2 + text.Length];
         answer[0] = Version;
-        answer[1] = (byte)Status.Joined;
+        answer[1] = (byte)status;
         text.CopyTo(answer, 2);
         return answer;
     }

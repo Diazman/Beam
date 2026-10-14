@@ -155,7 +155,8 @@ internal static class SecureTransport
         IReadOnlyList<IPEndPoint> endpoints,
         string? expectedFingerprint,
         string peerName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<IPEndPoint, IPAddress?>? localAddressFor = null)
     {
         if (endpoints.Count == 0)
             throw new TransferException(TransferErrorKind.ConnectFailed,
@@ -176,6 +177,9 @@ internal static class SecureTransport
             var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
+                // A direct session's connections leave from this device's own address on the direct network, so they
+                // can't take another route (e.g. the router) even if the routing table would prefer one.
+                if (localAddressFor?.Invoke(endpoint) is { } local) socket.Bind(new IPEndPoint(local, 0));
                 using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
                     cts.CancelAfter(ConnectTimeout);

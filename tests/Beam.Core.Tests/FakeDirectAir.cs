@@ -4,19 +4,32 @@ using Beam.Core.Discovery;
 
 namespace Beam.Core.Tests;
 
-/// <summary>Stand-in for the radio: hosting hands out a network, joining it makes the host reachable on 127.0.0.2.</summary>
+/// <summary>
+/// Stand-in for the radio, NOT real Wi-Fi: each link that hosts has its own network (name, passphrase); joining checks
+/// them like a WPA2 network would, and can be told to fail the way phones and PCs do (prompt denied, never answers, out
+/// of range). On the loopback interface 127.0.0.1 plays the shared Wi-Fi network, 127.0.0.2 the host's address on the
+/// direct network and 127.0.0.3 the joiner's: <see cref="Wire"/> makes both nodes treat .2/.3 as the direct network and
+/// bind their direct connections to their own address there, so the route checks of a direct session run for real.
+/// </summary>
 public sealed class FakeDirectAir
 {
-    public static readonly IPAddress DirectAddress = IPAddress.Parse("127.0.0.2");
+    public static readonly IPAddress DirectAddress = IPAddress.Parse("127.0.0.2"); // the host's address on the direct network
+    public static readonly IPAddress JoinerAddress = IPAddress.Parse("127.0.0.3"); // the joiner's
 
-    private DirectNetwork? _network;
-    private Action? _onJoined;
+    private readonly object _gate = new();
+    private readonly List<FakeLink> _links = new();
     private int _hosted, _joined, _stopped;
 
     public string? HostError { get; init; }
 
-    /// <summary>Joining fails from now on (e.g. the network went out of range while it is still listed).</summary>
+    /// <summary>Joining fails from now on (e.g. the network went out of range).</summary>
     public bool FailJoins { get; set; }
+
+    /// <summary>The platform says the network started, but no address comes up on it (a driver that half-works).</summary>
+    public bool HostUsable { get; set; } = true;
+
+    /// <summary>Networks don't show up in Wi-Fi scans (scan throttled or not allowed); joining by name still works.</summary>
+    public bool HiddenFromScans { get; set; }
 
     public int Hosted => Volatile.Read(ref _hosted);
 
@@ -24,75 +37,78 @@ public sealed class FakeDirectAir
 
     public int Stopped => Volatile.Read(ref _stopped);
 
-    private readonly List<FakeLink> _links = new();
-
     public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null)
     {
         var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet, JoinError = joinError };
-        _links.Add(link);
+        lock (_gate) _links.Add(link);
         return link;
     }
 
     /// <summary>The roles of the device whose link started the last network (who hosted).</summary>
     public DirectRoles? LastHost { get; private set; }
 
-    /// <summary>The link that started the last network.</summary>
     public IDirectLink? LastHostLink { get; private set; }
 
-    /// <summary>The link that joined last.</summary>
     public IDirectLink? LastJoinLink { get; private set; }
 
     /// <summary>The roles of the device whose link joined last (who joined).</summary>
     public DirectRoles? LastJoiner { get; private set; }
 
-    /// <summary>Whether a joiner is on the host's network right now.</summary>
-    public bool LinkUp { get; private set; }
-
-    /// <summary>The joiner fell off the host's network (e.g. the phone went back to its normal Wi-Fi).</summary>
-    public void LoseLink()
-    {
-        LinkUp = false;
-        foreach (var link in _links.Where(l => l.Roles.HasFlag(DirectRoles.Join))) link.RaiseLost();
-    }
-
-    /// <summary>Whether the host's direct network shows up in Wi-Fi scans (phones notice paired PCs this way).</summary>
-    /// <summary>The network details the last join was given (including how to join it).</summary>
+    /// <summary>The network details the last join was given.</summary>
     public DirectNetwork? LastJoin { get; private set; }
+
+    /// <summary>Whether any joiner is on a host's network right now.</summary>
+    public bool LinkUp
+    {
+        get
+        {
+            lock (_gate) return _links.Any(l => l.JoinedTo != null);
+        }
+    }
 
     public bool InRange { get; set; } = true;
 
-    /// <summary>
-    /// The two devices share no network at all: the joiner only reaches the host after joining its direct network.
-    /// </summary>
-    public void ConnectDirectOnly(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice)
+    /// <summary>Joiners fall off their host's network (e.g. the phone went back to its normal Wi-Fi).</summary>
+    public void LoseLink()
     {
-        joiner.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-        host.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-        _onJoined = () =>
+        List<FakeLink> lost;
+        lock (_gate)
         {
-            joiner.Discovery.ReportReachable(hostDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Transfers.Port) } });
-            host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
-        };
+            lost = _links.Where(l => l.JoinedTo != null).ToList();
+            foreach (var link in lost) link.JoinedTo = null;
+        }
+
+        foreach (var link in lost) link.RaiseLost();
     }
 
     /// <summary>
-    /// Both devices see each other on the Wi-Fi network (127.0.0.1); joining adds the direct address. With
-    /// <paramref name="hostHearsJoiner"/> false the host doesn't learn where the joiner is on its network by itself (like
-    /// a phone on a PC's hotspot whose announcements don't get through); the joiner then says so in its answer.
+    /// Makes 127.0.0.2/127.0.0.3 these nodes' direct network: each treats them as direct addresses, its own address there
+    /// is the other one, and its hosted network is usable when <see cref="HostUsable"/>.
     /// </summary>
-    public void Connect(BeamNode joiner, Func<DeviceInfo> joinerDevice, BeamNode host, Func<DeviceInfo> hostDevice, bool hostHearsJoiner = true)
+    public void Wire(params BeamNode[] nodes)
     {
-        joiner.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-        host.Transfers.IsDirectAddress = a => a.Equals(DirectAddress);
-        joiner.Discovery.ReportReachable(hostDevice());
-        host.Discovery.ReportReachable(joinerDevice());
-        if (!hostHearsJoiner) joiner.Direct.OwnAddressNear = _ => DirectAddress;
-        _onJoined = () =>
+        foreach (var node in nodes)
         {
-            joiner.Discovery.ReportReachable(hostDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, host.Transfers.Port) } });
-            if (hostHearsJoiner)
-                host.Discovery.ReportReachable(joinerDevice() with { Endpoints = new[] { new IPEndPoint(DirectAddress, joiner.Transfers.Port) } });
-        };
+            node.Transfers.IsDirectAddress = a => a.Equals(DirectAddress) || a.Equals(JoinerAddress);
+            node.Direct.OwnAddressNear = a => a.Equals(DirectAddress) ? JoinerAddress : a.Equals(JoinerAddress) ? DirectAddress : null;
+            node.Direct.HostNetworkReady = () => HostUsable;
+        }
+    }
+
+    /// <summary>Both devices see each other on the shared Wi-Fi network (127.0.0.1), and are wired for direct links.</summary>
+    public void Connect(BeamNode a, Func<DeviceInfo> aDevice, BeamNode b, Func<DeviceInfo> bDevice)
+    {
+        Wire(a, b);
+        a.Discovery.ReportReachable(bDevice());
+        b.Discovery.ReportReachable(aDevice());
+    }
+
+    /// <summary>The two devices share no network at all (found over Bluetooth only).</summary>
+    public void ConnectDirectOnly(BeamNode a, BeamNode b) => Wire(a, b);
+
+    public FakeLink? HostOf(string ssid)
+    {
+        lock (_gate) return _links.FirstOrDefault(l => l.Hosting?.Ssid == ssid);
     }
 
     public sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
@@ -102,7 +118,20 @@ public sealed class FakeDirectAir
         /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
         public string? JoinError { get; init; }
 
+        /// <summary>What joining does on this device (the system's prompt, a radio that never answers…).</summary>
+        public JoinOutcome NextJoins { get; set; } = JoinOutcome.Joins;
+
+        /// <summary>How long joining takes.</summary>
+        public TimeSpan JoinDelay { get; set; } = TimeSpan.FromMilliseconds(100);
+
+        /// <summary>The network actually started with another passphrase than the one reported (the joiner gets wrong credentials).</summary>
+        public bool StartsWithOtherPassphrase { get; set; }
+
+        /// <summary>Starting the network is held until this completes (a slow or stuck radio).</summary>
+        public TaskCompletionSource? HoldHost { get; set; }
+
         private readonly FakeDirectAir _air;
+        private int _hostCalls, _joinCalls, _stopCalls;
 
         public FakeLink(FakeDirectAir air, DirectRoles roles)
         {
@@ -112,36 +141,68 @@ public sealed class FakeDirectAir
 
         public DirectRoles Roles { get; }
 
-        /// <summary>How often this device was asked to start its network / join one.</summary>
+        /// <summary>The network this device hosts right now.</summary>
+        public DirectNetwork? Hosting { get; private set; }
+
+        /// <summary>The host whose network this device is on right now.</summary>
+        public FakeLink? JoinedTo { get; internal set; }
+
         public int HostCalls => Volatile.Read(ref _hostCalls);
 
         public int JoinCalls => Volatile.Read(ref _joinCalls);
 
-        private int _hostCalls, _joinCalls;
+        public int StopCalls => Volatile.Read(ref _stopCalls);
 
-        public Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
+        /// <summary>Every network this device was asked to start (to check fresh passphrases).</summary>
+        public List<DirectNetwork> HostedNetworks { get; } = new();
+
+        public async Task<DirectNetwork> HostAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _hostCalls);
+            if (HoldHost is { } hold) await hold.Task.WaitAsync(cancellationToken);
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
-            Interlocked.Increment(ref _air._hosted);
-            _air.LastHost = Roles;
-            _air.LastHostLink = this;
-            return Task.FromResult(_air._network ??= preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]));
+            lock (_air._gate)
+            {
+                if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
+                LeaveLocked(); // one adapter: hosting ends a join
+                var reported = preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]);
+                Hosting = StartsWithOtherPassphrase ? reported with { Passphrase = "not-" + reported.Passphrase } : reported;
+                HostedNetworks.Add(reported);
+                Interlocked.Increment(ref _air._hosted);
+                _air.LastHost = Roles;
+                _air.LastHostLink = this;
+                return reported;
+            }
         }
 
         public async Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _joinCalls);
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(JoinDelay, cancellationToken);
             if (JoinError != null) throw new DirectLinkException(JoinError);
-            if (_air.FailJoins) throw new DirectLinkException("The network isn't in range.");
-            if (network != _air._network) throw new DirectLinkException("Wrong passphrase");
-            _air.LastJoin = network;
-            Interlocked.Increment(ref _air._joined);
-            _air.LastJoiner = Roles;
-            _air.LastJoinLink = this;
-            _air.LinkUp = true;
-            _air._onJoined?.Invoke();
+            switch (NextJoins)
+            {
+                case JoinOutcome.PromptDenied:
+                    throw new DirectLinkException("The phone's user didn't allow connecting to " + network.Ssid);
+                case JoinOutcome.NeverAnswers:
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                    break;
+            }
+
+            if (_air.FailJoins || !_air.InRange) throw new DirectLinkException("The network isn't in range.");
+            lock (_air._gate)
+            {
+                var host = _air._links.FirstOrDefault(l => l.Hosting?.Ssid == network.Ssid);
+                if (host == null) throw new DirectLinkException("The network isn't in range.");
+                if (host.Hosting!.Passphrase != network.Passphrase) throw new DirectLinkException("Wrong passphrase");
+                if (Hosting != null) Hosting = null; // one adapter: joining ends this device's own network
+                JoinedTo = host;
+                _air.LastJoin = network;
+                Interlocked.Increment(ref _air._joined);
+                _air.LastJoiner = Roles;
+                _air.LastJoinLink = this;
+            }
+
             return DirectAddress;
         }
 
@@ -149,13 +210,44 @@ public sealed class FakeDirectAir
 
         public void RaiseLost() => Lost?.Invoke();
 
-        public IReadOnlyCollection<string> VisibleNetworks() =>
-            _air.InRange && _air._network != null ? new[] { "Home Wi-Fi", _air._network.Ssid } : new[] { "Home Wi-Fi" };
+        public IReadOnlyCollection<string> VisibleNetworks()
+        {
+            lock (_air._gate)
+            {
+                var visible = new List<string> { "Home Wi-Fi" };
+                if (_air.InRange && !_air.HiddenFromScans) visible.AddRange(_air._links.Where(l => l.Hosting != null).Select(l => l.Hosting!.Ssid));
+                return visible;
+            }
+        }
 
+        /// <summary>Stops this device's own network (its joiners fall off) and leaves the one it joined; nobody else's.</summary>
         public void Stop()
         {
+            Interlocked.Increment(ref _stopCalls);
             Interlocked.Increment(ref _air._stopped);
-            _air._network = null;
+            List<FakeLink> dropped;
+            lock (_air._gate)
+            {
+                LeaveLocked();
+                dropped = Hosting == null ? new List<FakeLink>() : _air._links.Where(l => l.JoinedTo == this).ToList();
+                foreach (var joiner in dropped) joiner.JoinedTo = null;
+                Hosting = null;
+            }
+
+            foreach (var joiner in dropped) joiner.RaiseLost();
         }
+
+        private void LeaveLocked() => JoinedTo = null;
+    }
+
+    public enum JoinOutcome
+    {
+        Joins,
+
+        /// <summary>The user tapped "Cancel" on the system's "Connect to DIRECT-…?" prompt.</summary>
+        PromptDenied,
+
+        /// <summary>The OS never answers (until the join is given up).</summary>
+        NeverAnswers,
     }
 }

@@ -74,7 +74,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     private bool _showingDirectProblem;
 
-    /// <summary>A direct connection couldn't be set up; transfers carry on over Wi-Fi.</summary>
+    /// <summary>Switching a running transfer to or from a direct link wasn't possible; it carries on as it was.</summary>
     private async void ShowDirectProblem(string message)
     {
         if (_showingDirectProblem) return;
@@ -82,7 +82,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         try
         {
             await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't connect directly"),
-                message + "\n\n" + L.T("Beam uses the Wi-Fi network instead."), L.T("OK"), ""));
+                message + "\n\n" + L.T("The transfer continues the way it was going."), L.T("OK"), ""));
         }
         finally
         {
@@ -382,14 +382,22 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         OnPropertyChanged(nameof(IsTransfersPage));
     }
 
-    /// <summary>Starts sending to one device. Returns false (after telling the user why) if it couldn't start.</summary>
+    /// <summary>
+    /// The sending mode chosen on Send: Direct (this device starts a direct link when Send is pressed and sends only over
+    /// it) or the Wi-Fi network. Direct only where this device can start one.
+    /// </summary>
+    public ConnectionMethod SendMode => Node.Settings.Current.Connection == ConnectionMethod.Direct && Node.Direct.CanHost
+        ? ConnectionMethod.Direct
+        : ConnectionMethod.SameNetwork;
+
+    /// <summary>Starts sending to one device in the chosen mode. Returns false (after telling the user why) if it couldn't start.</summary>
     public async Task<bool> StartSendAsync(DeviceInfo device, IReadOnlyList<string> paths)
     {
         if (await ResolveAsync(device) is not { } target) return false;
         device = target;
         try
         {
-            Node.Send(device, paths);
+            Node.Send(device, paths, SendMode);
             return true;
         }
         catch (Exception ex)
@@ -565,6 +573,40 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
             return await ShowDialogAsync(dialog, cancellationToken) is true;
         });
 
+    /// <summary>
+    /// An unpaired sender asks this device to join its direct network. Says plainly what that does (this device leaves
+    /// its Wi-Fi while the files come; a phone may also show Android's own prompt) and shows the security code to compare.
+    /// </summary>
+    public Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken) =>
+        Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            var code = Beam.Core.Identity.DeviceIdentity.ShortCode(request.SenderFingerprint);
+            var message = L.T("{0} wants to send you files over a direct Wi-Fi connection. This device leaves its Wi-Fi network while the files come, and goes back afterwards. Security code: {1}",
+                request.SenderName, code);
+            if (request.ClaimedOnly) message += "\n\n" + L.T("Found over Bluetooth: Beam checks this code again on the direct connection before any file comes.");
+            var dialog = new ConfirmViewModel(L.T("Connect directly to {0}?", request.SenderName), message, L.T("Connect"), L.T("Not now"));
+            if (!_ui.IsWindowActive)
+            {
+                Notify(s => s.NotifyOnIncomingRequest, dialog.Title, L.T("Open Beam to answer."), bringToFront: false);
+                _ui.BringToFront();
+            }
+
+            return await ShowDialogAsync(dialog, cancellationToken) is true;
+        });
+
+    /// <summary>The user chose to send a failed Direct transfer over the Wi-Fi network instead (a new, separate transfer).</summary>
+    private async Task SendOverNetworkInsteadAsync(TransferSession failed)
+    {
+        try
+        {
+            Node.SendOverNetworkInstead(failed);
+        }
+        catch (TransferException ex)
+        {
+            await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't send to {0}", failed.PeerName), ex.Error.Message, L.T("OK"), ""));
+        }
+    }
+
     public Task<IncomingDecision> RequestApprovalAsync(IncomingRequest request, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
@@ -648,7 +690,8 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private void AddTransfer(TransferSession session)
     {
         if (Transfers.Any(t => t.Session == session)) return;
-        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync, Node.Direct, Node.Discovery.Find);
+        var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync, Node.Direct, Node.Discovery.Find, SendOverNetworkInsteadAsync);
+        session.DirectChanged += _ => Dispatcher.UIThread.Post(vm.Refresh);
         Transfers.Insert(0, vm);
         session.StateChanged += s => Dispatcher.UIThread.Post(() => OnSessionStateChanged(vm));
         // A short transfer can finish before this subscription; catch up so it is still announced and counted.

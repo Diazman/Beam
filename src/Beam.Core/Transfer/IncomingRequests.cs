@@ -89,7 +89,20 @@ public interface IIncomingTransferHandler
 
     /// <summary>Ask the user what to do with files that already exist. Must return one action per conflict.</summary>
     Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A device that isn't paired asks this one to join its direct network for a transfer (this device then leaves its
+    /// Wi-Fi for that network while the files come). True to join. Without an answer (no UI), it is refused.
+    /// </summary>
+    Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken) => Task.FromResult(false);
 }
+
+/// <summary>Who asks this device to join its direct network (see <see cref="IIncomingTransferHandler.ApproveDirectConnectionAsync"/>).</summary>
+/// <param name="ClaimedOnly">
+/// The sender's identity is only claimed so far (asked over Bluetooth, which has no certificate check); Beam checks it on
+/// the direct network before any file comes, and leaves that network if it doesn't match.
+/// </param>
+public sealed record IncomingDirectRequest(string SenderId, string SenderName, string SenderFingerprint, bool ClaimedOnly);
 
 /// <summary>Receiver-side rules supplied by the host application.</summary>
 public sealed class IncomingPolicy

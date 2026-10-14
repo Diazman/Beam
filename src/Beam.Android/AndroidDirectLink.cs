@@ -14,11 +14,20 @@ using Beam.Core.Localization;
 namespace Beam.Droid;
 
 /// <summary>
-/// The phone side of a direct link. The phone joins a PC's (or another phone's) direct network by its name and
-/// passphrase, or starts one itself (Wi-Fi Direct, WifiP2pManager). Joining first tries Wi-Fi Direct, which keeps
-/// the phone on its normal Wi-Fi too; some phones can't join a Windows-hosted network that way (e.g. Xiaomi,
-/// Android 12), so it then joins it as an ordinary Wi-Fi network (Android asks the user once), and Beam's
-/// traffic goes over that network until the direct link is stopped. Needs Android 10.
+/// The phone side of a direct link. Needs Android 10.
+/// <para>
+/// Hosting (this phone sends): a Wi-Fi Direct group with this session's name and passphrase
+/// (WifiP2pManager.CreateGroup with a WifiP2pConfig), which also accepts ordinary Wi-Fi ("legacy") clients such as a
+/// Windows PC's Wi-Fi adapter. Group owners are 192.168.49.1.
+/// </para>
+/// <para>
+/// Joining (this phone receives): a phone's group is first joined the Wi-Fi Direct way, which keeps the phone on its
+/// normal Wi-Fi too; a computer's network (and a group where that failed) is joined as an ordinary Wi-Fi network for
+/// Beam only (WifiNetworkSpecifier): Android shows its "Connect to DIRECT-…?" prompt, which the user must approve
+/// (Beam never claims it connects without that), and may approve it again without asking for the same network.
+/// Beam's process is then bound to that network, so its connections (and only Beam's) use it; Beam.Core still checks
+/// the route by reporting in over it. Leaving releases only that binding and request.
+/// </para>
 /// </summary>
 internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner
 {
@@ -281,6 +290,15 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     /// <returns>The network's access point address (BSSID) when it was seen; null otherwise.</returns>
     private async Task<string?> WaitUntilVisibleAsync(string ssid, CancellationToken cancellationToken)
     {
+        // The network's name and passphrase came over Beam's authenticated channel: Android's WifiNetworkSpecifier
+        // doesn't need a scan to use them. Without scan access (permission not granted) there is nothing to wait for.
+        var permission = OperatingSystem.IsAndroidVersionAtLeast(33) ? Manifest.Permission.NearbyWifiDevices : Manifest.Permission.AccessFineLocation;
+        if (_context.CheckSelfPermission(permission) != Permission.Granted)
+        {
+            Log.Info($"Wi-Fi: no scan access; asking Android for {ssid} by name");
+            return null;
+        }
+
         var deadline = System.Environment.TickCount64 + (long)VisibleTimeout.TotalMilliseconds;
         _lastScanStart = 0; // scan now
         var sawAnything = false;

@@ -52,6 +52,8 @@
         <Button Margin="0,4,8,0" Command="{Binding ShowInFolderCommand}" IsVisible="{Binding CanOpen}" Content="{l:T 'Show in folder'}" />
         <Button Margin="0,4,8,0" Command="{Binding CopyTextCommand}" IsVisible="{Binding CanCopyText}" Content="{l:T 'Copy text'}" />
         <Button Classes="accent" Margin="0,4,8,0" Command="{Binding ResumeCommand}" IsVisible="{Binding CanResume}" Content="{l:T 'Try again'}" />
+        <Button Margin="0,4,8,0" Command="{Binding SendOverNetworkCommand}" IsVisible="{Binding CanSendOverNetwork}" Content="{l:T 'Send over Wi-Fi instead'}"
+                ToolTip.Tip="{l:T 'Send the same files over the Wi-Fi network as a new transfer.'}" />
         <Button Margin="0,4,8,0" Command="{Binding SwitchToDirectCommand}" IsVisible="{Binding CanSwitchToDirect}" Content="{l:T 'Connect directly'}"
                 ToolTip.Tip="{l:T 'Continue over a direct Wi-Fi link between the two devices: faster on a slow or busy network.'}" />
         <Button Margin="0,4,8,0" Command="{Binding SwitchToNetworkCommand}" IsVisible="{Binding CanSwitchToNetwork}" Content="{l:T 'Switch to Wi-Fi'}"

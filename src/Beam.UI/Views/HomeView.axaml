@@ -50,12 +50,14 @@
 
           <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding CanConnectDirectly}">
             <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="{l:T 'Prefer direct connection'}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{l:T 'Send directly'}" FontWeight="SemiBold" TextWrapping="Wrap" />
               <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="{l:T 'Connect to the other device directly first: faster, and no router needed. If that isn\'t possible, Beam uses the Wi-Fi network.'}" />
+                         Text="{l:T 'When you press Send, this device starts a direct Wi-Fi link and the chosen devices join it. Files go only over that link; if it can\'t be set up, Beam tells you why. Off: over the Wi-Fi network.'}" />
             </StackPanel>
             <ToggleSwitch Grid.Column="1" IsChecked="{Binding PreferDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
           </Grid>
+
+          <TextBlock Classes="caption" Text="{Binding DiscoveryStatus}" IsVisible="{Binding HasDiscoveryStatus}" TextWrapping="Wrap" />
 
           <Border Classes="notice" IsVisible="{Binding HasBluetoothNotice}">
             <Grid ColumnDefinitions="*,Auto">

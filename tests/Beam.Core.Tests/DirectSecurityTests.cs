@@ -146,27 +146,34 @@ public class DirectSecurityTests
     public async Task AcceptingATransferLetsItsSenderMoveItToADirectLink()
     {
         // Mid-transfer "Switch to direct" works without pairing or Receive: the user already accepted these files.
+        // (The sender hosts now: the PC, the receiver, joins the phone's network.)
         var air = new FakeDirectAir();
         var slow = new SlowFiles();
         var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: phoneLink, kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
+        pc.Handler.ApproveDirect = _ => false; // its user would say no if asked: accepting the files is what counts
 
-        // Before any transfer: refused.
-        Assert.False(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
-        Assert.Equal(0, Fake(pcLink).HostCalls);
+        // Before any transfer: refused (not paired, Receive closed), and nothing was started.
+        var before = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("a.txt", 1000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(before);
+        Assert.Equal(TransferState.Failed, before.State);
+        Assert.Equal(0, Fake(phoneLink).HostCalls);
+        Assert.Equal(0, Fake(pcLink).JoinCalls);
 
         var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(phone.CreateFile("video.mp4", 20L * 1024 * 1024, 3)) });
         await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "accepted");
-        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
-        Assert.Equal(1, Fake(pcLink).HostCalls);
+        Assert.True(await phone.Node.Direct.SwitchAsync(session, ConnectionMethod.Direct));
+        Assert.Equal(1, Fake(phoneLink).HostCalls);
+        Assert.Equal(1, Fake(pcLink).JoinCalls);
         await Wait.UntilAsync(() => session.Path == TransferPath.Direct, because: "moved to the direct link");
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
         Assert.Equal(TransferState.Completed, session.State);
 
-        // Its files are in: that unpaired phone no longer keeps the PC's network on.
-        await Wait.UntilAsync(() => pc.Node.Direct.HostedNetwork == null, because: "the network went off after the transfer");
+        // Its files are in: the phone's network goes off and the PC leaves it.
+        await Wait.UntilAsync(() => phone.Node.Direct.HostedNetwork == null && Fake(pcLink).JoinedTo == null, because: "the network went off after the transfer");
     }
 
     [Fact]
@@ -305,19 +312,16 @@ public class DirectSecurityTests
     [Fact]
     public async Task WithSameWiFiChosenASenderNeverStartsOrJoinsANetwork()
     {
-        // Everything that could tempt it: the receiver has Receive open with its network on, the sender is paired and
-        // knows that network, and it is in range.
+        // Everything that could tempt it: the receiver has Receive open, the sender is paired and knows its network.
         var air = new FakeDirectAir();
         var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
         pc.Node.Nearby.SetReceiving(true);
-        await Wait.UntilAsync(() => pc.Node.Direct.HostedNetwork != null, because: "the receiver's network is on");
         phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
         Assert.NotNull(phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId));
         Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
-        var hostedBefore = air.Hosted;
 
         var paths = new List<TransferPath>();
         var session = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("photo.jpg", 400_000) });
@@ -325,10 +329,12 @@ public class DirectSecurityTests
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
 
         Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(ConnectionMethod.SameNetwork, session.Mode);
+        Assert.Null(session.DirectSession);
         Assert.All(paths.Where(p => p != TransferPath.Unknown), p => Assert.Equal(TransferPath.Network, p));
         Assert.Equal(0, Fake(phoneLink).HostCalls);
         Assert.Equal(0, Fake(phoneLink).JoinCalls);
-        Assert.Equal(hostedBefore, air.Hosted); // the sender didn't ask the receiver to start anything either
+        Assert.Equal(0, air.Hosted); // nobody started anything: not the sender, and not the receiver for having Receive open
     }
 
     // ---- A direct link lost mid-transfer ----
@@ -338,62 +344,71 @@ public class DirectSecurityTests
     {
         var air = new FakeDirectAir();
         var slow = new SlowFiles();
-        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
+        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
-        phone.Node.Transfers.IsDirectAddress = a => a.Equals(FakeDirectAir.DirectAddress) && air.LinkUp; // like a real adapter
+        pc.Trust(phone);
         const long size = 30L * 1024 * 1024;
         var file = phone.CreateFile("video.mp4", size, 8);
 
-        var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
-        await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "accepted");
-        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) }, ConnectionMethod.Direct);
         await Wait.UntilAsync(() => session.Path == TransferPath.Direct && session.GetSnapshot().TransferredBytes > 4_000_000, because: "sending directly");
+        var first = session.DirectSession!.Id;
 
-        // The phone falls off the PC's network, and the connection over it dies.
+        // The PC falls off the phone's network, and the connection over it dies.
         air.LoseLink();
         Assert.True(session.InterruptConnection(switchingPath: false));
 
-        await Wait.UntilAsync(() => air.Joined == 2 && session.Path == TransferPath.Direct, because: "rejoined and resumed directly", timeout: TimeSpan.FromSeconds(30));
+        await Wait.UntilAsync(() => air.Joined == 2 && session.Path == TransferPath.Direct && session.State == TransferState.Transferring,
+            because: "set up again and resumed directly", timeout: TimeSpan.FromSeconds(30));
+        Assert.NotEqual(first, session.DirectSession!.Id); // a new session id for the new setup
+        Assert.Equal(1, session.DirectSession.Reconnects);
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(90));
         Assert.Equal(TransferState.Completed, session.State);
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "video.mp4")));
         Assert.True(slow.BytesRead < size + 3L * 1024 * 1024, $"read {slow.BytesRead} bytes of {size}: the transfer started over");
-        Assert.Single(pc.Handler.Requests); // resuming didn't ask the user again
+        Assert.Single(pc.Node.Transfers.Sessions, s => s.Direction == TransferDirection.Receive); // resumed, not a second transfer
         Assert.Empty(Directory.GetFiles(pc.ReceiveFolder, "*.beampart"));
         Assert.Single(Directory.GetFiles(pc.ReceiveFolder)); // no second copy
     }
 
     [Fact]
-    public async Task WhenTheLostDirectLinkCantBeRejoinedTheTransferFinishesOverWiFi()
+    public async Task WhenTheLostDirectLinkCantBeSetUpAgainTheTransferFailsAndNothingGoesOverWiFi()
     {
+        // (Until this version it quietly finished over the shared Wi-Fi. Direct now means direct: the user decides.)
         var air = new FakeDirectAir();
         var slow = new SlowFiles();
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
         await using var phone = new TestNode("Galaxy", externalFiles: slow, directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
         air.Connect(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
-        phone.Node.Transfers.IsDirectAddress = a => a.Equals(FakeDirectAir.DirectAddress) && air.LinkUp;
-        var problems = new List<string>();
-        phone.Node.Direct.Problem += problems.Add;
+        pc.Trust(phone);
         const long size = 30L * 1024 * 1024;
         var file = phone.CreateFile("video.mp4", size, 9);
+        var paths = new List<TransferPath>();
 
-        var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) });
-        await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "accepted");
-        Assert.True(await phone.Node.Direct.SwitchAsync(pc.Node.Identity.DeviceId, ConnectionMethod.Direct));
+        var session = phone.Node.Send(pc.AsDevice(), new[] { slow.Add(file) }, ConnectionMethod.Direct);
+        session.PathChanged += s => { lock (paths) paths.Add(s.Path); };
         await Wait.UntilAsync(() => session.Path == TransferPath.Direct && session.GetSnapshot().TransferredBytes > 4_000_000, because: "sending directly");
 
         air.FailJoins = true; // out of range now
         air.LoseLink();
         Assert.True(session.InterruptConnection(switchingPath: false));
 
-        await Wait.UntilAsync(() => session.Path == TransferPath.Network && session.State == TransferState.Transferring, because: "continued over Wi-Fi",
-            timeout: TimeSpan.FromSeconds(30));
-        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(90));
-        Assert.Equal(TransferState.Completed, session.State);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.Equal(TransferErrorKind.DirectFailed, session.Error!.Kind);
+        Assert.Contains("receiver join", session.Error.Message);
+        Assert.True(session.CanResume);
+        Assert.DoesNotContain(TransferPath.Network, paths);
+        Assert.Equal(ConnectionMethod.Direct, session.Mode);
+
+        // Only when the user asks: a separate transfer over the Wi-Fi network, shown as such; it finishes the file.
+        var overWiFi = phone.Node.SendOverNetworkInstead(session);
+        Assert.Equal(ConnectionMethod.SameNetwork, overWiFi.Mode);
+        await Wait.ForFinishAsync(overWiFi, TimeSpan.FromSeconds(90));
+        Assert.Equal(TransferState.Completed, overWiFi.State);
+        Assert.Equal(TransferPath.Network, overWiFi.Path);
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "video.mp4")));
-        Assert.True(slow.BytesRead < size + 3L * 1024 * 1024, $"read {slow.BytesRead} bytes of {size}: the transfer started over");
-        Assert.Single(pc.Handler.Requests);
-        Assert.Single(Directory.GetFiles(pc.ReceiveFolder));
     }
 }

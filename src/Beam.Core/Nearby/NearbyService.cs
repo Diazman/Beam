@@ -5,6 +5,7 @@ using Beam.Core.Diagnostics;
 using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.Localization;
+using Beam.Core.Protocol;
 using Beam.Core.Settings;
 
 namespace Beam.Core.Nearby;
@@ -21,7 +22,7 @@ namespace Beam.Core.Nearby;
 /// checked against the receiver's certificate fingerprint and approved on the receiver as always.
 /// </para>
 /// </summary>
-public sealed class NearbyService : INearbyResponder
+public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
 {
     /// <summary>Platform of the list entries for receivers only heard over Bluetooth (not yet known by their real id).</summary>
     public const string BluetoothPlatform = "bluetooth";
@@ -66,9 +67,7 @@ public sealed class NearbyService : INearbyResponder
         {
             radio.StateChanged += OnRadioStateChanged;
             direct.Changed += () => UpdateAdvertisement();
-            direct.RefreshNetwork = RefreshAsync;
-            direct.PeerNetworkOn = NetworkOn;
-            direct.AskToJoinOverBluetooth = AskToJoinAsync;
+            direct.Bluetooth = this;
         }
     }
 
@@ -175,10 +174,6 @@ public sealed class NearbyService : INearbyResponder
         }
     }
 
-    /// <summary>Whether the device's beacon says its network is on (null: not heard over Bluetooth).</summary>
-    private bool? NetworkOn(string deviceId) =>
-        _sightings.TryGetValue(HashText(deviceId), out var s) && Fresh(s.At) ? s.Sighting.Beacon.Flags.HasFlag(NearbyBeaconFlags.Hosting) : null;
-
     /// <summary>A list entry for a receiver heard only over Bluetooth (to send to it, <see cref="ResolveAsync"/> first).</summary>
     public static bool IsPlaceholder(DeviceInfo device) => device.Platform == BluetoothPlatform;
 
@@ -232,7 +227,8 @@ public sealed class NearbyService : INearbyResponder
 
             var flags = (_selfIsComputer ? NearbyBeaconFlags.Computer : NearbyBeaconFlags.None)
                         | (_direct.CanHost ? NearbyBeaconFlags.CanHost : NearbyBeaconFlags.None)
-                        | (_direct.HostedNetwork != null ? NearbyBeaconFlags.Hosting : NearbyBeaconFlags.None);
+                        | (_direct.HostedNetwork != null ? NearbyBeaconFlags.Hosting : NearbyBeaconFlags.None)
+                        | (_direct.AnnouncedRoles.HasFlag(DirectRoles.SenderHosted) ? NearbyBeaconFlags.SenderHosted : NearbyBeaconFlags.None);
             var beacon = new NearbyBeacon(NearbyBeacon.HashOf(_selfId()), _settings.Current.DeviceName, flags).ToBytes();
             lock (_gate)
             {
@@ -263,7 +259,7 @@ public sealed class NearbyService : INearbyResponder
         if (NearbyHandshake.IsJoinRequest(data))
         {
             _answers[sender] = _keys.TryGetValue(sender, out var keys)
-                ? (Task.Run(() => JoinForSenderAsync(data, keys)), Environment.TickCount64)
+                ? (Task.Run(() => SessionMessageAsync(sender, data, keys)), Environment.TickCount64)
                 : (Task.FromResult(NearbyHandshake.Refuse("No handshake yet.")), Environment.TickCount64);
             return;
         }
@@ -282,6 +278,7 @@ public sealed class NearbyService : INearbyResponder
             return;
         }
 
+        _senderHashes[sender] = NearbyHandshake.SenderHash(data);
         _answers[sender] = (Task.Run(async () =>
         {
             var (answer, keys) = await AnswerAsync(data).ConfigureAwait(false);
@@ -300,7 +297,11 @@ public sealed class NearbyService : INearbyResponder
     {
         _answers.TryRemove(sender, out _);
         _keys.TryRemove(sender, out _);
+        _senderHashes.TryRemove(sender, out _);
     }
+
+    /// <summary>Who each Bluetooth sender said it is in its handshake (its id hash), to check its later messages against.</summary>
+    private readonly ConcurrentDictionary<string, byte[]> _senderHashes = new();
 
     private async Task<(byte[] Answer, NearbyHandshake.Keys? Keys)> AnswerAsync(byte[] request)
     {
@@ -321,11 +322,10 @@ public sealed class NearbyService : INearbyResponder
         }
 
         var code = _pairingCode(network != null);
-        if (network != null)
-        {
-            code.Ssid = network.Ssid; // what is actually on (it may differ from the saved one)
-            code.Passphrase = network.Passphrase;
-        }
+        // A network's details only go to a sender this device started it for (an older sender that asked for it). This
+        // version's senders host themselves and get none: anyone nearby can run this handshake.
+        code.Ssid = network?.Ssid;
+        code.Passphrase = network?.Passphrase;
 
         if (network == null && code.Addresses.Count == 0 && !senderHosts)
             return (NearbyHandshake.Refuse(_settings.Current.AllowDirectSenders
@@ -340,26 +340,67 @@ public sealed class NearbyService : INearbyResponder
         return (NearbyHandshake.Answer(request, code.ToJson(), out var keys), keys);
     }
 
-    /// <summary>The sender started its own network and asks this device to join it (a phone sending to a computer).</summary>
-    private async Task<byte[]> JoinForSenderAsync(byte[] request, NearbyHandshake.Keys keys)
+    /// <summary>
+    /// A sealed message after the handshake: a direct session's proposal, offer or end (sender-hosted sessions), checked
+    /// against who the sender said it was in the handshake. Older senders' "join my network" (no session) is refused:
+    /// it joined without asking anyone.
+    /// </summary>
+    private async Task<byte[]> SessionMessageAsync(string sender, byte[] data, NearbyHandshake.Keys keys)
     {
         try
         {
-            var code = PairingCode.FromJson(NearbyHandshake.OpenJoinRequest(request, keys));
-            if (code?.Network == null) return NearbyHandshake.Refuse("Missing network details.");
-            using var timeout = new CancellationTokenSource(JoinTimeout);
-            var address = await _direct.JoinForNearbyAsync(code, timeout.Token).ConfigureAwait(false);
-            return NearbyHandshake.Joined(address?.ToString() ?? "");
+            var text = NearbyHandshake.OpenJoinRequest(data, keys);
+            DirectRequestMessage? request = null;
+            try
+            {
+                request = System.Text.Json.JsonSerializer.Deserialize(text, ProtocolJson.Default.DirectRequestMessage);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // not a session message
+            }
+
+            if (request is not { Action: DirectActions.Propose or DirectActions.Offer or DirectActions.End })
+            {
+                Log.Info("Nearby: an older sender asked this device to join its network; refused (update Beam on it)");
+                return NearbyHandshake.Refuse(L.T("Update Beam on the sending device to connect directly."));
+            }
+
+            // Its claims must match its handshake (still only claims: the direct network's TLS connection checks them).
+            if (string.IsNullOrEmpty(request.SenderId) || !_senderHashes.TryGetValue(sender, out var hash)
+                || !NearbyBeacon.HashOf(request.SenderId).AsSpan(0, 6).SequenceEqual(hash))
+                return NearbyHandshake.Refuse("Not the device that started this handshake.");
+
+            switch (request.Action)
+            {
+                case DirectActions.Propose:
+                {
+                    var reply = await _direct.ProposeIncomingAsync(request, request.SenderId, request.SenderName ?? "Beam", request.SenderFingerprint ?? "",
+                        claimedOnly: true, DirectControlChannel.Bluetooth, Array.Empty<IPEndPoint>(), CancellationToken.None).ConfigureAwait(false);
+                    return reply.Ok ? NearbyHandshake.Accepted() : NearbyHandshake.Refuse(reply.Message ?? L.T("{0} didn't accept the direct connection.", _settings.Current.DeviceName));
+                }
+
+                case DirectActions.Offer:
+                {
+                    var reply = _direct.OfferIncoming(request, request.SenderFingerprint ?? "", out var join);
+                    if (!reply.Ok || join == null) return NearbyHandshake.Refuse(reply.Message ?? "Missing network details.");
+                    return NearbyHandshake.Joined(await join.ConfigureAwait(false)); // the sender reads "working" meanwhile
+                }
+
+                default:
+                    _direct.EndFromSenderOverBluetooth(request);
+                    return NearbyHandshake.Joined("");
+            }
         }
         catch (DirectLinkException ex)
         {
-            Log.Warn($"Nearby: joining the sender's network failed: {ex.Message}");
+            Log.Warn($"Nearby: direct session over Bluetooth: {ex.Message}");
             return NearbyHandshake.Refuse(ex.Message);
         }
         catch (Exception ex)
         {
-            Log.Warn($"Nearby: joining the sender's network failed: {ex.Message}");
-            return NearbyHandshake.Refuse(L.T("{0} couldn't join the direct connection.", _settings.Current.DeviceName));
+            Log.Warn($"Nearby: direct session over Bluetooth failed: {ex.GetType().Name}: {ex.Message}");
+            return NearbyHandshake.Refuse(L.T("{0} couldn't join the direct network.", _settings.Current.DeviceName));
         }
     }
 
@@ -416,63 +457,121 @@ public sealed class NearbyService : INearbyResponder
     private static DirectRoles RolesOf(NearbyBeacon beacon) =>
         DirectRoles.Receiving
         | (beacon.Flags.HasFlag(NearbyBeaconFlags.CanHost) ? DirectRoles.Host : DirectRoles.None)
+        | (beacon.Flags.HasFlag(NearbyBeaconFlags.SenderHosted) ? DirectRoles.SenderHosted : DirectRoles.None)
         | (beacon.Flags.HasFlag(NearbyBeaconFlags.Computer) ? DirectRoles.JoinComputers : DirectRoles.Join);
 
     private static string KindOf(NearbyBeacon beacon) => beacon.Flags.HasFlag(NearbyBeaconFlags.Computer) ? DeviceKinds.Desktop : DeviceKinds.Phone;
 
     /// <summary>
-    /// Turns a receiver heard over Bluetooth into a device Beam can send to: runs the handshake, remembers its network,
-    /// and returns it under its real id. Devices that aren't placeholders come back unchanged.
+    /// Turns a receiver heard over Bluetooth into a device Beam can send to: runs the handshake (which only says who it
+    /// is: the receiver starts nothing) and returns it under its real id. Devices that aren't placeholders come back
+    /// unchanged.
     /// </summary>
     public async Task<DeviceInfo> ResolveAsync(DeviceInfo device, CancellationToken cancellationToken)
     {
         if (!IsPlaceholder(device)) return device;
         var hash = device.Id[PlaceholderPrefix.Length..];
-        // The receiver hosts: it starts its network (if it isn't on yet) and hands over its details.
-        var flags = NearbyHandshake.RequestFlags.None;
-        var (code, _) = await HandshakeAsync(hash, device.Name, flags, null, cancellationToken).ConfigureAwait(false);
+        var (code, _) = await HandshakeAsync(hash, device.Name, null,
+            (_, _, code, _) => Task.FromResult(code), cancellationToken).ConfigureAwait(false);
         var resolved = _direct.AcceptNearby(code);
         _discovery.Forget(device.Id);
         Changed?.Invoke();
         return resolved;
     }
 
-    /// <summary>Joining a remembered network failed: ask the receiver for its current details (if it is in range).</summary>
-    private async Task<bool> RefreshAsync(DeviceInfo device, CancellationToken cancellationToken)
+    bool IBluetoothDirectControl.CanReach(string deviceId) =>
+        _radio?.State == NearbyRadioState.Ready && _sightings.TryGetValue(HashText(deviceId), out var s) && Fresh(s.At);
+
+    /// <summary>A direct session's control channel over Bluetooth: the handshake, then the proposal, on one connection kept open.</summary>
+    async Task<IDirectControl> IBluetoothDirectControl.OpenAsync(DeviceInfo peer, string? expectedFingerprint, DirectRequestMessage propose,
+        CancellationToken cancellationToken)
     {
-        var hash = HashText(device.Id);
-        if (!_sightings.TryGetValue(hash, out var s) || !Fresh(s.At)) return false;
-        var before = _direct.KnownNetworkFor(device.Id);
-        var (code, _) = await HandshakeAsync(hash, device.Name, NearbyHandshake.RequestFlags.None, null, cancellationToken).ConfigureAwait(false);
-        _direct.AcceptNearby(code);
-        var after = _direct.KnownNetworkFor(device.Id);
-        return after != null && (before == null || before.Passphrase != after.Passphrase || before.Ssid != after.Ssid);
+        var (control, _) = await HandshakeAsync<IDirectControl>(HashText(peer.Id), peer.Name, expectedFingerprint, async (connection, sender, code, token) =>
+        {
+            if (code.DeviceId != peer.Id) throw new DirectLinkException(L.T("This isn't the {0} you connected to before. Beam didn't connect, to keep your files safe.", peer.Name));
+            await connection.WriteAsync(sender.JoinRequest(Json(propose)), token).ConfigureAwait(false);
+            await ReadUntilDoneAsync(connection, sender, peer.Name, NearbyHandshake.Status.Accepted, token).ConfigureAwait(false);
+            return new BluetoothControl(connection, sender, code.Fingerprint, peer.Name);
+        }, cancellationToken, keepOpen: true).ConfigureAwait(false);
+        return control;
     }
 
-    /// <summary>This device started <paramref name="network"/>: ask the device over Bluetooth to join it. Returns its address there.</summary>
-    private async Task<IPAddress?> AskToJoinAsync(DeviceInfo device, DirectNetwork network, CancellationToken cancellationToken)
+    private static string Json(DirectRequestMessage message) =>
+        System.Text.Json.JsonSerializer.Serialize(message, ProtocolJson.Default.DirectRequestMessage);
+
+    /// <summary>The open Bluetooth connection of one direct session (its messages sealed with that handshake's keys).</summary>
+    private sealed class BluetoothControl : IDirectControl
     {
-        var mine = _pairingCode(true);
-        mine.Ssid = network.Ssid;
-        mine.Passphrase = network.Passphrase;
-        var (_, address) = await HandshakeAsync(HashText(device.Id), device.Name, NearbyHandshake.RequestFlags.SenderHosts, mine, cancellationToken)
-            .ConfigureAwait(false);
-        return address;
+        private readonly INearbyConnection _connection;
+        private readonly NearbyHandshake.Sender _sender;
+        private readonly string _name;
+        private int _disposed;
+
+        public BluetoothControl(INearbyConnection connection, NearbyHandshake.Sender sender, string fingerprint, string name)
+        {
+            _connection = connection;
+            _sender = sender;
+            PeerFingerprint = fingerprint;
+            _name = name;
+        }
+
+        public DirectControlChannel Channel => DirectControlChannel.Bluetooth;
+
+        public string PeerFingerprint { get; }
+
+        public async Task OfferAsync(DirectRequestMessage offer, Action delivered, CancellationToken cancellationToken)
+        {
+            await _connection.WriteAsync(_sender.JoinRequest(Json(offer)), cancellationToken).ConfigureAwait(false);
+            delivered();
+            // "Working" while it joins; then joined (it also reports in over the direct network) or why it couldn't.
+            await ReadUntilDoneAsync(_connection, _sender, _name, NearbyHandshake.Status.Joined, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task TellAsync(DirectRequestMessage message)
+        {
+            if (Volatile.Read(ref _disposed) == 1) return;
+            try
+            {
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _connection.WriteAsync(_sender.JoinRequest(Json(message)), limit.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"Nearby: couldn't tell {_name} ({message.Action}) over Bluetooth: {ex.Message}");
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            try
+            {
+                await _connection.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"Nearby: closing the Bluetooth connection to {_name}: {ex.Message}");
+            }
+
+            _sender.Dispose();
+        }
     }
 
     /// <summary>
-    /// The handshake with the receiver whose id hash is <paramref name="hash"/>: its code, and (with
-    /// <paramref name="joinMine"/>) its address after it joined this device's network.
+    /// The handshake with the receiver whose id hash is <paramref name="hash"/> (it never starts a network for this
+    /// version's senders), then <paramref name="after"/> on the same connection. With <paramref name="keepOpen"/> the
+    /// connection stays open for what <paramref name="after"/> returns.
     /// </summary>
-    private async Task<(PairingCode Code, IPAddress? JoinedAt)> HandshakeAsync(string hash, string name, NearbyHandshake.RequestFlags flags,
-        PairingCode? joinMine, CancellationToken cancellationToken)
+    private async Task<(T Result, PairingCode Code)> HandshakeAsync<T>(string hash, string name, string? expectedFingerprint,
+        Func<INearbyConnection, NearbyHandshake.Sender, PairingCode, CancellationToken, Task<T>> after, CancellationToken cancellationToken,
+        bool keepOpen = false)
     {
         if (_radio == null || _radio.State != NearbyRadioState.Ready) throw new DirectLinkException(L.T("Turn on Bluetooth to connect to {0}.", name));
         if (!_sightings.TryGetValue(hash, out var seen) || !Fresh(seen.At))
             throw new DirectLinkException(L.T("{0} isn't nearby anymore. Open Receive on it and try again.", name));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(joinMine != null ? JoinTimeout + HandshakeTimeout : HandshakeTimeout);
+        timeout.CancelAfter(HandshakeTimeout);
         var token = timeout.Token;
         // Where to connect: a phone's service is at its beacon's address. Windows sends its beacon from another
         // (non-connectable) address, so for a computer try the addresses that advertised Beam's service first.
@@ -480,8 +579,7 @@ public sealed class NearbyService : INearbyResponder
         var candidates = seen.Sighting.Beacon.Flags.HasFlag(NearbyBeaconFlags.Computer)
             ? serviceAddresses.Append(seen.Sighting.Address).ToList()
             : serviceAddresses.Prepend(seen.Sighting.Address).ToList();
-        Log.Info($"Nearby: handshake with {name} over Bluetooth ({flags}{(joinMine != null ? ", asking it to join " + joinMine.Ssid : "")}); " +
-                 $"addresses to try: {string.Join(", ", candidates)}");
+        Log.Info($"Nearby: handshake with {name} over Bluetooth; addresses to try: {string.Join(", ", candidates)}");
         Exception? last = null;
         try
         {
@@ -489,7 +587,7 @@ public sealed class NearbyService : INearbyResponder
             {
                 try
                 {
-                    var result = await HandshakeAtAsync(address, name, hash, flags, joinMine, token).ConfigureAwait(false);
+                    var result = await HandshakeAtAsync(address, name, hash, expectedFingerprint, after, keepOpen, token).ConfigureAwait(false);
                     if (result is { } found) return found;
                 }
                 catch (DirectLinkException)
@@ -516,8 +614,8 @@ public sealed class NearbyService : INearbyResponder
     /// One handshake at one address (the connection has a time limit of its own, so a dead address costs little). Null
     /// when the device there isn't the one wanted.
     /// </summary>
-    private async Task<(PairingCode, IPAddress?)?> HandshakeAtAsync(string address, string name, string hash, NearbyHandshake.RequestFlags flags,
-        PairingCode? joinMine, CancellationToken token)
+    private async Task<(T, PairingCode)?> HandshakeAtAsync<T>(string address, string name, string hash, string? expectedFingerprint,
+        Func<INearbyConnection, NearbyHandshake.Sender, PairingCode, CancellationToken, Task<T>> after, bool keepOpen, CancellationToken token)
     {
         using var connecting = CancellationTokenSource.CreateLinkedTokenSource(token);
         connecting.CancelAfter(ConnectTimeout);
@@ -533,9 +631,11 @@ public sealed class NearbyService : INearbyResponder
         }
 
         Log.Info($"Nearby: connected to {address} over Bluetooth in {Environment.TickCount64 - started} ms");
-        await using (connection.ConfigureAwait(false))
+        // This version's senders always host themselves: the receiver never starts its network for this handshake.
+        var sender = new NearbyHandshake.Sender(NearbyBeacon.HashOf(_selfId()), NearbyHandshake.RequestFlags.SenderHosts);
+        var handedOver = false;
+        try
         {
-            using var sender = new NearbyHandshake.Sender(NearbyBeacon.HashOf(_selfId()), flags);
             await connection.WriteAsync(sender.Request(), token).ConfigureAwait(false);
             var text = await ReadUntilDoneAsync(connection, sender, name, NearbyHandshake.Status.Ready, token).ConfigureAwait(false);
             var code = PairingCode.FromJson(text) ?? throw new IOException("Not a pairing code.");
@@ -547,20 +647,26 @@ public sealed class NearbyService : INearbyResponder
 
             // A device seen before must still have the same certificate: otherwise someone is pretending to be it.
             var expected = _settings.Current.TrustedDevices.FirstOrDefault(t => t.DeviceId == code.DeviceId)?.Fingerprint
-                           ?? _direct.KnownNetworkFor(code.DeviceId)?.Fingerprint;
+                           ?? _direct.KnownNetworkFor(code.DeviceId)?.Fingerprint
+                           ?? expectedFingerprint;
             if (!string.IsNullOrEmpty(expected) && !string.Equals(expected, code.Fingerprint, StringComparison.OrdinalIgnoreCase))
             {
                 Log.Warn($"Nearby: {code.Name} answered with a different certificate than before; not connecting");
                 throw new DirectLinkException(L.T("This isn't the {0} you connected to before. Beam didn't connect, to keep your files safe.", code.Name));
             }
 
-            Log.Info($"Nearby: {code.Name} answered{(code.Network != null ? $" with its network {code.Network.Ssid}" : "")} (roles {code.Roles})");
-            if (joinMine == null) return (code, null);
-
-            await connection.WriteAsync(sender.JoinRequest(joinMine.ToJson()), token).ConfigureAwait(false);
-            var joinedAt = await ReadUntilDoneAsync(connection, sender, name, NearbyHandshake.Status.Joined, token).ConfigureAwait(false);
-            Log.Info($"Nearby: {code.Name} joined {joinMine.Ssid}{(joinedAt.Length > 0 ? " at " + joinedAt : "")}");
-            return (code, IPAddress.TryParse(joinedAt, out var ip) ? ip : null);
+            Log.Info($"Nearby: {code.Name} answered (roles {code.Roles})");
+            var result = await after(connection, sender, code, token).ConfigureAwait(false);
+            handedOver = keepOpen;
+            return (result, code);
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                await connection.DisposeAsync().ConfigureAwait(false);
+                sender.Dispose();
+            }
         }
     }
 

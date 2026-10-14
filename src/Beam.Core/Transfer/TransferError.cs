@@ -24,6 +24,9 @@ public enum TransferErrorKind
     SecureConnectionFailed,
     NothingToSend,
     Protocol,
+
+    /// <summary>Direct mode: the direct link couldn't be set up or verified (the message names the stage). Nothing went another way.</summary>
+    DirectFailed,
 }
 
 /// <summary>An error with a message suitable for normal users plus technical details for troubleshooting.</summary>
@@ -33,7 +36,7 @@ public sealed record TransferError(TransferErrorKind Kind, string Message, strin
     public bool IsRetryable => Kind is TransferErrorKind.ConnectFailed or TransferErrorKind.ConnectionLost
         or TransferErrorKind.NotEnoughSpace or TransferErrorKind.DestinationUnavailable
         or TransferErrorKind.PermissionDenied or TransferErrorKind.TimedOut or TransferErrorKind.Busy
-        or TransferErrorKind.Unknown or TransferErrorKind.SecureConnectionFailed;
+        or TransferErrorKind.Unknown or TransferErrorKind.SecureConnectionFailed or TransferErrorKind.DirectFailed;
 }
 
 /// <summary>Carries a <see cref="TransferError"/> through the call stack.</summary>

@@ -63,7 +63,8 @@ jobs:
           ./build.ps1 -Runtime ${{ matrix.runtime }} -SkipTests -Installer
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-${{ matrix.runtime }}
+          # Named after the exact commit it was built from (run the workflow by hand to package any branch).
+          name: beam-${{ matrix.runtime }}-${{ github.sha }}
           path: |
             artifacts/publish/${{ matrix.runtime }}/Beam.exe
             artifacts/installer/*.exe
@@ -83,7 +84,7 @@ jobs:
         run: ./packaging/build-msix.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-msix
+          name: beam-msix-${{ github.sha }}
           path: artifacts/msix/*.msixbundle
 
   android:
@@ -111,7 +112,7 @@ jobs:
           ls -la artifacts/android
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-android
+          name: beam-android-${{ github.sha }}
           path: artifacts/android/*-Signed.apk
       # Testers download the newest APK from the Releases page ("Android test build"), not from Actions artifacts.
       - name: Publish Android test build

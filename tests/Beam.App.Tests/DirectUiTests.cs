@@ -16,7 +16,7 @@ public class DirectUiTests
         var slow = new Beam.Core.Tests.SlowFiles(); // keeps the transfer running
         await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true,
             directLink: air.Link(DirectRoles.Host | DirectRoles.Join), externalFiles: slow);
-        await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host));
+        await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers));
         await phone.InitializeAsync();
         await laptop.InitializeAsync();
         air.Connect(phone.Node, phone.AsDevice, laptop.Node, laptop.AsDevice);
@@ -29,16 +29,22 @@ public class DirectUiTests
         await UiHarness.WaitForAsync(() => phone.ViewModel.Transfers.Count == 1 && phone.ViewModel.Transfers[0].State == TransferState.Transferring, "sending");
         var card = phone.ViewModel.Transfers[0];
         phone.ViewModel.IsTransfersPage = true;
-        await UiHarness.WaitForAsync(() => card.PathText == "Over Wi-Fi", "path shown");
-        Assert.False(card.CanSwitchToDirect); // Direct connection is a beta people choose in Settings
+        await UiHarness.WaitForAsync(() => card.PathText == "Over the Wi-Fi network", "path shown");
+        Assert.Equal(ConnectionMethod.SameNetwork, card.Session.Mode);
+        Assert.True(card.CanSwitchToDirect); // the user may move it; nothing moves by itself
         Assert.False(card.CanSwitchToNetwork);
-        Assert.DoesNotContain("Connect directly", phone.VisibleTexts());
         phone.Screenshot("direct-01-over-wifi");
 
-        // Turning on "Prefer direct connection" (Send page) moves the running transfer onto a direct link.
+        // Choosing Direct on the Send page applies to the next Send, not to this running transfer.
         home.PreferDirect = true;
-        await UiHarness.WaitForAsync(() => card.PathText == "Direct connection", "switched to direct", 25000);
+        await UiHarness.PumpAsync(500);
+        Assert.Equal("Over the Wi-Fi network", card.PathText);
+
+        // "Connect directly" on the card: set up while it keeps going over Wi-Fi, then moved over once verified.
+        card.SwitchToDirectCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => card.PathText == "Direct connection (verified)", "switched to direct", 25000);
         Assert.True(card.IsDirectPath);
+        Assert.Equal(ConnectionMethod.Direct, card.Session.Mode);
         Assert.False(card.CanSwitchToDirect);
         Assert.True(card.CanSwitchToNetwork);
         await UiHarness.PumpAsync(300);
@@ -48,14 +54,69 @@ public class DirectUiTests
 
         // The laptop's card shows the direct connection too, but only the sender switches.
         var received = laptop.ViewModel.Transfers.Single();
-        await UiHarness.WaitForAsync(() => received.PathText == "Direct connection", "receiver on direct");
+        await UiHarness.WaitForAsync(() => received.PathText == "Direct connection (verified)", "receiver on direct");
         Assert.False(received.CanSwitchToNetwork);
         card.SwitchToNetworkCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => card.PathText == "Over Wi-Fi", "back on Wi-Fi", 25000);
-        Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(laptop.Node.Identity.DeviceId));
+        await UiHarness.WaitForAsync(() => card.PathText == "Over the Wi-Fi network", "back on Wi-Fi", 25000);
+        Assert.Equal(ConnectionMethod.SameNetwork, card.Session.Mode); // shown as such
 
         card.Session.Cancel();
         await UiHarness.WaitForAsync(() => card.IsFinished, "cancelled");
+    }
+
+    [AvaloniaFact]
+    public async Task ADirectSendShowsItsStagesAsksTheReceiverAndOffersWiFiOnlyWhenTheUserChooses()
+    {
+        var air = new FakeDirectAir();
+        var laptopLink = (FakeDirectAir.FakeLink)air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        var phoneLink = (FakeDirectAir.FakeLink)air.Link(DirectRoles.Host | DirectRoles.Join);
+        await using var laptop = new UiHarness("Laptop", directLink: laptopLink);
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true, directLink: phoneLink);
+        await laptop.InitializeAsync();
+        await phone.InitializeAsync();
+        air.Connect(laptop.Node, laptop.AsDevice, phone.Node, phone.AsDevice);
+        phone.ViewModel.IsReceivePage = true; // not paired: Receive open, and its user is asked
+        var home = laptop.ViewModel.Home;
+        home.PreferDirect = true;
+        await UiHarness.WaitForAsync(() => home.SelectedDevice != null, "phone selected");
+        Assert.Equal("Searching over the local network…", home.DiscoveryStatus);
+        Assert.Equal(0, air.Hosted); // Send and Receive are open: nothing started
+
+        phoneLink.NextJoins = FakeDirectAir.JoinOutcome.PromptDenied; // then Android's own prompt is declined
+        home.AddPaths(new[] { laptop.CreateFile("Report.pdf", 300_000) });
+        home.SendCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => laptop.ViewModel.Transfers.Count == 1, "card");
+        var card = laptop.ViewModel.Transfers[0];
+        await UiHarness.WaitForAsync(() => card.StatusText == "Asking Diaz's Galaxy to accept a direct connection…", "asking");
+
+        // The phone's user is asked, with the security code, what joining means.
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Connect directly to Laptop?" }, "phone asked");
+        var question = (ConfirmViewModel)phone.ViewModel.Dialog!;
+        Assert.Contains(Beam.Core.Identity.DeviceIdentity.ShortCode(laptop.Node.Identity.Fingerprint), question.Message);
+        phone.Screenshot("direct-03-receiver-asked");
+        question.PrimaryCommand.Execute(null);
+
+        await UiHarness.WaitForAsync(() => card.IsFinished, "failed", 30000);
+        Assert.StartsWith("Direct connection failed at receiver join:", card.StatusText);
+        Assert.True(card.CanSendOverNetwork);
+        Assert.Equal("", card.PathText);
+        laptop.ViewModel.IsTransfersPage = true;
+        await UiHarness.PumpAsync(300);
+        Assert.Contains("Send over Wi-Fi instead", laptop.VisibleTexts());
+        Assert.Empty(laptop.TextOutsideWindow());
+        laptop.Screenshot("direct-04-failed-at-join");
+        Assert.Empty(phone.ViewModel.Transfers); // nothing went to it
+
+        // Only when the user picks it: a separate transfer over Wi-Fi, shown as such.
+        card.SendOverNetworkCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => laptop.ViewModel.Transfers.Count == 2, "second card");
+        var overWiFi = laptop.ViewModel.Transfers.First(t => t != card);
+        Assert.Equal(ConnectionMethod.SameNetwork, overWiFi.Session.Mode);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is IncomingRequestViewModel, "the phone is asked about the files");
+        ((IncomingRequestViewModel)phone.ViewModel.Dialog!).AcceptCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => overWiFi.IsFinished, "sent over Wi-Fi", 30000);
+        Assert.Equal(TransferState.Completed, overWiFi.State);
+        Assert.Equal(1, phoneLink.JoinCalls);
     }
 
     [AvaloniaFact]
@@ -68,35 +129,36 @@ public class DirectUiTests
         Assert.DoesNotContain("How devices connect", phone.VisibleTexts());
         phone.ViewModel.IsHomePage = true;
         await UiHarness.PumpAsync(100);
-        Assert.Contains("Prefer direct connection", phone.VisibleTexts());
+        Assert.Contains("Send directly", phone.VisibleTexts());
 
         // A phone that can't connect directly doesn't offer it.
         await using var oldPhone = new UiHarness("Old phone", width: 400, height: 860, phone: true);
         await oldPhone.InitializeAsync();
         await UiHarness.PumpAsync(100);
         Assert.False(oldPhone.ViewModel.Home.CanConnectDirectly);
-        Assert.DoesNotContain("Prefer direct connection", oldPhone.VisibleTexts());
+        Assert.DoesNotContain("Send directly", oldPhone.VisibleTexts());
     }
 
     [AvaloniaFact]
-    public async Task ReceiveKeepsThisComputersWiFiOnWhileSendersMayConnectDirectly()
+    public async Task ReceiveStartsNoNetworkAndSaysHowDirectSendersConnect()
     {
         var air = new FakeDirectAir();
         await using var app = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: new FakeNearbyAir().Radio());
         await app.InitializeAsync();
         var receive = app.ViewModel.Receive;
 
-        // Receive open, "Let senders connect directly" on: its own Wi-Fi goes on right away, and phones are warned it
-        // has no internet.
+        // Receive open with "Let senders connect directly": visible, and nothing started.
         app.ViewModel.IsReceivePage = true;
-        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on");
+        await UiHarness.PumpAsync(500);
         Assert.True(app.Node.Nearby.IsReceiving);
         Assert.True(receive.AllowDirect);
-        await UiHarness.PumpAsync(100);
+        Assert.False(receive.NetworkOn);
+        Assert.Equal(0, air.Hosted);
         Assert.Contains("Ready to receive", app.VisibleTexts());
         Assert.Contains("Let senders connect directly", app.VisibleTexts());
         Assert.Contains("Devices nearby can find it over Bluetooth, even without a shared Wi-Fi.", app.VisibleTexts());
-        Assert.Contains("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
+        Assert.Contains("Senders that send directly start their own Wi-Fi when they send, and this device joins it.", app.VisibleTexts());
+        Assert.DoesNotContain("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
         Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("receive-01-direct");
 
@@ -104,22 +166,12 @@ public class DirectUiTests
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
 
-        // Turning "Let senders connect directly" off turns it off too; back on, it goes on again.
-        receive.AllowDirect = false;
-        await UiHarness.WaitForAsync(() => air.Stopped > 0 && !receive.NetworkOn, "own Wi-Fi off with the switch");
-        Assert.Null(await app.Node.Direct.HostForNearbyAsync(CancellationToken.None));
-        receive.AllowDirect = true;
-        await UiHarness.WaitForAsync(() => receive.NetworkOn, "own Wi-Fi on again");
-
-        // Leaving Receive turns it off (at once here; after a few minutes in the app).
-        app.ViewModel.ShowHomeCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => air.Stopped > 1, "own Wi-Fi off");
-        Assert.False(app.Node.Nearby.IsReceiving);
-
         // Turned off: senders aren't offered a direct connection.
         receive.AllowDirect = false;
         await UiHarness.PumpAsync(100);
         Assert.Equal(DirectRoles.None, app.Node.Direct.AnnouncedRoles);
+        Assert.Contains("Senders connect over the shared Wi-Fi.", app.VisibleTexts());
+        Assert.Equal(0, air.Hosted);
     }
 
     [AvaloniaFact]
@@ -208,20 +260,26 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
-    public async Task PreferDirectConnectionOnTheSendPage()
+    public async Task SendDirectlyIsChosenOnTheSendPage()
     {
         var air = new FakeDirectAir();
         await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers));
         await laptop.InitializeAsync();
         var home = laptop.ViewModel.Home;
         await UiHarness.PumpAsync();
-        Assert.Contains("Prefer direct connection", laptop.VisibleTexts());
+        Assert.Contains("Send directly", laptop.VisibleTexts());
         Assert.DoesNotContain("Connect directly", laptop.VisibleTexts());
         Assert.False(home.PreferDirect);
+        Assert.False(home.HasDiscoveryStatus);
 
         home.PreferDirect = true;
         await UiHarness.PumpAsync(100);
         Assert.Equal(ConnectionMethod.Direct, laptop.Node.Settings.Current.Connection);
-        laptop.Screenshot("send-01-prefer-direct");
+        Assert.Equal(ConnectionMethod.Direct, laptop.ViewModel.SendMode);
+        Assert.Contains("Searching over the local network…", laptop.VisibleTexts());
+        Assert.False(home.SendCommand.CanExecute(null)); // no files, no device chosen
+        Assert.Equal(0, air.Hosted); // choosing Direct starts nothing
+        laptop.Screenshot("send-01-send-directly");
     }
+
 }

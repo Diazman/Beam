@@ -79,100 +79,69 @@ public class NearbyTests
         var wifi = new FakeDirectAir();
         var bluetooth = new FakeNearbyAir();
         var phoneRoles = DirectRoles.Host | DirectRoles.Join;
-        await using var pc = new TestNode("Laptop", directLink: wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
-        await using var phone = new TestNode("Galaxy", directLink: wifi.Link(phoneRoles), kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
-        wifi.ConnectDirectOnly(phone.Node, () => phone.AsDevice(), pc.Node, () => pc.AsDevice());
-        var leave = DirectManager.LeaveReceiverAfter;
-        DirectManager.LeaveReceiverAfter = TimeSpan.FromMilliseconds(300);
-        try
-        {
-            // Receive open with "Let senders connect directly": the PC's own network is on right away.
-            pc.Node.Nearby.SetReceiving(true);
-            await Wait.UntilAsync(() => wifi.Hosted > 0 && pc.Node.Direct.HostedNetwork != null, because: "PC's network on while receiving");
-            phone.Node.Nearby.SetLooking(true);
-            DeviceInfo? listed = null;
-            await Wait.UntilAsync(() => (listed = phone.Node.Discovery.Devices.FirstOrDefault(NearbyService.IsPlaceholder)) != null, because: "PC heard over Bluetooth");
-            Assert.Equal("Laptop", listed!.Name);
+        var pcLink = (FakeDirectAir.FakeLink)wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        var phoneLink = (FakeDirectAir.FakeLink)wifi.Link(phoneRoles);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, nearbyRadio: bluetooth.Radio());
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
+        wifi.ConnectDirectOnly(phone.Node, pc.Node);
 
-            var device = await phone.Node.Nearby.ResolveAsync(listed, CancellationToken.None);
-            Assert.Equal(pc.Node.Identity.DeviceId, device.Id);
-            Assert.Equal(pc.Node.Identity.Fingerprint, device.Fingerprint);
-            Assert.DoesNotContain(phone.Node.Discovery.Devices, NearbyService.IsPlaceholder);
-            Assert.DoesNotContain(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == device.Id); // found, not trusted
+        // Receive open: visible over Bluetooth, and nothing else (no network for senders).
+        pc.Node.Nearby.SetReceiving(true);
+        phone.Node.Nearby.SetLooking(true);
+        DeviceInfo? listed = null;
+        await Wait.UntilAsync(() => (listed = phone.Node.Discovery.Devices.FirstOrDefault(NearbyService.IsPlaceholder)) != null, because: "PC heard over Bluetooth");
+        Assert.Equal("Laptop", listed!.Name);
+        Assert.Equal(0, wifi.Hosted);
 
-            // Sending: the phone joins the PC's network (the receiver hosts).
-            var file = phone.CreateFile("photo.jpg", 300_000);
-            var session = phone.Node.Send(device, new[] { file });
-            await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
-            Assert.Equal(TransferState.Completed, session.State);
-            Assert.Equal(1, wifi.Joined);
-            Assert.Equal(phoneRoles, wifi.LastJoiner);
-            Assert.True(wifi.LastJoin!.HostIsComputer);
-            Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "photo.jpg")));
+        var device = await phone.Node.Nearby.ResolveAsync(listed, CancellationToken.None);
+        Assert.Equal(pc.Node.Identity.DeviceId, device.Id);
+        Assert.Equal(pc.Node.Identity.Fingerprint, device.Fingerprint);
+        Assert.DoesNotContain(phone.Node.Discovery.Devices, NearbyService.IsPlaceholder);
+        Assert.DoesNotContain(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == device.Id); // found, not trusted
+        Assert.Null(phone.Node.Direct.KnownNetworkFor(device.Id)); // and the handshake handed over no network details
+        Assert.Equal(0, wifi.Hosted);
 
-            // Sent: the phone leaves the PC's network again.
-            await Wait.UntilAsync(() => wifi.Stopped > 0, because: "phone left the PC's network");
-        }
-        finally
-        {
-            DirectManager.LeaveReceiverAfter = leave;
-        }
+        // Sending directly: the phone (the sender) starts its network; the PC joins it once its user agreed.
+        var file = phone.CreateFile("photo.jpg", 300_000);
+        var session = phone.Node.Send(device, new[] { file }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(phoneRoles, wifi.LastHost);
+        Assert.Same(pcLink, wifi.LastJoinLink);
+        Assert.False(wifi.LastJoin!.HostIsComputer);
+        Assert.Single(pc.Handler.DirectRequests);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(pc.ReceiveFolder, "photo.jpg")));
+
+        // Sent: the phone's network goes off and the PC is back on its own Wi-Fi.
+        await Wait.UntilAsync(() => phoneLink.Hosting == null && pcLink.JoinedTo == null, because: "network off, PC left it");
     }
 
     [Fact]
-    public async Task PcSendsToAPhoneWithReceiveOpenThenGoesBackToItsWifi()
+    public async Task PcSendsToAPhoneWithReceiveOpenThenTurnsItsNetworkOff()
     {
         var wifi = new FakeDirectAir();
         var bluetooth = new FakeNearbyAir();
-        await using var pc = new TestNode("Laptop", directLink: wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
-        await using var phone = new TestNode("Galaxy", directLink: wifi.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone,
-            nearbyRadio: bluetooth.Radio());
-        wifi.ConnectDirectOnly(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
-        var leave = DirectManager.LeaveReceiverAfter;
-        DirectManager.LeaveReceiverAfter = TimeSpan.FromMilliseconds(300);
-        try
-        {
-            // Receive open on the phone: visible over Bluetooth, and its own network on for senders.
-            phone.Node.Nearby.SetReceiving(true);
-            Assert.True(phone.Node.Direct.AnnouncedRoles.HasFlag(DirectRoles.Receiving));
-            await Wait.UntilAsync(() => wifi.Hosted > 0, because: "phone's network on while receiving");
+        var pcLink = (FakeDirectAir.FakeLink)wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        var phoneLink = (FakeDirectAir.FakeLink)wifi.Link(DirectRoles.Host | DirectRoles.Join);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, nearbyRadio: bluetooth.Radio());
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
+        wifi.ConnectDirectOnly(pc.Node, phone.Node);
 
-            pc.Node.Nearby.SetLooking(true);
-            DeviceInfo? listed = null;
-            await Wait.UntilAsync(() => (listed = pc.Node.Discovery.Devices.FirstOrDefault(NearbyService.IsPlaceholder)) != null, because: "phone heard");
-            Assert.Equal(DeviceKinds.Phone, listed!.Kind);
-            var device = await pc.Node.Nearby.ResolveAsync(listed, CancellationToken.None);
+        phone.Node.Nearby.SetReceiving(true);
+        Assert.True(phone.Node.Direct.AnnouncedRoles.HasFlag(DirectRoles.Receiving));
+        pc.Node.Nearby.SetLooking(true);
+        DeviceInfo? listed = null;
+        await Wait.UntilAsync(() => (listed = pc.Node.Discovery.Devices.FirstOrDefault(NearbyService.IsPlaceholder)) != null, because: "phone heard");
+        Assert.Equal(DeviceKinds.Phone, listed!.Kind);
+        var device = await pc.Node.Nearby.ResolveAsync(listed, CancellationToken.None);
 
-            var session = pc.Node.Send(device, new[] { pc.CreateFile("report.pdf", 200_000) });
-            await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
-            Assert.Equal(TransferState.Completed, session.State);
-            Assert.Equal(1, wifi.Joined);
-            Assert.False(wifi.LastJoin!.HostIsComputer);
-
-            // Done sending: the PC leaves the phone's network (back to its own Wi-Fi).
-            await Wait.UntilAsync(() => wifi.Stopped > 0, because: "PC left the phone's network");
-        }
-        finally
-        {
-            DirectManager.LeaveReceiverAfter = leave;
-        }
-    }
-
-    [Fact]
-    public async Task OnTheSameWifiASenderPreferringDirectJoinsTheReceiversNetworkWithoutAPrompt()
-    {
-        var wifi = new FakeDirectAir();
-        await using var receiver = new TestNode("Desk PC", directLink: wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers));
-        await using var sender = new TestNode("Laptop", directLink: wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
-        receiver.Node.Nearby.SetReceiving(true);
-        sender.Node.Settings.Update(s => s.Connection = ConnectionMethod.Direct);
-        wifi.Connect(sender.Node, () => sender.AsDevice(), receiver.Node, () => receiver.AsDevice());
-        Assert.True(sender.Node.Direct.CanConnectDirectly(receiver.AsDevice()), "Receive open: the computer hosts for any sender");
-
-        var session = sender.Node.Send(receiver.AsDevice(), new[] { sender.CreateFile("a.bin", 100_000) });
+        var session = pc.Node.Send(device, new[] { pc.CreateFile("report.pdf", 200_000) }, ConnectionMethod.Direct);
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
         Assert.Equal(TransferState.Completed, session.State);
         Assert.Equal(1, wifi.Joined);
+        Assert.Same(pcLink, wifi.LastHostLink);
+        Assert.True(wifi.LastJoin!.HostIsComputer);
+        await Wait.UntilAsync(() => pcLink.Hosting == null && phoneLink.JoinedTo == null, because: "the PC's network went off");
     }
 
     [Fact]
@@ -180,9 +149,10 @@ public class NearbyTests
     {
         var wifi = new FakeDirectAir();
         var bluetooth = new FakeNearbyAir();
+        var phoneLink = (FakeDirectAir.FakeLink)wifi.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: wifi.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
-        await using var phone = new TestNode("Galaxy", directLink: wifi.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone,
-            nearbyRadio: bluetooth.Radio());
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
+        wifi.ConnectDirectOnly(phone.Node, pc.Node);
         // The phone knew this PC before, with another certificate.
         phone.Node.Direct.Remember(pc.Node.Identity.DeviceId, "Laptop", new string('a', 64), DeviceKinds.Laptop, new DirectNetwork("DIRECT-xy-Old", "oldpassphrase"));
 
@@ -192,13 +162,47 @@ public class NearbyTests
         await Wait.UntilAsync(() => (listed = phone.Node.Discovery.Find(pc.Node.Identity.DeviceId)) != null, because: "known PC heard");
         Assert.Empty(listed!.Endpoints);
 
-        // Joining the remembered network fails; asking again over Bluetooth gets an answer from a different certificate.
-        var session = phone.Node.Send(listed, new[] { phone.CreateFile("x.bin", 1000) });
+        // Over Bluetooth it answers with a different certificate: refused before this phone starts anything.
+        var session = phone.Node.Send(listed, new[] { phone.CreateFile("x.bin", 1000) }, ConnectionMethod.Direct);
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
-        Assert.NotEqual(TransferState.Completed, session.State);
-        Assert.True(bluetooth.Connections > 0, "asked over Bluetooth after the remembered network failed");
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.Equal(DirectSessionState.Negotiating, session.DirectSession!.FailedAt);
+        Assert.Contains("isn't the Laptop you connected to before", session.Error!.Message);
+        Assert.True(bluetooth.Connections > 0);
+        Assert.Equal(0, phoneLink.HostCalls);
         Assert.Equal(0, wifi.Joined);
+        Assert.Empty(pc.Handler.DirectRequests);
         Assert.Equal("oldpassphrase", phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Passphrase);
+    }
+
+    [Fact]
+    public async Task ABluetoothHandshakeNeverHandsOutTheReceiversOwnNetworkDetailsToThisVersionsSenders()
+    {
+        var bluetooth = new FakeNearbyAir();
+        var pcLink = (FakeDirectAir.FakeLink)new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, nearbyRadio: bluetooth.Radio());
+        pc.Node.Nearby.SetReceiving(true);
+        var radio = bluetooth.Radio(); // anyone nearby
+        var address = radio.RecentServiceAddresses().Single();
+
+        await using var connection = await radio.ConnectAsync(address, CancellationToken.None);
+        using var sender = new NearbyHandshake.Sender(NearbyBeacon.HashOf("someone"), NearbyHandshake.RequestFlags.SenderHosts);
+        await connection.WriteAsync(sender.Request(), CancellationToken.None);
+        (NearbyHandshake.Status Status, string? Text) answer;
+        do
+        {
+            await Task.Delay(50);
+            answer = sender.Open(await connection.ReadAsync(CancellationToken.None));
+        }
+        while (answer.Status == NearbyHandshake.Status.Working);
+
+        Assert.Equal(NearbyHandshake.Status.Ready, answer.Status);
+        var code = PairingCode.FromJson(answer.Text!)!;
+        Assert.Equal(pc.Node.Identity.DeviceId, code.DeviceId);
+        Assert.Null(code.Ssid);
+        Assert.Null(code.Passphrase);
+        Assert.DoesNotContain(pc.Node.Direct.OwnNetwork().Passphrase, answer.Text);
+        Assert.Equal(0, pcLink.HostCalls); // and nothing was started for it
     }
 
     [Fact]

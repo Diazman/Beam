@@ -74,6 +74,17 @@ public sealed class TestHandler : IIncomingTransferHandler
         return Decide(request);
     }
 
+    /// <summary>What the receiving "user" answers to "join this unpaired sender's direct network?".</summary>
+    public Func<IncomingDirectRequest, bool> ApproveDirect { get; set; } = _ => true;
+
+    public List<IncomingDirectRequest> DirectRequests { get; } = new();
+
+    public Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken)
+    {
+        lock (DirectRequests) DirectRequests.Add(request);
+        return Task.FromResult(ApproveDirect(request));
+    }
+
     public Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken)
     {
         lock (Conflicts) Conflicts.Add(conflicts);

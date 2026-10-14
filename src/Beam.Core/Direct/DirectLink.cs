@@ -15,8 +15,10 @@ public enum DirectRoles
     Join = 2,
 
     /// <summary>
-    /// Can join another computer's direct network, but not a phone's (Windows: its Wi-Fi joins the other PC's network).
-    /// Announced as its own word, so older Beam versions on phones see only "host" and keep joining the PC.
+    /// Joins a direct network as an ordinary Wi-Fi client (Windows: its Wi-Fi adapter leaves the current Wi-Fi and joins
+    /// the WPA2 network by name and passphrase). That works for another PC's network and for a phone's Wi-Fi Direct group,
+    /// which accepts such "legacy" clients (Android 10+ groups created with a name and passphrase). Announced as its own
+    /// word ("joinpc") so Beam 1.5.3 and older on phones keep their old behavior.
     /// </summary>
     JoinComputers = 4,
 
@@ -34,6 +36,11 @@ public enum DirectRoles
     /// </summary>
     Receiving = 32,
 
+    /// <summary>
+    /// Speaks the sender-hosted session protocol (propose, offer, ready, verify, end): the sender starts its network when
+    /// Send is pressed and this device joins it. Devices without it only know the older receiver-hosted requests.
+    /// </summary>
+    SenderHosted = 64,
 }
 
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
@@ -46,13 +53,14 @@ public static class DirectRolesText
 {
     public static string Format(DirectRoles roles)
     {
-        var parts = new List<string>(6);
+        var parts = new List<string>(7);
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
         if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
         if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
+        if (roles.HasFlag(DirectRoles.SenderHosted)) parts.Add("shost");
         return string.Join(",", parts);
     }
 
@@ -67,6 +75,7 @@ public static class DirectRolesText
             else if (part == "wired") roles |= DirectRoles.Wired;
             else if (part == "share") roles |= DirectRoles.SharesInternet;
             else if (part == "rx") roles |= DirectRoles.Receiving;
+            else if (part == "shost") roles |= DirectRoles.SenderHosted;
         }
 
         return roles;
@@ -110,6 +119,12 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
 
         return new DirectNetwork(name.ToString().TrimEnd(' ', '-'), Random(12));
     }
+
+    /// <summary>
+    /// The network for a send's direct sessions: this device's usual name (a phone that approved joining it before may
+    /// connect without asking again), with a passphrase made just for it (about 115 bits), useless once it goes off.
+    /// </summary>
+    public static DirectNetwork ForSession(string ssid) => new(ssid, Random(20));
 
     private static string Random(int length)
     {

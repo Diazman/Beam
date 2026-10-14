@@ -83,7 +83,8 @@ receiver's id, name, certificate fingerprint, addresses, and its own network's n
 sender joins that network and connects as usual (TLS, checked against the fingerprint; the receiver still approves).
 
 **Beacon** (manufacturer data, company id `0xFFFF`, at most 20 bytes):
-`"Bm"`, version `2`, flags (`1` its network is on, `2` computer, `4` can start a network),
+`"Bm"`, version `2`, flags (`1` its network is on, `2` computer, `4` can start a network, `8` takes sender-hosted
+direct sessions),
 the first 6 bytes of SHA-256 of the device id, a CRC-8 (polynomial 0x07) over all other bytes, then the start of the
 name (UTF-8, not empty). Beacons that fail the check are ignored (garbled reads used to show up as extra devices).
 Windows also advertises the GATT service separately; Android puts the service UUID in the scan response.
@@ -101,10 +102,35 @@ Windows also advertises the GATT service separately; Android puts the service UU
    The plaintext is the pairing code as JSON.
 
 A device seen before must answer with the same fingerprint, or the sender refuses to connect.
-When the passphrase went to an unpaired sender, the receiver gives its network a new passphrase once the network is off.
+The pairing code in the answer carries no network name or passphrase, unless the request came without flag `1` (an
+older sender) and the receiver started its network for it; then, if that sender isn't paired, the receiver gives its
+network a new passphrase once the network is off.
 
-**Join request** (a phone sending to a computer hosts its own Wi-Fi Direct group): after a ready answer, the sender
-writes `[1, 0x20, length (2 bytes, big-endian), IV, ciphertext, HMAC]` with the same keys. The plaintext is the
-sender's pairing code, including its network. The receiver joins that network and answers `[1, 3, its address there]`,
-or `[1, 2, message…]` when it can't. Until then it answers "working".
+**Session messages** (sender-hosted direct sessions, below): after a ready answer, the sender writes
+`[1, 0x20, length (2 bytes, big-endian), IV, ciphertext, HMAC]` with the same keys; the plaintext is a direct request
+(JSON, as below) with `senderId`, `senderName` and `senderFingerprint`, whose id must match the handshake's id hash.
+A proposal is answered `[1, 4]` (accepted) or `[1, 2, message…]`; an offer `[1, 3, its address on the network]` once
+the receiver joined and reported in, `[1, 2, message…]` when it couldn't, and "working" until then. Over Bluetooth the
+sender's identity is only claimed: the receiver always asks its user, and the TLS connections on the direct network
+check the claimed fingerprint before any file comes. A join request without a session (Beam 1.5.3 and older) is
+refused.
 
+## Direct sessions (sender-hosted)
+
+Connection purpose `direct`; one `DirectRequest` (JSON) answered by one `DirectResponse` (`ok`, `message`, `declined`).
+One session per receiver: `sessionId` and `nonce` are 128 random bits (hex). Devices announce support with the role
+word `shost` (discovery) or beacon flag `8`.
+
+| Action | From → to, over | Meaning |
+|---|---|---|
+| `propose` | sender → receiver, control channel | "Accept a direct session?" (`receiverId` must be the receiver's id). Paired senders (proven by TLS) are accepted; others only with Receive open and the user's yes. Nothing is started before this. |
+| `offer` | sender → receiver, control channel | The session's `ssid`, `passphrase` (fresh per network, 20 characters), `ttlSeconds`, the sender's `port`, `hostIsComputer`. Answered at once; the receiver then joins. |
+| `ready` | receiver → sender, **direct network** | "Joined; my Beam is at `port`." Accepted only from the session's certificate, with its nonce, from a direct address. |
+| `verify` | sender → receiver, **direct network** | Checked the same way on the receiver. Only then may file data go, and only to that endpoint. |
+| `failed` | receiver → sender, LAN | Joining failed (`stage`, `message`), so the sender can say where. |
+| `end` | either way | The session is over: the receiver leaves what it joined for it, the sender gives back its share of its network. Ended ids are never accepted again. |
+
+The control channel is Beam's TLS connection on the shared network when the receiver answers there (checked against
+its paired, remembered or announced fingerprint), else the Bluetooth session messages above. Neither discovery
+announcements nor beacons ever carry network details. Older versions' receiver-hosted requests (`host`, `join`,
+`prefer`, `stop`) are still answered for compatibility; this version never sends them.

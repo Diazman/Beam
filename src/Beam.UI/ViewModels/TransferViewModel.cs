@@ -32,11 +32,16 @@ public sealed class TransferViewModel : ObservableObject
     private ConnectionMethod? _switchingTo;
 
     public TransferViewModel(TransferSession session, IPlatformServices platform, Action<TransferViewModel> dismiss, Func<string, Task>? copy = null,
-        DirectManager? direct = null, Func<string, DeviceInfo?>? findDevice = null)
+        DirectManager? direct = null, Func<string, DeviceInfo?>? findDevice = null, Func<TransferSession, Task>? sendOverNetwork = null)
     {
         Session = session;
         _direct = direct;
         _findDevice = findDevice;
+        SendOverNetworkCommand = new AsyncCommand(async () =>
+        {
+            if (sendOverNetwork != null && CanSendOverNetwork) await sendOverNetwork(Session);
+        });
+        _canSendOverNetwork = sendOverNetwork != null;
         SwitchToDirectCommand = new AsyncCommand(() => SwitchAsync(ConnectionMethod.Direct));
         SwitchToNetworkCommand = new AsyncCommand(() => SwitchAsync(ConnectionMethod.SameNetwork));
         CopyTextCommand = new AsyncCommand(async () =>
@@ -171,7 +176,10 @@ public sealed class TransferViewModel : ObservableObject
 
     public bool CanCopyText => Session.IsText && State == TransferState.Completed;
 
-    /// <summary>"Direct connection" / "Over Wi-Fi" / "Switching…" while the transfer is running.</summary>
+    /// <summary>
+    /// How the transfer runs: "Direct connection (verified)" only once the direct link was verified and the files go
+    /// over it; "Over the Wi-Fi network" for Same Network; "Switching…" while the user moves it.
+    /// </summary>
     public string PathText
     {
         get
@@ -179,34 +187,42 @@ public sealed class TransferViewModel : ObservableObject
             if (Session.IsText || IsFinished) return "";
             if (_switching || Session.IsSwitchingPath)
                 return (_switchingTo ?? Method) == ConnectionMethod.Direct ? L.T("Switching to a direct connection…") : L.T("Switching to Wi-Fi…");
-            return Session.Path switch
-            {
-                TransferPath.Direct => L.T("Direct connection"),
-                TransferPath.Network when State == TransferState.Transferring => L.T("Over Wi-Fi"),
-                _ => "",
-            };
+            if (IsDirectPath) return L.T("Direct connection (verified)");
+            return Session.Path == TransferPath.Network && State == TransferState.Transferring ? L.T("Over the Wi-Fi network") : "";
         }
     }
 
     public bool HasPathText => PathText.Length > 0;
 
-    public bool IsDirectPath => Session.Path == TransferPath.Direct && !Session.IsSwitchingPath;
+    /// <summary>The files go over a verified direct link right now (never just because a network was joined).</summary>
+    public bool IsDirectPath => Session.Path == TransferPath.Direct && !Session.IsSwitchingPath
+                                && (Session.Mode != ConnectionMethod.Direct
+                                    || Session.DirectSession?.State is DirectSessionState.Verified or DirectSessionState.Transferring);
 
-    /// <summary>
-    /// Direct connection (a beta) was chosen but the transfer runs over Wi-Fi (it fell back, or the link dropped):
-    /// try again. Not offered to people who never chose Direct connection.
-    /// </summary>
-    public bool CanSwitchToDirect => CanSwitch && Session.Path != TransferPath.Direct && Method == ConnectionMethod.Direct
-                                     && _findDevice?.Invoke(Session.PeerId) is { } peer && _direct!.CanConnectDirectly(peer);
+    /// <summary>Sent over the Wi-Fi network: the user may move it to a direct link (set up while it keeps going).</summary>
+    public bool CanSwitchToDirect => CanSwitch && Method == ConnectionMethod.SameNetwork
+                                     && _findDevice?.Invoke(Session.PeerId) is { } peer && _direct!.CanSendDirectlyTo(peer);
 
-    /// <summary>Running over a direct link: going back to the Wi-Fi network, e.g. to get internet.</summary>
-    public bool CanSwitchToNetwork => CanSwitch && Session.Path == TransferPath.Direct;
+    /// <summary>Sent directly: the user may move it to the Wi-Fi network (e.g. a device needs its internet back).</summary>
+    public bool CanSwitchToNetwork => CanSwitch && Method == ConnectionMethod.Direct
+                                      && _findDevice?.Invoke(Session.PeerId) is { } peer && peer.Endpoints.Any(e => !IsDirectAddress(e));
+
+    private bool IsDirectAddress(System.Net.IPEndPoint endpoint) => _direct?.IsDirectAddress(endpoint.Address) ?? false;
 
     public AsyncCommand SwitchToDirectCommand { get; }
 
     public AsyncCommand SwitchToNetworkCommand { get; }
 
-    private ConnectionMethod Method => _direct?.MethodFor(Session.PeerId) ?? ConnectionMethod.SameNetwork;
+    private readonly bool _canSendOverNetwork;
+
+    /// <summary>A Direct send failed setting up: the user may send the same files over the Wi-Fi network instead (a new transfer).</summary>
+    public bool CanSendOverNetwork => _canSendOverNetwork && IsSend && !Session.IsText && Session.Mode == ConnectionMethod.Direct
+                                      && State == TransferState.Failed && Session.Error?.Kind == TransferErrorKind.DirectFailed;
+
+    public AsyncCommand SendOverNetworkCommand { get; }
+
+    /// <summary>The mode the user chose for this transfer.</summary>
+    private ConnectionMethod Method => Session.Mode;
 
     /// <summary>Only the sender switches (its choice decides how both devices connect).</summary>
     private bool CanSwitch => IsSend && _direct is { IsSupported: true } && !_switching && !Session.IsText
@@ -221,7 +237,7 @@ public sealed class TransferViewModel : ObservableObject
         RefreshPath();
         try
         {
-            await _direct.SwitchAsync(Session.PeerId, method);
+            await _direct.SwitchAsync(Session, method);
         }
         finally
         {
@@ -238,6 +254,7 @@ public sealed class TransferViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDirectPath));
         OnPropertyChanged(nameof(CanSwitchToDirect));
         OnPropertyChanged(nameof(CanSwitchToNetwork));
+        OnPropertyChanged(nameof(CanSendOverNetwork));
     }
 
     /// <summary>Pulls the latest numbers from the engine. Called on the UI thread.</summary>
@@ -273,6 +290,7 @@ public sealed class TransferViewModel : ObservableObject
                      nameof(State), nameof(IsFinished), nameof(IsActive), nameof(IsSuccess), nameof(IsWarning), nameof(IsError),
                      nameof(IsNeutral), nameof(IsIndeterminate), nameof(ShowProgress), nameof(CanOpen), nameof(CanOpenFile), nameof(CanCopyText),
                      nameof(CanResume), nameof(CanCancel), nameof(CancelText), nameof(HasDetails), nameof(DetailsText), nameof(ItemTitle),
+                     nameof(CanSendOverNetwork),
                  })
         {
             OnPropertyChanged(name);
@@ -291,6 +309,10 @@ public sealed class TransferViewModel : ObservableObject
         {
             case TransferState.Preparing:
                 return L.T("Preparing files…");
+            case TransferState.Connecting when Session.Mode == ConnectionMethod.Direct && Session.DirectSession is { } direct:
+                return DirectStatus(direct, peer);
+            case TransferState.Reconnecting when Session.Mode == ConnectionMethod.Direct && Session.DirectSession is { State: < DirectSessionState.Verified } direct:
+                return DirectStatus(direct, peer);
             case TransferState.Connecting:
                 return L.T("Connecting to {0}…", peer);
             case TransferState.WaitingForAcceptance when Session.PeerId == Beam.Core.Phone.PhoneLinkServer.PhonePeerId:
@@ -323,6 +345,20 @@ public sealed class TransferViewModel : ObservableObject
                 return s.Error?.Message ?? s.State.ToString();
         }
     }
+
+    /// <summary>Where setting up the direct link stands, in words (each stage is only shown once it really started).</summary>
+    private static string DirectStatus(DirectSession direct, string peer) => direct.State switch
+    {
+        DirectSessionState.Negotiating => L.T("Asking {0} to accept a direct connection…", peer),
+        DirectSessionState.Hosting => L.T("Starting direct connection…"),
+        DirectSessionState.OfferingCredentials => direct.Channel == DirectControlChannel.Bluetooth
+            ? L.T("Sending the connection details to {0} over Bluetooth…", peer)
+            : L.T("Sending the connection details to {0} over the local network…", peer),
+        DirectSessionState.Joining => L.T("Waiting for {0} to join. If it asks to connect to a Wi-Fi network, tap Connect there.", peer),
+        DirectSessionState.Verifying => L.T("Verifying direct link…"),
+        DirectSessionState.Interrupted => L.T("The direct link dropped. Setting it up again…"),
+        _ => L.T("Connecting to {0}…", peer),
+    };
 
     private string BuildDetails(TransferSnapshot s)
     {
