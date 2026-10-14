@@ -446,6 +446,14 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             return;
         }
 
+        // Already listed by its real id (found out over Bluetooth, so no address): kept, and never listed twice.
+        if (listed != null)
+        {
+            _discovery.Forget(PlaceholderPrefix + hash);
+            _discovery.ReportReachable(listed);
+            return;
+        }
+
         // Known from an earlier handshake (or its code): list it by its real id, ready to join its network.
         var known = _settings.Current.KnownDirectNetworks.FirstOrDefault(k => beacon.Matches(k.DeviceId));
         if (known != null)

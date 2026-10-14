@@ -97,6 +97,9 @@ public class NearbyTests
         Assert.Equal(pc.Node.Identity.DeviceId, device.Id);
         Assert.Equal(pc.Node.Identity.Fingerprint, device.Fingerprint);
         Assert.DoesNotContain(phone.Node.Discovery.Devices, NearbyService.IsPlaceholder);
+        await Task.Delay(500); // several more sightings of its beacon: still listed once, by its real id
+        Assert.DoesNotContain(phone.Node.Discovery.Devices, NearbyService.IsPlaceholder);
+        Assert.Single(phone.Node.Discovery.Devices, d => d.Id == device.Id);
         Assert.DoesNotContain(phone.Node.Settings.Current.TrustedDevices, t => t.DeviceId == device.Id); // found, not trusted
         Assert.Null(phone.Node.Direct.KnownNetworkFor(device.Id)); // and the handshake handed over no network details
         Assert.Equal(0, wifi.Hosted);
