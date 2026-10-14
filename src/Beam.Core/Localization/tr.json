@@ -529,5 +529,11 @@
   "{0} wants to send you files over a direct Wi-Fi connection. This device leaves its Wi-Fi network while the files come, and goes back afterwards. Security code: {1}": "{0} size doğrudan bir Wi-Fi bağlantısı üzerinden dosya göndermek istiyor. Dosyalar gelirken bu cihaz kendi Wi-Fi ağından ayrılır ve sonra geri döner. Güvenlik kodu: {1}",
   "{0} · Found over Bluetooth": "{0} · Bluetooth ile bulundu",
   "{0} · Found over local network": "{0} · Yerel ağda bulundu",
-  "{0} · Found over local network and Bluetooth": "{0} · Yerel ağda ve Bluetooth ile bulundu"
+  "{0} · Found over local network and Bluetooth": "{0} · Yerel ağda ve Bluetooth ile bulundu",
+  "Wi-Fi is off": "Wi-Fi kapalı",
+  "Turn on Wi-Fi": "Wi-Fi'yi aç",
+  "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "Doğrudan göndermek için bu cihazda Wi-Fi'nin açık olması gerekir. Bir ağa bağlı olması gerekmez.",
+  "Turn on Wi-Fi, then press Send again.": "Wi-Fi'yi açın, ardından tekrar Gönder'e basın.",
+  "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu cihazda Wi-Fi kapalı. Açın, ardından Tekrar dene'ye basın.",
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} cihazında Wi-Fi kapalı. Orada açın, ardından Tekrar dene'ye basın."
 }

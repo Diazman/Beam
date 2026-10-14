@@ -30,8 +30,11 @@ internal interface IDirectControl : IAsyncDisposable
 /// <summary>Set by the nearby service: direct sessions set up over Bluetooth when there's no shared network.</summary>
 internal interface IBluetoothDirectControl
 {
-    /// <summary>The device's beacon was heard just now (Bluetooth on and allowed).</summary>
-    bool CanReach(string deviceId);
+    /// <summary>
+    /// Whether the device can be reached over Bluetooth: its beacon heard just now, or within <paramref name="wait"/>
+    /// (scanning meanwhile, whatever page is open).
+    /// </summary>
+    Task<bool> CanReachAsync(string deviceId, TimeSpan wait, CancellationToken cancellationToken);
 
     /// <summary>
     /// Bluetooth handshake with the device (its identity checked against <paramref name="expectedFingerprint"/> when
@@ -48,6 +51,9 @@ public sealed partial class DirectManager
     /// confirmed on hardware; more receivers are told to wait.
     /// </summary>
     public const int MaxDirectReceivers = 4;
+
+    /// <summary>How long to listen for the receiver's Bluetooth beacon when it wasn't heard just now.</summary>
+    internal static TimeSpan BluetoothSightingWait { get; set; } = TimeSpan.FromSeconds(8);
 
     /// <summary>How long the receiver may take to accept (it may ask its user).</summary>
     internal static TimeSpan ProposeTimeout { get; set; } = TimeSpan.FromSeconds(90);
@@ -69,8 +75,22 @@ public sealed partial class DirectManager
     /// <summary>How long a receiver may use an offer's network details to join.</summary>
     internal static TimeSpan OfferLifetime { get; set; } = TimeSpan.FromMinutes(4);
 
-    /// <summary>How often a session whose verified link dropped sets up again before the transfer fails.</summary>
+    /// <summary>
+    /// How often a dropped direct link is set up again in a row without any file data getting through in between,
+    /// before the transfer fails (a link that keeps dropping but makes progress each time keeps going, up to
+    /// <see cref="MaxReconnectsTotal"/>).
+    /// </summary>
     internal static int MaxReconnects { get; set; } = 2;
+
+    internal static int MaxReconnectsTotal { get; set; } = 30;
+
+    /// <summary>
+    /// After a running transfer's link dropped, how long Beam keeps trying to reach the receiver again (it may be between
+    /// networks: a phone that left the direct network takes a while to be back on its Wi-Fi) before the transfer fails.
+    /// </summary>
+    internal TimeSpan RecoveryWindow { get; set; } = TimeSpan.FromMinutes(2);
+
+    internal TimeSpan RecoveryRetryDelay { get; set; } = TimeSpan.FromSeconds(3);
 
     /// <summary>
     /// Whether the network this device started is usable (an address on it): a platform saying "started" isn't enough
@@ -84,7 +104,7 @@ public sealed partial class DirectManager
     private readonly ConcurrentDictionary<string, Outgoing> _outgoing = new(); // by session id on the wire
     private readonly ConcurrentDictionary<string, DirectSend> _sends = new(); // by transfer id
     private readonly object _hostGate = new();
-    private readonly HashSet<DirectSession> _hostLeases = new();
+    private readonly HashSet<string> _hostLeases = new(); // one per Direct transfer (shared by its setups)
     private Task<DirectNetwork>? _sessionHostStart;
     private DirectNetwork? _sessionNetwork;
 
@@ -98,6 +118,19 @@ public sealed partial class DirectManager
         public ConnectionMethod Mode { get; set; }
 
         public TransferSession? Transfer { get; set; }
+
+        /// <summary>Owns this transfer's share of this device's network (kept while the link is set up again).</summary>
+        public string Key { get; } = DirectSession.NewToken();
+
+        /// <summary>One setup, recovery or switch at a time for this transfer.</summary>
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        /// <summary>Bytes transferred when the link was last verified (progress since then resets the reconnect budget).</summary>
+        public long BytesAtVerify { get; set; }
+
+        public int ReconnectsWithoutProgress { get; set; }
+
+        public int Reconnects { get; set; }
     }
 
     private sealed class Outgoing
@@ -115,6 +148,19 @@ public sealed partial class DirectManager
     public bool CanSendDirectlyTo(DeviceInfo peer) =>
         CanHost && peer.DirectRoles.HasFlag(DirectRoles.SenderHosted) && (peer.DirectRoles & (DirectRoles.Join | DirectRoles.JoinComputers)) != 0;
 
+    /// <summary>This device's Wi-Fi is switched off (so it can't start or join a direct network until the user turns it on).</summary>
+    public bool IsWifiOff => _link is IDirectRadio { IsWifiEnabled: false };
+
+    /// <summary>Shows the system's Wi-Fi panel and waits (up to <paramref name="wait"/>) for Wi-Fi to be on. True when it is.</summary>
+    public async Task<bool> RequestWifiOnAsync(TimeSpan wait, CancellationToken cancellationToken = default)
+    {
+        if (_link is not IDirectRadio radio || radio.IsWifiEnabled != false) return true;
+        Log.Info("Direct: Wi-Fi is off; asking the user to turn it on");
+        var on = await radio.RequestWifiOnAsync(wait, cancellationToken).ConfigureAwait(false);
+        Log.Info(on ? "Direct: Wi-Fi is on" : "Direct: Wi-Fi is still off");
+        return on;
+    }
+
     /// <summary>Whether an address is on a direct network (as the transfer service tells it).</summary>
     public bool IsDirectAddress(IPAddress address) => _transfers.IsDirectAddress(address);
 
@@ -123,7 +169,7 @@ public sealed partial class DirectManager
 
     internal IDirectLink? LinkForTests => _link;
 
-    private static string LeaseKey(DirectSession session) => "session:" + session.Key;
+    private static string LeaseKey(string owner) => "session:" + owner;
 
     /// <summary>A direct session uses the radio (this device hosts for one, or joined one's network).</summary>
     private bool LinkInUseBySessions() => _linkedPeers.Keys.Any(k => k.StartsWith("session:", StringComparison.Ordinal) || k.StartsWith("rx:", StringComparison.Ordinal));
@@ -203,42 +249,83 @@ public sealed partial class DirectManager
 
     /// <summary>
     /// Before each connection of a Direct transfer: the session is verified (set up on the first attempt; checked again
-    /// after a drop, and set up again a bounded number of times when the link is gone). Throws
+    /// after a drop, and recovered when the link is gone). One at a time per transfer. Throws
     /// <see cref="TransferException"/> (<see cref="TransferErrorKind.DirectFailed"/>) naming the stage that failed.
     /// </summary>
     private async Task PrepareDirectAsync(DirectSend send, CancellationToken token)
     {
-        var session = send.Session;
-        if (session.IsFinished)
+        await send.Gate.WaitAsync(token).ConfigureAwait(false);
+        try
         {
-            // Tried again after a failure (or after the session ended): a new session.
-            session = send.Session = NewSession(send.Receiver);
-            send.Transfer?.SetMode(ConnectionMethod.Direct, session);
+            var session = send.Session;
+            if (session.IsFinished)
+            {
+                // Tried again after a failure (or after the session ended): a new session, set up like the first one.
+                session = send.Session = NewSession(send.Receiver);
+                send.ReconnectsWithoutProgress = 0;
+                send.Transfer?.SetMode(ConnectionMethod.Direct, session);
+            }
+
+            if (session.State == DirectSessionState.Negotiating)
+            {
+                await EstablishAsync(session, send, token).ConfigureAwait(false);
+                return;
+            }
+
+            if (session.State is DirectSessionState.Verified or DirectSessionState.Transferring or DirectSessionState.Interrupted
+                && await StillVerifiedAsync(session, token).ConfigureAwait(false))
+                return;
+
+            await RecoverAsync(send, session, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            send.Gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The verified link is gone (the receiver left the network, it went out of range, or the OS dropped it): set the
+    /// session up again with a new id and nonce, the receiver authenticated again, on the network this device keeps
+    /// hosting. While the receiver can't be reached (between networks) this keeps trying for <see cref="RecoveryWindow"/>.
+    /// The transfer then resumes from what the receiver confirms it has.
+    /// </summary>
+    private async Task RecoverAsync(DirectSend send, DirectSession lost, CancellationToken token)
+    {
+        lost.TryMove(DirectSessionState.Interrupted);
+        var bytes = send.Transfer?.GetSnapshot().TransferredBytes ?? 0;
+        if (bytes > send.BytesAtVerify) send.ReconnectsWithoutProgress = 0; // the last link moved data: not a dead end
+        if (send.ReconnectsWithoutProgress >= MaxReconnects || send.Reconnects >= MaxReconnectsTotal)
+        {
+            lost.Fail(L.T("The direct connection to {0} was lost and couldn't be set up again.", lost.PeerName));
+            await EndOutgoingAsync(lost, notify: true).ConfigureAwait(false);
+            throw Failure(lost);
         }
 
-        if (session.State == DirectSessionState.Negotiating)
+        send.ReconnectsWithoutProgress++;
+        send.Reconnects++;
+        Log.Info($"Direct: {lost}: link lost after {bytes} bytes; setting it up again (reconnect {send.Reconnects}, " +
+                 $"{send.ReconnectsWithoutProgress} of {MaxReconnects} without progress)");
+        await EndOutgoingAsync(lost, notify: true).ConfigureAwait(false);
+        var deadline = Environment.TickCount64 + (long)RecoveryWindow.TotalMilliseconds;
+        while (true)
         {
-            await EstablishAsync(session, send.Receiver, token).ConfigureAwait(false);
-            return;
+            var next = NewSession(send.Receiver);
+            next.Reconnects = send.Reconnects;
+            send.Session = next;
+            send.Transfer?.SetMode(ConnectionMethod.Direct, next);
+            try
+            {
+                await EstablishAsync(next, send, token).ConfigureAwait(false);
+                return;
+            }
+            catch (TransferException) when (next.FailedTransiently && Environment.TickCount64 < deadline && !token.IsCancellationRequested)
+            {
+                var left = (deadline - Environment.TickCount64) / 1000;
+                Log.Info($"Direct: {next.PeerName} isn't reachable yet ({next.Error}); trying again in {RecoveryRetryDelay.TotalSeconds:0} s ({left} s left)");
+                await Task.Delay(RecoveryRetryDelay, token).ConfigureAwait(false);
+            }
         }
-
-        if (session.State is DirectSessionState.Verified or DirectSessionState.Transferring or DirectSessionState.Interrupted
-            && await StillVerifiedAsync(session, token).ConfigureAwait(false))
-            return;
-
-        // The verified link is gone (the receiver left the network, or it went out of range).
-        session.TryMove(DirectSessionState.Interrupted);
-        if (session.Reconnects >= MaxReconnects)
-        {
-            session.Fail(L.T("The direct connection to {0} was lost and couldn't be set up again.", session.PeerName));
-            await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
-            throw Failure(session);
-        }
-
-        Log.Info($"Direct: the link to {session.PeerName} was lost; setting the session up again ({session.Reconnects + 1} of {MaxReconnects})");
-        await EndOutgoingAsync(session, notify: true, keepHost: true).ConfigureAwait(false);
-        session.Restart();
-        await EstablishAsync(session, send.Receiver, token).ConfigureAwait(false);
     }
 
     /// <summary>Why a session failed, as the transfer reports it ("Direct connection failed at receiver join: …").</summary>
@@ -253,8 +340,9 @@ public sealed partial class DirectManager
     /// stage that failed (the session is then failed and what it set up is let go), or
     /// <see cref="OperationCanceledException"/> when the transfer or session was cancelled.
     /// </summary>
-    private async Task EstablishAsync(DirectSession session, DeviceInfo peer, CancellationToken token)
+    private async Task EstablishAsync(DirectSession session, DirectSend send, CancellationToken token)
     {
+        var peer = send.Receiver;
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token, session.CancellationToken, _stopping.Token);
         limit.CancelAfter(SessionLifetime);
         var outgoing = new Outgoing { Session = session };
@@ -263,6 +351,7 @@ public sealed partial class DirectManager
         {
             var current = _discovery.Find(peer.Id) ?? peer;
             if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't start a direct connection."));
+            if (IsWifiOff) throw new DirectLinkException(L.T("Wi-Fi is off on this device. Turn it on, then press Try again.")) { WifiOff = true };
             if (!CanSendDirectlyTo(current))
                 throw new DirectLinkException(L.T("{0} can't join a direct connection from this device. Update Beam on it; phones need Android 10 or newer.", peer.Name));
             if (_outgoing.Values.Count(o => o.Session != session && !o.Session.IsFinished && Volatile.Read(ref o.Ended) == 0) >= MaxDirectReceivers)
@@ -276,7 +365,7 @@ public sealed partial class DirectManager
 
             // 2. This device's network, now that someone will join it.
             Move(session, DirectSessionState.Hosting);
-            var network = await AcquireHostAsync(session, limit.Token).ConfigureAwait(false);
+            var network = await AcquireHostAsync(send.Key, session, limit.Token).ConfigureAwait(false);
 
             // 3. Its details, for this receiver only, over the authenticated control channel.
             Move(session, DirectSessionState.OfferingCredentials);
@@ -314,7 +403,9 @@ public sealed partial class DirectManager
             Move(session, DirectSessionState.Verifying);
             await VerifyAsync(session, reported, limit.Token).ConfigureAwait(false);
             if (!session.MarkVerified(reported)) throw new OperationCanceledException(limit.Token);
-            Log.Info($"Direct: {session}: verified at {reported}");
+            send.BytesAtVerify = send.Transfer?.GetSnapshot().TransferredBytes ?? 0;
+            Log.Info($"Direct: {session}: verified at {reported} (channel {session.Channel}, reconnect {session.Reconnects}, " +
+                     $"{send.BytesAtVerify} bytes already sent)");
         }
         catch (Exception ex) when (ex is OperationCanceledException && (token.IsCancellationRequested || session.CancellationToken.IsCancellationRequested
                                                                         || _stopping.IsCancellationRequested))
@@ -334,6 +425,7 @@ public sealed partial class DirectManager
                 _ => L.T("Something went wrong."),
             };
             Log.Warn($"Direct: {session}: failed at {session.State}: {ex.GetType().Name}: {ex.Message}");
+            session.FailedTransiently = ex is DirectLinkException { Transient: true };
             session.Fail(message);
             await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
             throw Failure(session);
@@ -383,7 +475,7 @@ public sealed partial class DirectManager
             }
         }
 
-        if (Bluetooth is { } bluetooth && bluetooth.CanReach(peer.Id))
+        if (Bluetooth is { } bluetooth && await bluetooth.CanReachAsync(peer.Id, BluetoothSightingWait, token).ConfigureAwait(false))
         {
             var control = await bluetooth.OpenAsync(peer, expected, propose, token).ConfigureAwait(false);
             Log.Info($"Direct: {session}: {peer.Name} accepted over Bluetooth");
@@ -392,7 +484,7 @@ public sealed partial class DirectManager
 
         throw new DirectLinkException(lan.Count > 0
             ? L.T("Couldn't reach {0} over the network or Bluetooth to set up the direct connection.", peer.Name)
-            : L.T("{0} isn't reachable over the network or Bluetooth right now. Open Receive on it and try again.", peer.Name));
+            : L.T("{0} isn't reachable over the network or Bluetooth right now. Open Receive on it and try again.", peer.Name), transient: true);
     }
 
     private sealed class LanControl : IDirectControl
@@ -441,12 +533,21 @@ public sealed partial class DirectManager
     /// with a fresh passphrase), shared by the sessions that follow while it's on. Refused while the link is someone
     /// else's (the Phone page, this device being on another device's network).
     /// </summary>
-    private async Task<DirectNetwork> AcquireHostAsync(DirectSession session, CancellationToken token)
+    private async Task<DirectNetwork> AcquireHostAsync(string owner, DirectSession session, CancellationToken token)
     {
         Task<DirectNetwork> start;
         lock (_hostGate)
         {
-            if (!_hostLeases.Contains(session))
+            // Started earlier, but gone since (the OS or driver stopped it): start it again rather than offer a dead network.
+            if (_sessionHostStart is { IsCompletedSuccessfully: true } && !HostNetworkReady())
+            {
+                Log.Warn($"Direct: this device's network for direct sessions is gone; starting it again. Adapters: {DirectAddresses.Describe()}");
+                _sessionHostStart = null;
+                _sessionNetwork = null;
+                HostedNetwork = null;
+            }
+
+            if (!_hostLeases.Contains(owner) || _sessionHostStart == null || _sessionHostStart.IsFaulted || _sessionHostStart.IsCanceled)
             {
                 if (_sessionHostStart == null || _sessionHostStart.IsFaulted || _sessionHostStart.IsCanceled)
                 {
@@ -461,8 +562,8 @@ public sealed partial class DirectManager
                     _sessionHostStart = StartSessionHostAsync();
                 }
 
-                _hostLeases.Add(session);
-                _linkedPeers[LeaseKey(session)] = 0;
+                _hostLeases.Add(owner);
+                _linkedPeers[LeaseKey(owner)] = 0;
             }
 
             start = _sessionHostStart!;
@@ -472,9 +573,11 @@ public sealed partial class DirectManager
         {
             return await start.WaitAsync(token).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            ReleaseHost(session);
+            // A start that failed or was given up is retried by the next setup; the share itself is given back when the
+            // transfer is over (or the user moves it to the network), not here: a recovering transfer still needs it.
+            if (ex is not OperationCanceledException) lock (_hostGate) if (ReferenceEquals(_sessionHostStart, start) && start.IsCompleted) _sessionHostStart = null;
             throw;
         }
     }
@@ -562,13 +665,13 @@ public sealed partial class DirectManager
     }
 
     /// <summary>Gives back <paramref name="session"/>'s share; the network goes off once no session (or anyone else) uses it.</summary>
-    private void ReleaseHost(DirectSession session)
+    private void ReleaseHost(string owner)
     {
         bool stop;
         lock (_hostGate)
         {
-            if (!_hostLeases.Remove(session)) return;
-            _linkedPeers.TryRemove(LeaseKey(session), out _);
+            if (!_hostLeases.Remove(owner)) return;
+            _linkedPeers.TryRemove(LeaseKey(owner), out _);
             stop = _hostLeases.Count == 0 && _sessionHostStart is { IsCompleted: true };
             if (_hostLeases.Count == 0 && stop)
             {
@@ -605,7 +708,8 @@ public sealed partial class DirectManager
         catch (Exception ex) when (ex is TransferException or IOException or System.Net.Sockets.SocketException
                                        || (ex is OperationCanceledException && limit.IsCancellationRequested && !token.IsCancellationRequested))
         {
-            throw new DirectLinkException(L.T("Beam couldn't reach {0} over the direct network. Check that Beam is allowed through the firewall.", session.PeerName), ex);
+            throw new DirectLinkException(L.T("Beam couldn't reach {0} over the direct network. Check that Beam is allowed through the firewall.", session.PeerName), ex,
+                transient: true);
         }
     }
 
@@ -644,15 +748,11 @@ public sealed partial class DirectManager
 
     /// <summary>
     /// Lets go of what <paramref name="session"/> set up (once): tells the receiver it is over (over the direct network
-    /// if verified, else the control channel), and gives back its share of this device's network.
+    /// if verified, else the control channel). This device's network stays: it belongs to the transfer.
     /// </summary>
-    private async Task EndOutgoingAsync(DirectSession session, bool notify, bool keepHost = false)
+    private async Task EndOutgoingAsync(DirectSession session, bool notify)
     {
-        if (!_outgoing.TryGetValue(session.Id, out var outgoing) || Interlocked.Exchange(ref outgoing.Ended, 1) == 1)
-        {
-            if (!keepHost) ReleaseHost(session);
-            return;
-        }
+        if (!_outgoing.TryGetValue(session.Id, out var outgoing) || Interlocked.Exchange(ref outgoing.Ended, 1) == 1) return;
 
         _outgoing.TryRemove(new KeyValuePair<string, Outgoing>(session.Id, outgoing));
         outgoing.Ready.TrySetCanceled();
@@ -681,14 +781,15 @@ public sealed partial class DirectManager
         finally
         {
             if (outgoing.Control != null) await outgoing.Control.DisposeAsync().ConfigureAwait(false);
-            if (!keepHost) ReleaseHost(session);
         }
     }
 
     /// <summary>The transfer moved on: the session follows (transferring, interrupted, or over), and lets go when it's over.</summary>
     private void OnTransferChanged(DirectSend send)
     {
-        if (send.Transfer is not { } transfer || send.Mode != ConnectionMethod.Direct) return;
+        if (send.Transfer is not { } transfer) return;
+        if (transfer.IsFinished) _ = FinishSendAsync(send);
+        if (send.Mode != ConnectionMethod.Direct) return;
         var session = send.Session;
         switch (transfer.State)
         {
@@ -700,19 +801,29 @@ public sealed partial class DirectManager
                 break;
             case TransferState.Completed or TransferState.CompletedWithErrors:
                 session.TryMove(DirectSessionState.Completed);
-                _ = EndOutgoingAsync(session, notify: true);
                 break;
             case TransferState.Cancelled or TransferState.Declined:
                 session.Cancel();
-                _ = EndOutgoingAsync(session, notify: true);
                 break;
             case TransferState.Failed:
                 session.Fail(transfer.Error?.Message ?? L.T("Something went wrong."));
-                _ = EndOutgoingAsync(session, notify: true);
                 break;
         }
 
         if (transfer.IsFinished && !transfer.CanResume) _sends.TryRemove(transfer.Id, out _);
+    }
+
+    /// <summary>The transfer is over (done, cancelled, or failed for now): its session ends, and its share of this device's network goes.</summary>
+    private async Task FinishSendAsync(DirectSend send)
+    {
+        try
+        {
+            await EndOutgoingAsync(send.Session, notify: true).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseHost(send.Key);
+        }
     }
 
     /// <summary>
@@ -733,42 +844,63 @@ public sealed partial class DirectManager
             }
 
             Log.Info($"Direct: the user moved {transfer.Id} to {transfer.PeerName} to the network");
-            _switchedToNetwork[transfer.Id] = 0;
-            send.Mode = ConnectionMethod.SameNetwork;
-            var old = send.Session;
-            transfer.SetMode(ConnectionMethod.SameNetwork, null);
-            transfer.InterruptConnection(switchingPath: true);
-            old.Cancel();
-            await EndOutgoingAsync(old, notify: true).ConfigureAwait(false);
+            await send.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                _switchedToNetwork[transfer.Id] = 0;
+                send.Mode = ConnectionMethod.SameNetwork;
+                var old = send.Session;
+                transfer.SetMode(ConnectionMethod.SameNetwork, null);
+                transfer.InterruptConnection(switchingPath: true);
+                old.Cancel();
+                await EndOutgoingAsync(old, notify: true).ConfigureAwait(false);
+                ReleaseHost(send.Key);
+            }
+            finally
+            {
+                send.Gate.Release();
+            }
+
             return true;
         }
 
         var session = NewSession(send.Receiver);
         Log.Info($"Direct: the user moved {transfer.Id} to {transfer.PeerName} to a direct connection; setting it up meanwhile");
+        await send.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, transfer.CancellationToken);
-            await EstablishAsync(session, send.Receiver, linked.Token).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            Report(ex is TransferException te ? te.Error.Message : ex.Message);
-            return false; // still over the network, as it was
-        }
+            try
+            {
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, transfer.CancellationToken);
+                await EstablishAsync(session, send, linked.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                ReleaseHost(send.Key);
+                Report(ex is TransferException te ? te.Error.Message : ex.Message);
+                return false; // still over the network, as it was
+            }
 
-        if (transfer.IsFinished)
-        {
-            session.Cancel();
-            await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
-            return false;
-        }
+            if (transfer.IsFinished)
+            {
+                session.Cancel();
+                await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
+                ReleaseHost(send.Key);
+                return false;
+            }
 
-        send.Session = session;
-        send.Mode = ConnectionMethod.Direct;
-        _switchedToNetwork.TryRemove(transfer.Id, out _);
-        transfer.SetMode(ConnectionMethod.Direct, session);
-        transfer.InterruptConnection(switchingPath: true);
-        return true;
+            send.Session = session;
+            send.Mode = ConnectionMethod.Direct;
+            send.ReconnectsWithoutProgress = 0;
+            _switchedToNetwork.TryRemove(transfer.Id, out _);
+            transfer.SetMode(ConnectionMethod.Direct, session);
+            transfer.InterruptConnection(switchingPath: true);
+            return true;
+        }
+        finally
+        {
+            send.Gate.Release();
+        }
     }
 
     // ---- Messages to the sender (over the direct network or the control channel) ----
@@ -800,7 +932,11 @@ public sealed partial class DirectManager
 
     private DirectResponseMessage HandleReceiverEnded(Outgoing outgoing, DirectRequestMessage request)
     {
-        Log.Info($"Direct: {outgoing.Session}: the receiver ended it ({Trim(request.Message ?? "")})");
+        Log.Info($"Direct: {outgoing.Session}: the receiver ended it ({Trim(request.Message ?? "")}, stage {request.Stage ?? "-"})");
+        if (outgoing.Session.State is DirectSessionState.Verified or DirectSessionState.Transferring
+            && _sends.Values.FirstOrDefault(s => ReferenceEquals(s.Session, outgoing.Session))?.Transfer is { } transfer
+            && transfer.InterruptConnection(switchingPath: false))
+            Log.Info($"Direct: {outgoing.Session}: dropped the transfer's connection, which ran over the lost link; setting it up again");
         outgoing.Ready.TrySetException(new DirectLinkException(string.IsNullOrWhiteSpace(request.Message)
             ? L.T("{0} ended the direct connection.", outgoing.Session.PeerName)
             : Trim(request.Message)));

@@ -349,6 +349,8 @@ public sealed class TransferViewModel : ObservableObject
     /// <summary>Where setting up the direct link stands, in words (each stage is only shown once it really started).</summary>
     private static string DirectStatus(DirectSession direct, string peer) => direct.State switch
     {
+        // Set up again after a drop: say so (the steps are the same as the first time), except where the user may act.
+        < DirectSessionState.Joining when direct.Reconnects > 0 => L.T("The direct link dropped. Setting it up again…"),
         DirectSessionState.Negotiating => L.T("Asking {0} to accept a direct connection…", peer),
         DirectSessionState.Hosting => L.T("Starting direct connection…"),
         DirectSessionState.OfferingCredentials => direct.Channel == DirectControlChannel.Bluetooth

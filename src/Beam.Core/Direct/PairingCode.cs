@@ -56,8 +56,16 @@ public sealed class PairingCode
         return string.IsNullOrEmpty(link) ? "beam:" + payload : link + Marker + payload;
     }
 
-    /// <summary>The code as plain JSON (sent over Bluetooth, where every byte counts).</summary>
-    public string ToJson() => JsonSerializer.Serialize(this, PairingJson.Default.PairingCode);
+    /// <summary>
+    /// The code as plain JSON (sent over Bluetooth, where every byte counts): letters outside ASCII (a Cyrillic device
+    /// name) stay UTF-8 instead of six-byte \uXXXX escapes. Read back like any JSON.
+    /// </summary>
+    public string ToJson() => JsonSerializer.Serialize(this, CompactPairingJson.PairingCode);
+
+    private static readonly PairingJson CompactPairingJson = new(new JsonSerializerOptions(PairingJson.Default.Options)
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
 
     /// <summary>Reads <see cref="ToJson"/>; null when it isn't a valid code.</summary>
     public static PairingCode? FromJson(string json)

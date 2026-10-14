@@ -125,7 +125,7 @@ public sealed class BeamNode : IAsyncDisposable
     {
         if (_started) return;
         _started = true;
-        Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
+        Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} (build {AppInfo.Build}) as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
         Transfers.Start(_options.TransferPort);
         Discovery.Start();
         Direct.Start();

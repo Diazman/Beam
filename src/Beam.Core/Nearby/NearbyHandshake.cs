@@ -173,6 +173,15 @@ public static class NearbyHandshake
         return partial.Length < 4 ? null : 4 + (partial[2] << 8 | partial[3]);
     }
 
+    /// <summary>
+    /// The longest value a Bluetooth LE attribute may hold (Core spec: 512 bytes). Every handshake message must fit:
+    /// longer ones are cut off or refused by the Bluetooth stack, and the handshake then fails or times out.
+    /// </summary>
+    public const int MaxValueLength = 512;
+
+    /// <summary>Whether <paramref name="text"/>, sealed (<see cref="Sender.JoinRequest"/>), fits <see cref="MaxValueLength"/>.</summary>
+    public static bool Fits(string text) => 4 + IvLength + (Encoding.UTF8.GetByteCount(text) / 16 + 1) * 16 + MacLength <= MaxValueLength;
+
     /// <summary>[version, marker, length (2 bytes), IV, AES-CBC ciphertext, HMAC over all before it].</summary>
     private static byte[] Seal(byte marker, byte[] plain, Keys keys)
     {
@@ -181,7 +190,8 @@ public static class NearbyHandshake
         var iv = RandomNumberGenerator.GetBytes(IvLength);
         var cipher = aes.EncryptCbc(plain, iv);
         var length = IvLength + cipher.Length + MacLength;
-        if (length > 0xFFFF) throw new ArgumentException("Too long.");
+        if (4 + length > MaxValueLength)
+            throw new ArgumentException($"A {plain.Length}-byte message doesn't fit in a Bluetooth attribute ({MaxValueLength} bytes).");
         var message = new byte[4 + length];
         message[0] = Version;
         message[1] = marker;

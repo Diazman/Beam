@@ -67,6 +67,18 @@ public static class DirectAddresses
         return false;
     }
 
+    /// <summary>
+    /// The host of the direct network <paramref name="own"/> is on (.1 of a Wi-Fi Direct subnet), when this device is a
+    /// guest there; null otherwise (including when this device is the host).
+    /// </summary>
+    public static IPAddress? DirectHostOf(IPAddress own)
+    {
+        if (own.AddressFamily != AddressFamily.InterNetwork) return null;
+        var address = ToUInt(own);
+        if (!KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network) || (address & 0xFF) == 1) return null;
+        return FromUInt((address & 0xFFFFFF00) | 1);
+    }
+
     /// <summary>This device's own address (not loopback): connecting to it would reach this device itself.</summary>
     public static bool IsOwnAddress(IPAddress address)
     {

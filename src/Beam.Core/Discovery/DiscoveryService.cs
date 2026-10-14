@@ -49,11 +49,53 @@ public sealed class DiscoveryService : IDisposable
     private readonly SemaphoreSlim _wake = new(0);
     private Socket? _socket;
     private List<LocalInterface> _interfaces = new();
+
+    // Which interfaces the socket joined the multicast group on. The OS keys a membership by interface, not by address:
+    // an interface that changes address (a phone's wlan0 going from the home Wi-Fi to a direct network) is still a member,
+    // and joining again fails ("Address already in use" on Android, "An invalid argument was supplied" on Windows).
+    // Changed only under _sendGate, together with the socket it belongs to.
+    private readonly HashSet<string> _memberships = new();
+
+    // Unicast targets this service added by itself (the host of a direct network this device is on): removed again
+    // once this device is no longer on that network, so it doesn't keep sending to an unreachable address.
+    private readonly ConcurrentDictionary<IPEndPoint, byte> _autoTargets = new();
+
+    // When each of a device's addresses was last heard (an address that stops answering ages out on its own, even while
+    // the device is still heard at another one).
+    private readonly ConcurrentDictionary<(string Id, IPEndPoint Endpoint), long> _endpointSeen = new();
     private long _interfacesRefreshedAt;
     private long _reopenedAt;
     private bool _discoverable = true;
     private Task? _receiveTask;
     private Task? _timerTask;
+
+    /// <summary>The clock (tests replace it).</summary>
+    internal Func<long> Clock { get; set; } = () => Environment.TickCount64;
+
+    /// <summary>Tests: the adapters to use instead of the machine's.</summary>
+    internal Func<IReadOnlyList<LocalInterface>>? InterfacesForTests { get; set; }
+
+    /// <summary>Tests: what joining (true) or leaving (false) the multicast group on an interface does instead of the socket call.</summary>
+    internal Action<LocalInterface, bool>? MembershipForTests { get; set; }
+
+    /// <summary>The interfaces (by their key) the socket is a member of the multicast group on.</summary>
+    internal IReadOnlyCollection<string> MembershipsForTests
+    {
+        get
+        {
+            lock (_sendGate) return _memberships.ToList();
+        }
+    }
+
+    internal IReadOnlyCollection<IPEndPoint> UnicastTargetsForTests => _unicastTargets.Keys.ToList();
+
+    internal void HandleForTests(byte[] data, IPEndPoint remote) => Handle(data, remote);
+
+    internal void ExpireForTests() => ExpireDevices();
+
+    internal void RefreshInterfacesForTests() => RefreshInterfaces();
+
+    internal void ReopenForTests() => ReopenSocket();
 
     public DiscoveryService(DiscoveryOptions options, Func<LocalAnnouncement> self)
     {
@@ -157,7 +199,15 @@ public sealed class DiscoveryService : IDisposable
             _reopenedAt = Environment.TickCount64;
             var old = _socket;
             if (old == null || _cts.IsCancellationRequested) return;
+            if (MembershipForTests != null)
+            {
+                _memberships.Clear(); // tests: no real socket
+                _interfaces = new List<LocalInterface>();
+                return;
+            }
+
             old.Dispose();
+            _memberships.Clear(); // they belonged to the old socket
             try
             {
                 _socket = OpenSocket(LocalPort);
@@ -216,6 +266,7 @@ public sealed class DiscoveryService : IDisposable
         {
             var kept = existing.Device.Endpoints.Where(e => !drop(e)).ToList();
             if (kept.Count == existing.Device.Endpoints.Count) return;
+            foreach (var gone in existing.Device.Endpoints.Except(kept)) _endpointSeen.TryRemove((deviceId, gone), out _);
             var changed = existing.Device with { Endpoints = kept };
             if (!_devices.TryUpdate(deviceId, new Entry(changed, existing.LastSeen), existing)) continue;
             DeviceChanged?.Invoke(this, new DeviceEventArgs(changed));
@@ -226,7 +277,9 @@ public sealed class DiscoveryService : IDisposable
     /// <summary>Drops a device from the list (e.g. a Bluetooth placeholder now known by its real id).</summary>
     public void Forget(string deviceId)
     {
-        if (_devices.TryRemove(deviceId, out var removed)) DeviceLost?.Invoke(this, new DeviceEventArgs(removed.Device));
+        if (!_devices.TryRemove(deviceId, out var removed)) return;
+        foreach (var endpoint in removed.Device.Endpoints) _endpointSeen.TryRemove((deviceId, endpoint), out _);
+        DeviceLost?.Invoke(this, new DeviceEventArgs(removed.Device));
     }
 
     public void Dispose()
@@ -388,7 +441,8 @@ public sealed class DiscoveryService : IDisposable
 
     private void Upsert(DeviceInfo incoming, IPEndPoint? endpoint)
     {
-        var now = Environment.TickCount64;
+        var now = Clock();
+        foreach (var heard in endpoint != null ? new[] { endpoint } : incoming.Endpoints) _endpointSeen[(incoming.Id, heard)] = now;
         DeviceInfo? found = null, changed = null;
         _devices.AddOrUpdate(
             incoming.Id,
@@ -423,11 +477,31 @@ public sealed class DiscoveryService : IDisposable
 
     private void ExpireDevices()
     {
-        var cutoff = Environment.TickCount64 - (long)_options.DeviceTimeout.TotalMilliseconds;
+        var cutoff = Clock() - (long)_options.DeviceTimeout.TotalMilliseconds;
         foreach (var (id, entry) in _devices)
         {
-            if (entry.LastSeen < cutoff && _devices.TryRemove(id, out var removed))
-                DeviceLost?.Invoke(this, new DeviceEventArgs(removed.Device));
+            if (entry.LastSeen < cutoff)
+            {
+                if (_devices.TryRemove(new KeyValuePair<string, Entry>(id, entry)))
+                {
+                    foreach (var endpoint in entry.Device.Endpoints) _endpointSeen.TryRemove((id, endpoint), out _);
+                    DeviceLost?.Invoke(this, new DeviceEventArgs(entry.Device));
+                }
+
+                continue;
+            }
+
+            // Still heard, but not at every address it had (it left a network): those addresses go, so connecting
+            // doesn't keep trying an address that no longer reaches it.
+            var stale = entry.Device.Endpoints.Where(e => _endpointSeen.GetValueOrDefault((id, e)) < cutoff).ToHashSet();
+            if (stale.Count == 0) continue;
+            foreach (var endpoint in stale) _endpointSeen.TryRemove((id, endpoint), out _);
+            var kept = entry.Device with { Endpoints = entry.Device.Endpoints.Where(e => !stale.Contains(e)).ToList() };
+            if (_devices.TryUpdate(id, entry with { Device = kept }, entry))
+            {
+                Log.Info($"Discovery: {entry.Device.Name} no longer heard at {string.Join(", ", stale)}");
+                DeviceChanged?.Invoke(this, new DeviceEventArgs(kept));
+            }
         }
     }
 
@@ -540,6 +614,90 @@ public sealed class DiscoveryService : IDisposable
     private void RefreshInterfaces()
     {
         _interfacesRefreshedAt = Environment.TickCount64;
+        var list = InterfacesForTests?.Invoke().ToList() ?? ReadInterfaces();
+
+        // Serialized with sends and with reopening the socket: refreshes run from the timer, network-change events and
+        // the direct link at the same time, and two of them must not both join on the same interface.
+        lock (_sendGate)
+        {
+            var socket = _socket;
+            if (socket != null && _options.UseMulticastAndBroadcast) UpdateMemberships(socket, list);
+            _interfaces = list;
+        }
+
+        // A guest on another device's direct network (e.g. a phone that joined a PC's DIRECT-… Wi-Fi): ask its host
+        // directly instead of relying on broadcasts, and stop once this device has left that network.
+        if (_options.UseMulticastAndBroadcast || InterfacesForTests != null)
+        {
+            var hosts = list.Select(i => Direct.DirectAddresses.DirectHostOf(i.Address)).OfType<IPAddress>()
+                .Select(h => new IPEndPoint(h, _options.Port)).ToHashSet();
+            foreach (var target in hosts)
+            {
+                if (_unicastTargets.ContainsKey(target)) continue;
+                _unicastTargets[target] = 0;
+                _autoTargets[target] = 0;
+                Log.Info($"Discovery: on {target.Address}'s direct network; asking it directly");
+            }
+
+            foreach (var target in _autoTargets.Keys.Where(t => !hosts.Contains(t)).ToList())
+            {
+                _autoTargets.TryRemove(target, out _);
+                _unicastTargets.TryRemove(target, out _);
+                _failingTargets.TryRemove(target, out _);
+                Log.Info($"Discovery: no longer on {target.Address}'s direct network; not asking it any more");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Joins the multicast group on interfaces that came up and leaves it on those that went away, keyed by interface
+    /// (an interface that only changed its address stays a member). Caller holds <see cref="_sendGate"/>.
+    /// </summary>
+    private void UpdateMemberships(Socket socket, IReadOnlyList<LocalInterface> list)
+    {
+        var current = list.GroupBy(i => i.Key).ToDictionary(g => g.Key, g => g.First());
+        foreach (var key in _memberships.Where(k => !current.ContainsKey(k)).ToList())
+        {
+            _memberships.Remove(key);
+            var gone = _interfaces.FirstOrDefault(i => i.Key == key);
+            if (gone == null) continue;
+            try
+            {
+                if (MembershipForTests is { } test) test(gone, false);
+                else socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.DropMembership, gone.Membership(_options.MulticastGroup));
+            }
+            catch (Exception ex)
+            {
+                // The interface is already gone, and the membership with it.
+                Log.Info($"Discovery: left the group on {gone.Address} ({ex.Message})");
+            }
+        }
+
+        foreach (var (key, nic) in current)
+        {
+            if (_memberships.Contains(key)) continue;
+            try
+            {
+                if (MembershipForTests is { } test) test(nic, true);
+                else socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, nic.Membership(_options.MulticastGroup));
+                _memberships.Add(key);
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode is SocketError.AddressAlreadyInUse or SocketError.InvalidArgument)
+            {
+                // The OS says this socket already is a member on that interface (EADDRINUSE on Linux/Android, WSAEINVAL
+                // on Windows): note it, so it is left properly when the interface goes.
+                _memberships.Add(key);
+                Log.Info($"Discovery: already in the group on {nic.Address} ({ex.SocketErrorCode})");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Could not join discovery group on {nic.Address}: {ex.Message}");
+            }
+        }
+    }
+
+    private static List<LocalInterface> ReadInterfaces()
+    {
         var list = new List<LocalInterface>();
         try
         {
@@ -549,11 +707,13 @@ public sealed class DiscoveryService : IDisposable
                 if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
                 IPInterfaceProperties props;
                 try { props = nic.GetIPProperties(); } catch { continue; }
+                var index = -1;
+                try { index = props.GetIPv4Properties()?.Index ?? -1; } catch { /* not available here: keyed by address */ }
                 foreach (var unicast in props.UnicastAddresses)
                 {
                     if (unicast.Address.AddressFamily != AddressFamily.InterNetwork) continue;
                     if (IPAddress.IsLoopback(unicast.Address)) continue;
-                    list.Add(new LocalInterface(unicast.Address, ComputeBroadcast(unicast.Address, unicast.IPv4Mask)));
+                    list.Add(new LocalInterface(unicast.Address, ComputeBroadcast(unicast.Address, unicast.IPv4Mask), index));
                 }
             }
         }
@@ -562,35 +722,7 @@ public sealed class DiscoveryService : IDisposable
             Log.Warn("Could not enumerate network adapters", ex);
         }
 
-        var socket = _socket;
-        if (socket != null && _options.UseMulticastAndBroadcast)
-        {
-            foreach (var nic in list.Where(n => !_interfaces.Any(o => o.Address.Equals(n.Address))))
-            {
-                try
-                {
-                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(_options.MulticastGroup, nic.Address));
-                }
-                catch (Exception ex)
-                {
-                    Log.Warn($"Could not join discovery group on {nic.Address}: {ex.Message}");
-                }
-            }
-        }
-
-        _interfaces = list;
-
-        // A guest on another device's direct network (e.g. a phone that joined a PC's DIRECT-… Wi-Fi from a QR code):
-        // ask its host directly instead of relying on broadcasts.
-        if (_options.UseMulticastAndBroadcast)
-        {
-            Direct.DirectAddresses.Invalidate();
-            foreach (var host in Direct.DirectAddresses.DirectHostsOfLocalNetworks())
-            {
-                var target = new IPEndPoint(host, _options.Port);
-                if (_unicastTargets.TryAdd(target, 0)) Log.Info($"Discovery: on {host}'s direct network; asking it directly");
-            }
-        }
+        return list;
     }
 
     private static IPAddress? ComputeBroadcast(IPAddress address, IPAddress? mask)
@@ -607,5 +739,12 @@ public sealed class DiscoveryService : IDisposable
 
     private sealed record Entry(DeviceInfo Device, long LastSeen);
 
-    private sealed record LocalInterface(IPAddress Address, IPAddress? Broadcast);
+    /// <summary>A local IPv4 address on an adapter (<paramref name="Index"/>: the adapter's index, -1 when unknown).</summary>
+    internal sealed record LocalInterface(IPAddress Address, IPAddress? Broadcast, int Index = -1)
+    {
+        /// <summary>What a multicast membership belongs to: the adapter (an address change keeps it).</summary>
+        public string Key => Index >= 0 ? "if" + Index : "ip" + Address;
+
+        public MulticastOption Membership(IPAddress group) => Index >= 0 ? new MulticastOption(group, Index) : new MulticastOption(group, Address);
+    }
 }

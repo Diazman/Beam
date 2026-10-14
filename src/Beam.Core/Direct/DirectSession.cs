@@ -106,8 +106,11 @@ public sealed class DirectSession
     /// <summary>The receiver's Beam on the direct network, once verified (the only place this session's files go).</summary>
     public IPEndPoint? VerifiedEndpoint { get; private set; }
 
-    /// <summary>How often this session was set up again after its direct link dropped.</summary>
+    /// <summary>How often this transfer's direct link was set up again after it dropped (0 for the first setup).</summary>
     public int Reconnects { get; internal set; }
+
+    /// <summary>It failed only because the receiver couldn't be reached just then (a recovering transfer tries again).</summary>
+    internal bool FailedTransiently { get; set; }
 
     public DirectSessionState State
     {

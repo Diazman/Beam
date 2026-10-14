@@ -215,7 +215,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string SecurityCode => DeviceIdentity.ShortCode(_node.Identity.Fingerprint);
 
-    public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version}";
+    public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version} ({AppInfo.Build})";
 
     public string DataFolder => _node.Paths.Root;
 

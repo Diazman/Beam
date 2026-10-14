@@ -29,7 +29,7 @@ namespace Beam.Droid;
 /// the route by reporting in over it. Leaving releases only that binding and request.
 /// </para>
 /// </summary>
-internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner
+internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner, IDirectRadio
 {
     private static readonly TimeSpan GroupTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan P2pJoinTimeout = TimeSpan.FromSeconds(15);
@@ -375,7 +375,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         Android.Net.Network? joined = null;
         for (var attempt = 1; ; attempt++)
         {
-            callback = new WifiCallback(network.Ssid, OnNetworkLost);
+            callback = new WifiCallback(network.Ssid, OnNetworkLost, () => IsWifiEnabled);
             Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
             var asked = System.Environment.TickCount64;
             try
@@ -507,16 +507,20 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         }
     }
 
+    public bool? IsWifiEnabled => _context.GetSystemService(Context.WifiService) is WifiManager wifi ? wifi.IsWifiEnabled : null;
+
     /// <summary>
-    /// Wi-Fi is off: Android doesn't let apps switch it on (since Android 10), so Beam opens Android's Wi-Fi panel (one
-    /// tap) and waits a little for it.
+    /// Wi-Fi is off: Android 10+ doesn't let apps switch it on, so Beam opens the system's Wi-Fi panel (one tap) when it
+    /// is in front, and waits until Wi-Fi is on and settled. False when it stays off (panel dismissed, Beam in the
+    /// background, or no answer within <paramref name="wait"/>).
     /// </summary>
-    private async Task EnsureWifiOnAsync(CancellationToken cancellationToken)
+    public async Task<bool> RequestWifiOnAsync(TimeSpan wait, CancellationToken cancellationToken)
     {
-        if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi || wifi.IsWifiEnabled) return;
-        if (AndroidHost.CurrentActivity is { } activity)
+        if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return false;
+        if (wifi.IsWifiEnabled) return true;
+        if (OperatingSystem.IsAndroidVersionAtLeast(29) && AndroidHost.CurrentActivity is { } activity)
         {
-            Log.Info("Wi-Fi: it is off; asking the user to turn it on");
+            Log.Info("Wi-Fi: it is off; showing Android's Wi-Fi panel");
             activity.RunOnUiThread(() =>
             {
                 try
@@ -528,11 +532,26 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
                     Log.Warn($"Wi-Fi: couldn't open the Wi-Fi panel: {ex.Message}");
                 }
             });
-            for (var i = 0; i < 40 && !wifi.IsWifiEnabled; i++) await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            Log.Info("Wi-Fi: it is off and Beam isn't in front; the user has to turn it on");
         }
 
-        if (!wifi.IsWifiEnabled) throw new DirectLinkException(L.T("Turn on Wi-Fi to connect directly."));
-        await Task.Delay(1500, cancellationToken).ConfigureAwait(false); // Wi-Fi needs a moment before it can join or host
+        var deadline = System.Environment.TickCount64 + (long)wait.TotalMilliseconds;
+        while (!wifi.IsWifiEnabled && System.Environment.TickCount64 < deadline) await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        if (!wifi.IsWifiEnabled) return false;
+        // "Enabled" comes before the radio can scan, join or host: give it a moment.
+        const int Enabled = 3; // WifiManager.WIFI_STATE_ENABLED
+        for (var i = 0; i < 20 && (int)wifi.WifiState != Enabled; i++) await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task EnsureWifiOnAsync(CancellationToken cancellationToken)
+    {
+        if (!await RequestWifiOnAsync(TimeSpan.FromSeconds(20), cancellationToken).ConfigureAwait(false))
+            throw new DirectLinkException(L.T("Turn on Wi-Fi to connect directly.")) { WifiOff = true };
     }
 
     /// <summary>
@@ -667,11 +686,14 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     {
         private readonly Action<WifiCallback> _lost;
 
-        public WifiCallback(string ssid, Action<WifiCallback> lost)
+        public WifiCallback(string ssid, Action<WifiCallback> lost, Func<bool?>? wifiEnabled = null)
         {
             Ssid = ssid;
             _lost = lost;
+            WifiEnabled = wifiEnabled;
         }
+
+        private Func<bool?>? WifiEnabled { get; }
 
         public string Ssid { get; }
 
@@ -681,11 +703,22 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
         public TaskCompletionSource<Android.Net.Network?> Available { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>When Android said the network is available (to tell, when it's lost, how long it lasted).</summary>
+        public long AvailableAt { get; private set; }
+
         public override void OnAvailable(Android.Net.Network network)
         {
             Network = network;
+            AvailableAt = System.Environment.TickCount64;
             Available.TrySetResult(network);
         }
+
+        public override void OnLosing(Android.Net.Network network, int maxMsToLive)
+        {
+            Log.Warn($"Wi-Fi: Android is about to drop {Ssid} (within {maxMsToLive} ms, {Seconds()} s after it came up)");
+        }
+
+        private string Seconds() => AvailableAt == 0 ? "?" : ((System.Environment.TickCount64 - AvailableAt) / 1000.0).ToString("0.0");
 
         public override void OnUnavailable()
         {
@@ -695,7 +728,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
         public override void OnLost(Android.Net.Network network)
         {
-            Log.Warn($"Wi-Fi: lost {Ssid}");
+            Log.Warn($"Wi-Fi: lost {Ssid} ({Seconds()} s after it came up; Wi-Fi {(WifiEnabled?.Invoke() is { } on ? on ? "on" : "off" : "?")})");
             Network = null;
             _lost(this);
         }

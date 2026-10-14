@@ -617,5 +617,11 @@
   "{0} wants to send you files over a direct Wi-Fi connection. This device leaves its Wi-Fi network while the files come, and goes back afterwards. Security code: {1}": "{0} хочет отправить вам файлы через прямое подключение Wi-Fi. Пока файлы передаются, это устройство отключится от своей сети Wi-Fi, а потом вернётся. Код безопасности: {1}",
   "{0} · Found over Bluetooth": "{0} · найдено через Bluetooth",
   "{0} · Found over local network": "{0} · найдено в локальной сети",
-  "{0} · Found over local network and Bluetooth": "{0} · найдено в локальной сети и через Bluetooth"
+  "{0} · Found over local network and Bluetooth": "{0} · найдено в локальной сети и через Bluetooth",
+  "Wi-Fi is off": "Wi-Fi выключен",
+  "Turn on Wi-Fi": "Включить Wi-Fi",
+  "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "Для прямой отправки на этом устройстве должен быть включён Wi-Fi. Подключаться к какой-либо сети не нужно.",
+  "Turn on Wi-Fi, then press Send again.": "Включите Wi-Fi и снова нажмите «Отправить».",
+  "Wi-Fi is off on this device. Turn it on, then press Try again.": "На этом устройстве выключен Wi-Fi. Включите его и нажмите «Повторить».",
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "На {0} выключен Wi-Fi. Включите его там и нажмите «Повторить»."
 }

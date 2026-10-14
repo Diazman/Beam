@@ -711,15 +711,34 @@ public sealed class HomeViewModel : ObservableObject
     private async Task SendTextAsync()
     {
         if (_selected.Count == 0) return;
+        if (!await EnsureWifiForDirectAsync()) return;
         var targets = _selected.Select(d => d.Device).ToList();
         // Starts empty: reading the clipboard unasked could show a copied password (and Android announces every read).
         if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, "", _ui)) is not string text) return;
         foreach (var target in targets) await _main.StartSendTextAsync(target, text);
     }
 
+    /// <summary>
+    /// Direct chosen and Wi-Fi off on this device: offer to turn it on (the system's Wi-Fi panel on Android) before
+    /// anything starts. False when it stays off; nothing is then sent (and never over another connection instead).
+    /// </summary>
+    private async Task<bool> EnsureWifiForDirectAsync()
+    {
+        if (!PreferDirect || !_node.Direct.IsWifiOff) return true;
+        var ask = new Dialogs.ConfirmViewModel(L.T("Wi-Fi is off"),
+            L.T("Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network."),
+            L.T("Turn on Wi-Fi"));
+        if (await _main.ShowDialogAsync(ask) is not true) return false;
+        if (await _node.Direct.RequestWifiOnAsync(TimeSpan.FromSeconds(60))) return true;
+        await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Wi-Fi is off"),
+            L.T("Turn on Wi-Fi, then press Send again."), L.T("OK"), ""));
+        return false;
+    }
+
     private async Task SendAsync()
     {
         if (!CanSend) return;
+        if (!await EnsureWifiForDirectAsync()) return;
         var targets = _selected.Select(d => d.Device).ToList();
         var paths = Items.Select(i => i.Path).ToList();
         var text = _sharedText;

@@ -529,5 +529,11 @@
   "{0} wants to send you files over a direct Wi-Fi connection. This device leaves its Wi-Fi network while the files come, and goes back afterwards. Security code: {1}": "{0} sizga toʻgʻridan-toʻgʻri Wi-Fi ulanishi orqali fayllar yubormoqchi. Fayllar kelayotganda bu qurilma oʻz Wi-Fi tarmogʻidan chiqadi va keyin qaytadi. Xavfsizlik kodi: {1}",
   "{0} · Found over Bluetooth": "{0} · Bluetooth orqali topildi",
   "{0} · Found over local network": "{0} · Mahalliy tarmoqda topildi",
-  "{0} · Found over local network and Bluetooth": "{0} · Mahalliy tarmoqda va Bluetooth orqali topildi"
+  "{0} · Found over local network and Bluetooth": "{0} · Mahalliy tarmoqda va Bluetooth orqali topildi",
+  "Wi-Fi is off": "Wi-Fi o'chiq",
+  "Turn on Wi-Fi": "Wi-Fi'ni yoqish",
+  "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "To'g'ridan-to'g'ri yuborish uchun bu qurilmada Wi-Fi yoqilgan bo'lishi kerak. Biror tarmoqqa ulanish shart emas.",
+  "Turn on Wi-Fi, then press Send again.": "Wi-Fi'ni yoqing, so'ng yana Yuborish tugmasini bosing.",
+  "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu qurilmada Wi-Fi o'chiq. Uni yoqing, so'ng Qayta urinish tugmasini bosing.",
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} da Wi-Fi o'chiq. Uni u yerda yoqing, so'ng Qayta urinish tugmasini bosing."
 }

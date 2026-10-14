@@ -115,6 +115,13 @@ sender's identity is only claimed: the receiver always asks its user, and the TL
 check the claimed fingerprint before any file comes. A join request without a session (Beam 1.5.3 and older) is
 refused.
 
+Every value written or read is at most 512 bytes (a GATT attribute). Only the proposal carries the identity fields;
+offers and ends on the same connection leave them out (the receiver takes them from the proposal), and their
+`message` is at most 80 characters. JSON over Bluetooth keeps non-ASCII text as UTF-8 (not `\uXXXX`); if a message
+still doesn't fit, only the text shown to people (`senderName`, then `message`; in an answer, `addresses`, then the
+name) is shortened. The connection of the handshake that found out who a receiver is stays open for 30 s, and a
+direct session started meanwhile uses it.
+
 ## Direct sessions (sender-hosted)
 
 Connection purpose `direct`; one `DirectRequest` (JSON) answered by one `DirectResponse` (`ok`, `message`, `declined`).
@@ -128,9 +135,14 @@ word `shost` (discovery) or beacon flag `8`.
 | `ready` | receiver → sender, **direct network** | "Joined; my Beam is at `port`." Accepted only from the session's certificate, with its nonce, from a direct address. |
 | `verify` | sender → receiver, **direct network** | Checked the same way on the receiver. Only then may file data go, and only to that endpoint. |
 | `failed` | receiver → sender, LAN | Joining failed (`stage`, `message`), so the sender can say where. |
-| `end` | either way | The session is over: the receiver leaves what it joined for it, the sender gives back its share of its network. Ended ids are never accepted again. |
+| `end` | either way | The session is over: the receiver leaves what it joined for it, the sender gives back its share of its network. Ended ids are never accepted again. A receiver whose OS dropped the direct network sends `end` with `stage` `lost` over the shared network (retried for 45 s): the sender then sets up a new session at once instead of waiting for the transfer to time out. |
 
 The control channel is Beam's TLS connection on the shared network when the receiver answers there (checked against
 its paired, remembered or announced fingerprint), else the Bluetooth session messages above. Neither discovery
-announcements nor beacons ever carry network details. Older versions' receiver-hosted requests (`host`, `join`,
+announcements nor beacons ever carry network details.
+
+After a verified link is lost, the sender sets up a new session (new id and nonce, the receiver authenticated again)
+on the network it keeps hosting, retrying for up to 2 minutes while the receiver can't be reached; the transfer then
+resumes from the offsets the receiver's `OfferResponse` plan confirms. A transfer gives up after two set-ups in a row
+that moved no data (30 in all). It never continues over the shared network by itself. Older versions' receiver-hosted requests (`host`, `join`,
 `prefer`, `stop`) are still answered for compatibility; this version never sends them.

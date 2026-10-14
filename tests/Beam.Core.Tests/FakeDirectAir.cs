@@ -111,8 +111,27 @@ public sealed class FakeDirectAir
         lock (_gate) return _links.FirstOrDefault(l => l.Hosting?.Ssid == ssid);
     }
 
-    public sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing
+    public sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing, IDirectRadio
     {
+        /// <summary>This device's Wi-Fi switch.</summary>
+        public bool WifiOn { get; set; } = true;
+
+        /// <summary>When Beam asks (the system's Wi-Fi panel), the user turns Wi-Fi on.</summary>
+        public bool TurnsOnWhenAsked { get; set; }
+
+        public int WifiAsks => Volatile.Read(ref _wifiAsks);
+
+        private int _wifiAsks;
+
+        public bool? IsWifiEnabled => WifiOn;
+
+        public Task<bool> RequestWifiOnAsync(TimeSpan wait, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _wifiAsks);
+            if (TurnsOnWhenAsked) WifiOn = true;
+            return Task.FromResult(WifiOn);
+        }
+
         public bool CanShareInternet { get; init; }
 
         /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
@@ -161,6 +180,7 @@ public sealed class FakeDirectAir
             Interlocked.Increment(ref _hostCalls);
             if (HoldHost is { } hold) await hold.Task.WaitAsync(cancellationToken);
             if (_air.HostError != null) throw new DirectLinkException(_air.HostError);
+            if (!WifiOn) throw new DirectLinkException("Wi-Fi is off.");
             lock (_air._gate)
             {
                 if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
@@ -180,6 +200,7 @@ public sealed class FakeDirectAir
             Interlocked.Increment(ref _joinCalls);
             await Task.Delay(JoinDelay, cancellationToken);
             if (JoinError != null) throw new DirectLinkException(JoinError);
+            if (!WifiOn) throw new DirectLinkException("Wi-Fi is off.");
             switch (NextJoins)
             {
                 case JoinOutcome.PromptDenied:

@@ -178,6 +178,22 @@ public interface IDirectLinkEvents
     event Action? Lost;
 }
 
+/// <summary>
+/// A link whose Wi-Fi the user may have switched off, and that can't switch it on by itself (Android 10+ doesn't let
+/// apps): it can only show the system's Wi-Fi panel and wait for the user.
+/// </summary>
+public interface IDirectRadio
+{
+    /// <summary>False when Wi-Fi is switched off; null when that can't be told.</summary>
+    bool? IsWifiEnabled { get; }
+
+    /// <summary>
+    /// Shows the system's Wi-Fi panel (when Beam is in front) and waits up to <paramref name="wait"/> for Wi-Fi to be on
+    /// and ready. True when it is.
+    /// </summary>
+    Task<bool> RequestWifiOnAsync(TimeSpan wait, CancellationToken cancellationToken);
+}
+
 /// <summary>A link that can also list the Wi-Fi networks in range (phones: to notice a paired PC's direct network).</summary>
 public interface IDirectNetworkScanner
 {
@@ -187,12 +203,22 @@ public interface IDirectNetworkScanner
 
 public sealed class DirectLinkException : Exception
 {
-    public DirectLinkException(string message, Exception? inner = null, bool declined = false)
+    public DirectLinkException(string message, Exception? inner = null, bool declined = false, bool transient = false)
         : base(message, inner)
     {
         Declined = declined;
+        Transient = transient;
     }
 
     /// <summary>The other device's user said no (so don't try another way that would ask again).</summary>
     public bool Declined { get; }
+
+    /// <summary>
+    /// The other device couldn't be reached just now (e.g. a phone between networks after its direct link dropped):
+    /// worth trying again shortly when recovering a running transfer. Never set for refusals or identity problems.
+    /// </summary>
+    public bool Transient { get; }
+
+    /// <summary>This device's Wi-Fi is switched off (the user has to turn it on; Beam may open the system's Wi-Fi panel).</summary>
+    public bool WifiOff { get; init; }
 }

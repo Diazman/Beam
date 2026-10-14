@@ -15,6 +15,9 @@ public sealed partial class DirectManager
     /// <summary>After accepting a proposal, how long the sender has to send the network details.</summary>
     internal TimeSpan ProposalLifetime { get; set; } = TimeSpan.FromMinutes(3);
 
+    /// <summary>How long a receiver whose Wi-Fi is off waits for its user to turn it on.</summary>
+    internal static TimeSpan WifiOnWait { get; set; } = TimeSpan.FromSeconds(60);
+
     /// <summary>How long joining and reporting in may take before this device gives up and leaves.</summary>
     internal static TimeSpan ReportInTimeout { get; set; } = TimeSpan.FromSeconds(25);
 
@@ -260,6 +263,15 @@ public sealed partial class DirectManager
                 _linkedPeers[incoming.Key] = 0; // from here the link is this session's (nobody else may take it)
             }
 
+            if (_link is IDirectRadio { IsWifiEnabled: false } radio)
+            {
+                // Apps can't switch Wi-Fi on (Android 10+): show the system's Wi-Fi panel and wait, within the offer's time.
+                Log.Info($"Direct: {incoming}: Wi-Fi is off; asking this device's user to turn it on");
+                var left = TimeSpan.FromMilliseconds(Math.Max(1000, incoming.Deadline - Environment.TickCount64));
+                if (!await radio.RequestWifiOnAsync(left < WifiOnWait ? left : WifiOnWait, limit.Token).ConfigureAwait(false))
+                    throw new DirectLinkException(L.T("Wi-Fi is off on {0}. Turn it on there, then press Try again.", _settings.Current.DeviceName)) { WifiOff = true };
+            }
+
             if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
             Log.Info($"Direct: {incoming}: joining {network.Ssid}");
             IPAddress? host;
@@ -403,7 +415,7 @@ public sealed partial class DirectManager
     }
 
     /// <summary>Over Bluetooth: the sender ends a session (it can't use TLS; the session's nonce and claimed certificate must match).</summary>
-    internal void EndFromSenderOverBluetooth(DirectRequestMessage request) => EndFromSender(request, request.SenderFingerprint ?? "");
+    internal void EndFromSenderOverBluetooth(DirectRequestMessage request, string claimedFingerprint) => EndFromSender(request, claimedFingerprint);
 
     /// <summary>
     /// Ends an incoming session once: what it joined is left (only if this session joined it, and only when nobody
@@ -463,7 +475,49 @@ public sealed partial class DirectManager
     /// </summary>
     private void OnJoinedNetworkLost()
     {
-        foreach (var incoming in _incoming.Values.Where(i => i.OwnsJoin).ToList()) EndIncoming(incoming, "its network was lost");
+        foreach (var incoming in _incoming.Values.Where(i => i.OwnsJoin).ToList())
+        {
+            var wasUp = incoming.Stage is IncomingStage.Joined or IncomingStage.Verified;
+            EndIncoming(incoming, "its network was lost");
+            // The sender may not notice for a minute (its data just stops being acknowledged): tell it, so it sets the
+            // link up again right away. Only over the shared network, once this device is back on it.
+            if (wasUp) _ = TellSenderLinkLostAsync(incoming);
+        }
+    }
+
+    /// <summary>How long a receiver keeps trying to tell the sender its direct link was lost (it may be between networks).</summary>
+    internal TimeSpan LinkLostNoticeWindow { get; set; } = TimeSpan.FromSeconds(45);
+
+    private async Task TellSenderLinkLostAsync(Incoming incoming)
+    {
+        if (incoming.SenderLan.Count == 0) return; // set up over Bluetooth: the sender finds out by its own timeout
+        var deadline = Environment.TickCount64 + (long)LinkLostNoticeWindow.TotalMilliseconds;
+        var message = new DirectRequestMessage
+        {
+            Action = DirectActions.End,
+            SessionId = incoming.SessionId,
+            Nonce = incoming.Nonce,
+            Stage = "lost",
+            Message = "link lost",
+        };
+        while (Environment.TickCount64 < deadline && !_stopping.IsCancellationRequested)
+        {
+            try
+            {
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                await RequestAsync(incoming.SenderLan, incoming.SenderFingerprint, incoming.SenderName, message, TimeSpan.FromSeconds(5), limit.Token)
+                    .ConfigureAwait(false);
+                Log.Info($"Direct: {incoming}: told the sender the direct network was lost");
+                return;
+            }
+            catch (Exception ex) when (ex is TransferException or IOException or System.Net.Sockets.SocketException or TimeoutException
+                                           or OperationCanceledException or System.Security.Authentication.AuthenticationException)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false); // not back on the shared network yet
+            }
+        }
+
+        Log.Info($"Direct: {incoming}: couldn't tell the sender the direct network was lost (not back on the shared network in time)");
     }
 
     /// <summary>
