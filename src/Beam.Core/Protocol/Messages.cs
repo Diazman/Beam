@@ -119,6 +119,12 @@ public sealed class DirectRequestMessage
 
     /// <summary>Failed/End: why, for the other device's user.</summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// Propose/Offer setting a lost link up again: made with the key the receiver gave on the last verified session
+    /// (<see cref="Direct.ReconnectProof"/>), so the receiver needn't ask its user again.
+    /// </summary>
+    public string? Proof { get; set; }
 }
 
 public sealed class DirectResponseMessage
@@ -137,6 +143,9 @@ public sealed class DirectResponseMessage
 
     /// <summary>For a join: the joined device's own address on the direct network, so the host can reach it right away.</summary>
     public string? Address { get; set; }
+
+    /// <summary>Verify: the receiver's key for setting a lost link up again (<see cref="Direct.ReconnectProof"/>); only over TLS.</summary>
+    public string? ReconnectKey { get; set; }
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>

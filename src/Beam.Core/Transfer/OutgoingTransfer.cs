@@ -44,6 +44,9 @@ internal sealed class OutgoingTransfer
     public void Start()
     {
         if (Interlocked.Exchange(ref _running, 1) == 1) return;
+        // "Try again" after a failure: running again from now on. (It used to read "failed" until data flowed, and
+        // whoever watched the transfer took that for the end of the new run.)
+        if (_session.IsFinished) _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
         // RunAsync handles every exception and always ends in Finish(), which clears _running,
         // or in a completed transfer (which can't be resumed).
         _ = Task.Run(RunAsync);
@@ -81,6 +84,7 @@ internal sealed class OutgoingTransfer
 
             var failures = 0;
             long firstFailure = 0;
+            long bytesAtFailure = -1;
             while (true)
             {
                 token.ThrowIfCancellationRequested();
@@ -94,13 +98,19 @@ internal sealed class OutgoingTransfer
                     // While switching between Wi-Fi and a direct link the devices need a moment to find each
                     // other on the new path: keep trying for a while instead of giving up after a few attempts.
                     var switching = Environment.TickCount64 < Volatile.Read(ref _switchingUntil);
+                    // A connection that moved data since the last failure: this is a new drop, not the same one still
+                    // failing, so the count (and the patience below) starts over. Without this a long transfer whose
+                    // link drops every few minutes gave up at the second drop.
+                    var bytes = _session.GetSnapshot().TransferredBytes;
+                    if (!switching && failures > 0 && bytes > bytesAtFailure) failures = 0;
+                    if (!switching) bytesAtFailure = bytes;
                     if (!switching) failures++;
                     if (failures == 1 && !switching) firstFailure = Environment.TickCount64;
                     Log.Warn($"Transfer {_session.Id} to {PeerName}: attempt failed{(switching ? " while switching connection" : $" ({failures})")} ({ex.GetType().Name}: {ex.Message})");
                     // Before the other side accepted, give up quickly. A running transfer keeps trying for a while: the
                     // devices may be re-joining a direct network, walking back into Wi-Fi range or waking up.
                     if (!_accepted && failures >= 2) throw;
-                    if (_accepted && failures >= 2 && Environment.TickCount64 - firstFailure > (long)ReconnectPatience.TotalMilliseconds) throw;
+                    if (_accepted && failures >= 2 && Environment.TickCount64 - firstFailure > (long)_service.ReconnectPatience.TotalMilliseconds) throw;
                     _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
                     if (!switching) _session.SetPath(TransferPath.Unknown);
                     await Task.Delay(switching ? TimeSpan.FromSeconds(1.5) : Backoff(failures), token).ConfigureAwait(false);
@@ -135,8 +145,6 @@ internal sealed class OutgoingTransfer
         _session.SetState(state, error);
     }
 
-    /// <summary>How long a running transfer keeps trying to reconnect before it fails (it can still be resumed later).</summary>
-    internal static TimeSpan ReconnectPatience { get; set; } = TimeSpan.FromMinutes(3);
 
     private static TimeSpan Backoff(int failures) => TimeSpan.FromSeconds(failures switch
     {

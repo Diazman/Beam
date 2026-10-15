@@ -21,9 +21,10 @@ namespace Beam.Droid;
 /// Windows PC's Wi-Fi adapter. Group owners are 192.168.49.1.
 /// </para>
 /// <para>
-/// Joining (this phone receives): a phone's group is first joined the Wi-Fi Direct way, which keeps the phone on its
-/// normal Wi-Fi too; a computer's network (and a group where that failed) is joined as an ordinary Wi-Fi network for
-/// Beam only (WifiNetworkSpecifier): Android shows its "Connect to DIRECT-…?" prompt, which the user must approve
+/// Joining (this phone receives): the sender's network (a phone's group, or a computer's, which Windows runs as a
+/// Wi-Fi Direct group too) is first joined the Wi-Fi Direct way. That runs beside the phone's normal Wi-Fi, which it
+/// stays on: Android has no network without internet to switch away from. A network where that failed is joined as an
+/// ordinary Wi-Fi network for Beam only (WifiNetworkSpecifier): Android shows its "Connect to DIRECT-…?" prompt, which the user must approve
 /// (Beam never claims it connects without that), and may approve it again without asking for the same network.
 /// Beam's process is then bound to that network, so its connections (and only Beam's) use it; Beam.Core still checks
 /// the route by reporting in over it. Leaving releases only that binding and request.
@@ -57,12 +58,77 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     private WifiP2pManager.Channel? _channel;
     private WifiCallback? _wifiNetwork;
 
+    /// <summary>The group this phone joined the Wi-Fi Direct way (null when it isn't in one as a client).</summary>
+    private string? _p2pJoined;
+    private long _p2pJoinedAt;
+    private P2pConnectionReceiver? _p2pReceiver;
+
     public AndroidDirectLink(Context context, Func<string> deviceName)
     {
         _context = context;
         _deviceName = deviceName;
         if (OperatingSystem.IsAndroidVersionAtLeast(29) && context.PackageManager?.HasSystemFeature(PackageManager.FeatureWifiDirect) == true)
             _manager = (WifiP2pManager?)context.GetSystemService(Context.WifiP2pService);
+        WatchDefaultNetwork();
+    }
+
+    /// <summary>
+    /// For the log: which network the phone uses for everything else, and whether it has internet. Shows when Android
+    /// moves off a network (e.g. to one with internet) around a dropped direct link.
+    /// </summary>
+    private void WatchDefaultNetwork()
+    {
+        try
+        {
+            if (_context.GetSystemService(Context.ConnectivityService) is ConnectivityManager connectivity)
+                connectivity.RegisterDefaultNetworkCallback(new DefaultNetworkLogger());
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Network: can't watch the default network: {ex.Message}");
+        }
+    }
+
+    private sealed class DefaultNetworkLogger : ConnectivityManager.NetworkCallback
+    {
+        private string? _last;
+
+        public override void OnCapabilitiesChanged(Android.Net.Network network, NetworkCapabilities capabilities)
+        {
+            var transport = capabilities.HasTransport(TransportType.Wifi) ? "Wi-Fi" : capabilities.HasTransport(TransportType.Cellular) ? "mobile data"
+                : capabilities.HasTransport(TransportType.Ethernet) ? "Ethernet" : "other";
+            var state = $"{transport} ({(capabilities.HasCapability(NetCapability.Internet) ? "internet" : "no internet")}, " +
+                        $"{(capabilities.HasCapability(NetCapability.Validated) ? "validated" : "not validated")})";
+            if (state == _last) return; // signal changes come often; only what matters
+            _last = state;
+            Log.Info($"Network: the phone's default network is {state}");
+        }
+
+        public override void OnLost(Android.Net.Network network)
+        {
+            _last = null;
+            Log.Info("Network: the phone's default network went away");
+        }
+    }
+
+    /// <summary>For the log: how the joined network's link is doing (band, speed, signal), every 30 s while on it.</summary>
+    private async Task WatchLinkAsync(WifiCallback callback, ConnectivityManager connectivity)
+    {
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(31) && _context.GetSystemService(Context.WifiService) is WifiManager wifi)
+                Log.Info($"Wi-Fi: this phone {(wifi.IsStaConcurrencyForLocalOnlyConnectionsSupported ? "can" : "can't")} stay on its own Wi-Fi beside a network joined for one app");
+            while (ReferenceEquals(Volatile.Read(ref _wifiNetwork), callback) && callback.Network is { } network)
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(29) && connectivity.GetNetworkCapabilities(network)?.TransportInfo is WifiInfo info)
+                    Log.Info($"Wi-Fi: on {callback.Ssid}: {info.Frequency} MHz, {info.LinkSpeed} Mbps, {info.Rssi} dBm");
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Wi-Fi: link details unavailable: {ex.Message}");
+        }
     }
 
     public DirectRoles Roles => _manager != null ? DirectRoles.Host | DirectRoles.Join : DirectRoles.None;
@@ -145,7 +211,12 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
         // A start only created a group (a computer's network this phone was on before it is someone else's); a join
         // left everything else first, so both the network it joined and any group are its own.
-        if (joined) ReleaseWifiNetwork();
+        if (joined)
+        {
+            ReleaseWifiNetwork();
+            LeaveP2pQuietly();
+        }
+
         await RemoveGroupIfOpenAsync().ConfigureAwait(false);
     }
 
@@ -159,6 +230,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
                 && !string.IsNullOrEmpty(existing.NetworkName) && !string.IsNullOrEmpty(existing.Passphrase))
                 return new DirectNetwork(existing.NetworkName, existing.Passphrase);
 
+            LeaveP2pQuietly(); // one adapter: hosting ends a join
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             var network = preferred ?? DirectNetwork.Create(_deviceName());
             var config = new WifiP2pConfig.Builder()
@@ -177,7 +249,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
                     if (await GroupInfoAsync(channel).ConfigureAwait(false) is { IsGroupOwner: true } group)
                     {
                         OwnedByRunningAttempt();
-                        Log.Info($"Wi-Fi Direct: hosting {group.NetworkName}");
+                        Log.Info($"Wi-Fi Direct: hosting {group.NetworkName}{(OperatingSystem.IsAndroidVersionAtLeast(29) ? $" on {group.Frequency} MHz" : "")}");
                         return new DirectNetwork(group.NetworkName ?? network.Ssid, group.Passphrase ?? network.Passphrase);
                     }
 
@@ -223,11 +295,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
             if (_wifiNetwork is { Network: not null, Host: { } joinedHost } wifi && wifi.Ssid == network.Ssid) return joinedHost;
 
+            LeaveP2pQuietly();
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             ReleaseWifiNetwork();
-            // A computer's network (Windows) is joined as ordinary Wi-Fi straight away: joining it the Wi-Fi Direct way
-            // fails on many phones and only costs time. So does a network where that already failed once.
-            if (!network.HostIsComputer && !_joinAsWifi.Contains(network.Ssid))
+            // The Wi-Fi Direct way first, also for a computer's network: the phone keeps its normal Wi-Fi beside it, so
+            // Android doesn't drop the direct network for one with internet. Where that failed once (some phones and
+            // drivers can't), straight to ordinary Wi-Fi.
+            if (!_joinAsWifi.Contains(network.Ssid))
             {
                 if (await TryJoinAsP2pAsync(channel, network, cancellationToken).ConfigureAwait(false) is { } owner) return owner;
                 _joinAsWifi.Add(network.Ssid);
@@ -257,7 +331,10 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
                 if (await ConnectionInfoAsync(channel).ConfigureAwait(false) is { GroupFormed: true, IsGroupOwner: false, GroupOwnerAddress: { } owner })
                 {
                     OwnedByRunningAttempt();
-                    Log.Info($"Wi-Fi Direct: joined {network.Ssid}, host at {owner.HostAddress}");
+                    var frequency = OperatingSystem.IsAndroidVersionAtLeast(29) && await GroupInfoAsync(channel).ConfigureAwait(false) is { } joinedGroup
+                        ? $", {joinedGroup.Frequency} MHz" : "";
+                    Log.Info($"Wi-Fi Direct: joined {network.Ssid}, host at {owner.HostAddress}{frequency} (this phone stays on its own Wi-Fi too)");
+                    OnJoinedOverP2p(network.Ssid);
                     return IPAddress.Parse(owner.HostAddress!);
                 }
 
@@ -341,6 +418,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     public void Stop()
     {
         var op = Interlocked.Increment(ref _ops);
+        LeaveP2pQuietly(); // leaving on purpose: not a lost link
         ReleaseWifiNetwork(); // at once: Beam's connections mustn't stay bound to a network being left
         if (_manager == null || _channel == null) return;
         // The group is removed after any start or join still running (never alongside it), unless a newer start came first.
@@ -434,6 +512,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         var host = HostAddress(connectivity.GetLinkProperties(joined));
         callback.Host = host;
         Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host?.ToString() ?? "unknown"}");
+        _ = WatchLinkAsync(callback, connectivity);
         JoinedChanged?.Invoke();
         return host;
     }
@@ -465,7 +544,66 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     public event Action? Lost;
 
     /// <summary>Beam is on a computer's network right now (joined and bound to it).</summary>
-    public bool IsJoined => Volatile.Read(ref _wifiNetwork) is { Network: not null };
+    public bool IsJoined => Volatile.Read(ref _wifiNetwork) is { Network: not null } || Volatile.Read(ref _p2pJoined) != null;
+
+    /// <summary>Joined a group the Wi-Fi Direct way: watch for it going away (the host stopped it, or it went out of range).</summary>
+    private void OnJoinedOverP2p(string ssid)
+    {
+        Volatile.Write(ref _p2pJoinedAt, System.Environment.TickCount64);
+        Volatile.Write(ref _p2pJoined, ssid);
+        if (_p2pReceiver == null)
+        {
+            _p2pReceiver = new P2pConnectionReceiver(OnP2pConnectionChanged);
+            var filter = new IntentFilter(WifiP2pManager.WifiP2pConnectionChangedAction);
+            if (OperatingSystem.IsAndroidVersionAtLeast(33)) _context.RegisterReceiver(_p2pReceiver, filter, ReceiverFlags.NotExported);
+            else _context.RegisterReceiver(_p2pReceiver, filter);
+        }
+
+        JoinedChanged?.Invoke();
+    }
+
+    /// <summary>This phone leaves the group itself (stopping, or joining another): not reported as lost.</summary>
+    private void LeaveP2pQuietly()
+    {
+        if (Interlocked.Exchange(ref _p2pJoined, null) is { } ssid)
+        {
+            Log.Info($"Wi-Fi Direct: leaving {ssid}");
+            JoinedChanged?.Invoke();
+        }
+    }
+
+    private void OnP2pConnectionChanged(Intent intent)
+    {
+#pragma warning disable CA1422 // the typed GetParcelableExtra needs Android 13
+        var info = intent.GetParcelableExtra(WifiP2pManager.ExtraWifiP2pInfo) as WifiP2pInfo;
+#pragma warning restore CA1422
+        if (info is { GroupFormed: true }) return;
+        if (Interlocked.Exchange(ref _p2pJoined, null) is not { } ssid) return;
+        var seconds = (System.Environment.TickCount64 - Volatile.Read(ref _p2pJoinedAt)) / 1000.0;
+        Log.Warn($"Wi-Fi Direct: lost {ssid} ({seconds:0.0} s after joining; Wi-Fi {(IsWifiEnabled is { } on ? on ? "on" : "off" : "?")})");
+        JoinedChanged?.Invoke();
+        Lost?.Invoke();
+    }
+
+    private sealed class P2pConnectionReceiver : BroadcastReceiver
+    {
+        private readonly Action<Intent> _changed;
+
+        public P2pConnectionReceiver(Action<Intent> changed) => _changed = changed;
+
+        public override void OnReceive(Context? context, Intent? intent)
+        {
+            if (intent == null) return;
+            try
+            {
+                _changed(intent);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Wi-Fi Direct: reading a connection change failed: {ex.Message}");
+            }
+        }
+    }
 
     /// <summary>Joined or left a computer's network.</summary>
     public event Action? JoinedChanged;

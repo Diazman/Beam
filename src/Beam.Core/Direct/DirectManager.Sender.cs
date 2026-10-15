@@ -128,9 +128,15 @@ public sealed partial class DirectManager
         /// <summary>Bytes transferred when the link was last verified (progress since then resets the reconnect budget).</summary>
         public long BytesAtVerify { get; set; }
 
+        /// <summary>When the link was last verified (for its speed in the log).</summary>
+        public long VerifiedAt { get; set; }
+
         public int ReconnectsWithoutProgress { get; set; }
 
         public int Reconnects { get; set; }
+
+        /// <summary>The key the receiver gave on the last verified session, to set the link up again without its user (<see cref="ReconnectProof"/>).</summary>
+        public string? ReconnectKey { get; set; }
     }
 
     private sealed class Outgoing
@@ -273,7 +279,7 @@ public sealed partial class DirectManager
             }
 
             if (session.State is DirectSessionState.Verified or DirectSessionState.Transferring or DirectSessionState.Interrupted
-                && await StillVerifiedAsync(session, token).ConfigureAwait(false))
+                && await StillVerifiedAsync(send, session, token).ConfigureAwait(false))
                 return;
 
             await RecoverAsync(send, session, token).ConfigureAwait(false);
@@ -304,7 +310,10 @@ public sealed partial class DirectManager
 
         send.ReconnectsWithoutProgress++;
         send.Reconnects++;
-        Log.Info($"Direct: {lost}: link lost after {bytes} bytes; setting it up again (reconnect {send.Reconnects}, " +
+        var seconds = send.VerifiedAt == 0 ? 0 : (Environment.TickCount64 - send.VerifiedAt) / 1000.0;
+        var moved = Math.Max(0, bytes - send.BytesAtVerify);
+        Log.Info($"Direct: {lost}: link lost after {bytes} bytes ({moved / 1e6:0.0} MB over this link in {seconds:0} s, " +
+                 $"{(seconds > 0 ? moved / 1e6 / seconds : 0):0.00} MB/s); setting it up again (reconnect {send.Reconnects}, " +
                  $"{send.ReconnectsWithoutProgress} of {MaxReconnects} without progress)");
         await EndOutgoingAsync(lost, notify: true).ConfigureAwait(false);
         var deadline = Environment.TickCount64 + (long)RecoveryWindow.TotalMilliseconds;
@@ -359,7 +368,7 @@ public sealed partial class DirectManager
 
             // 1. Who is it, and does it accept? (Nothing is started before it says yes.)
             Log.Info($"Direct: {session}: negotiating (roles {DirectRolesText.Format(current.DirectRoles)}; addresses {string.Join(", ", current.Endpoints)})");
-            outgoing.Control = await OpenControlAsync(session, current, limit.Token).ConfigureAwait(false);
+            outgoing.Control = await OpenControlAsync(session, current, send.ReconnectKey, limit.Token).ConfigureAwait(false);
             session.Channel = outgoing.Control.Channel;
             session.PeerFingerprint = outgoing.Control.PeerFingerprint;
 
@@ -370,7 +379,7 @@ public sealed partial class DirectManager
             // 3. Its details, for this receiver only, over the authenticated control channel.
             Move(session, DirectSessionState.OfferingCredentials);
             Log.Info($"Direct: {session}: offering {network.Ssid} over {session.Channel}");
-            await outgoing.Control.OfferAsync(new DirectRequestMessage
+            var offer = new DirectRequestMessage
             {
                 Action = DirectActions.Offer,
                 SessionId = session.Id,
@@ -384,7 +393,9 @@ public sealed partial class DirectManager
                 TtlSeconds = (int)OfferLifetime.TotalSeconds,
                 HostIsComputer = _selfIsComputer,
                 Port = _transfers.Port,
-            }, () => session.TryMove(DirectSessionState.Joining), limit.Token).ConfigureAwait(false);
+            };
+            if (send.ReconnectKey is { } offerKey) offer.Proof = ReconnectProof.ForOffer(offerKey, offer);
+            await outgoing.Control.OfferAsync(offer, () => session.TryMove(DirectSessionState.Joining), limit.Token).ConfigureAwait(false);
             session.TryMove(DirectSessionState.Joining);
 
             // 4. The receiver reports in over the direct network itself (not just "joined" on the control channel).
@@ -401,9 +412,10 @@ public sealed partial class DirectManager
 
             // 5. Both ends of the route, the session and the receiver's certificate, before any file data.
             Move(session, DirectSessionState.Verifying);
-            await VerifyAsync(session, reported, limit.Token).ConfigureAwait(false);
+            send.ReconnectKey = await VerifyAsync(session, reported, limit.Token).ConfigureAwait(false);
             if (!session.MarkVerified(reported)) throw new OperationCanceledException(limit.Token);
             send.BytesAtVerify = send.Transfer?.GetSnapshot().TransferredBytes ?? 0;
+            send.VerifiedAt = Environment.TickCount64;
             Log.Info($"Direct: {session}: verified at {reported} (channel {session.Channel}, reconnect {session.Reconnects}, " +
                      $"{send.BytesAtVerify} bytes already sent)");
         }
@@ -441,7 +453,7 @@ public sealed partial class DirectManager
     /// The control channel for setting up: Beam's authenticated connection on the shared network when the receiver
     /// answers there, else Bluetooth. Either way the receiver is asked (propose) before anything starts.
     /// </summary>
-    private async Task<IDirectControl> OpenControlAsync(DirectSession session, DeviceInfo peer, CancellationToken token)
+    private async Task<IDirectControl> OpenControlAsync(DirectSession session, DeviceInfo peer, string? reconnectKey, CancellationToken token)
     {
         var propose = new DirectRequestMessage
         {
@@ -452,6 +464,7 @@ public sealed partial class DirectManager
             SenderName = _settings.Current.DeviceName,
             SenderFingerprint = _transfers.Identity.Fingerprint,
         };
+        if (reconnectKey != null) propose.Proof = ReconnectProof.ForPropose(reconnectKey, propose);
         var expected = ExpectedFingerprint(peer);
         var lan = peer.Endpoints.Where(e => !_transfers.IsDirectAddress(e.Address)).ToList();
         if (lan.Count > 0)
@@ -691,7 +704,8 @@ public sealed partial class DirectManager
     /// Over the direct network: a TLS connection to the endpoint the receiver reported from, checked against its
     /// certificate, leaving from this device's own address there, and answered for this session and nonce.
     /// </summary>
-    private async Task VerifyAsync(DirectSession session, IPEndPoint endpoint, CancellationToken token)
+    /// <returns>The receiver's reconnect key, if it gave one (older versions don't).</returns>
+    private async Task<string?> VerifyAsync(DirectSession session, IPEndPoint endpoint, CancellationToken token)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(VerifyTimeout);
@@ -700,6 +714,7 @@ public sealed partial class DirectManager
             var (reply, _) = await ExchangeOnDirectAsync(session, endpoint,
                 new DirectRequestMessage { Action = DirectActions.Verify, SessionId = session.Id, Nonce = session.Nonce }, limit.Token).ConfigureAwait(false);
             if (!reply.Ok) throw new DirectLinkException(reply.Message ?? L.T("{0} couldn't confirm the direct connection.", session.PeerName));
+            return ReconnectProof.IsKey(reply.ReconnectKey) ? reply.ReconnectKey : null;
         }
         catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.IdentityMismatch)
         {
@@ -728,7 +743,7 @@ public sealed partial class DirectManager
     }
 
     /// <summary>After a dropped connection: whether the receiver still confirms the session on the direct network.</summary>
-    private async Task<bool> StillVerifiedAsync(DirectSession session, CancellationToken token)
+    private async Task<bool> StillVerifiedAsync(DirectSend send, DirectSession session, CancellationToken token)
     {
         if (session.VerifiedEndpoint is not { } endpoint) return false;
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -737,6 +752,7 @@ public sealed partial class DirectManager
         {
             var (reply, _) = await ExchangeOnDirectAsync(session, endpoint,
                 new DirectRequestMessage { Action = DirectActions.Verify, SessionId = session.Id, Nonce = session.Nonce }, limit.Token).ConfigureAwait(false);
+            if (reply.Ok && ReconnectProof.IsKey(reply.ReconnectKey)) send.ReconnectKey = reply.ReconnectKey; // each verify gives a new one
             return reply.Ok;
         }
         catch (Exception ex) when (!token.IsCancellationRequested)

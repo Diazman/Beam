@@ -535,5 +535,6 @@
   "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "Doğrudan göndermek için bu cihazda Wi-Fi'nin açık olması gerekir. Bir ağa bağlı olması gerekmez.",
   "Turn on Wi-Fi, then press Send again.": "Wi-Fi'yi açın, ardından tekrar Gönder'e basın.",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu cihazda Wi-Fi kapalı. Açın, ardından Tekrar dene'ye basın.",
-  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} cihazında Wi-Fi kapalı. Orada açın, ardından Tekrar dene'ye basın."
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} cihazında Wi-Fi kapalı. Orada açın, ardından Tekrar dene'ye basın.",
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} doğrudan bağlantıyı zamanında kabul etmedi. {0} sorduğunda Kabul et'e dokunun, ardından tekrar deneyin."
 }

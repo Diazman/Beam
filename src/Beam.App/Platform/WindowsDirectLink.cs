@@ -275,10 +275,33 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             _network = network;
             OwnedByRunningAttempt();
             Log.Info($"Wi-Fi Direct network {network.Ssid} started");
+            _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => LogWirelessAdapters(), TaskScheduler.Default);
             return network;
         }
     }
 #endif
+
+    /// <summary>
+    /// For the log: this PC's Wi-Fi adapters and their link speeds. A PC that stays on its own Wi-Fi while hosting shares
+    /// one radio between both networks; on different channels that costs speed.
+    /// </summary>
+    private static void LogWirelessAdapters()
+    {
+        try
+        {
+            foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211) continue;
+                var addresses = string.Join(", ", nic.GetIPProperties().UnicastAddresses
+                    .Where(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).Select(a => a.Address));
+                Log.Info($"Wi-Fi adapter: {nic.Description} ({nic.OperationalStatus}, {nic.Speed / 1_000_000} Mbps, {addresses})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Wi-Fi adapters unavailable: {ex.Message}");
+        }
+    }
 
     /// <summary>Joins a sender's direct network (a PC's or a phone's) with this PC's Wi-Fi (the PC leaves its current Wi-Fi meanwhile).</summary>
     public Task<IPAddress?> JoinAsync(DirectNetwork network, CancellationToken cancellationToken)

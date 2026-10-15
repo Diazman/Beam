@@ -623,5 +623,6 @@
   "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "Для прямой отправки на этом устройстве должен быть включён Wi-Fi. Подключаться к какой-либо сети не нужно.",
   "Turn on Wi-Fi, then press Send again.": "Включите Wi-Fi и снова нажмите «Отправить».",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "На этом устройстве выключен Wi-Fi. Включите его и нажмите «Повторить».",
-  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "На {0} выключен Wi-Fi. Включите его там и нажмите «Повторить»."
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "На {0} выключен Wi-Fi. Включите его там и нажмите «Повторить».",
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} не принял прямое подключение вовремя. Когда {0} спросит, нажмите «Принять» и попробуйте снова."
 }

@@ -29,7 +29,16 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
 
     private const string PlaceholderPrefix = "bt-";
     private const int MaxHandshakes = 8;
-    private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(60);
+    /// <summary>How long connecting and the handshake may take, together.</summary>
+    internal TimeSpan HandshakeTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// How long the sender waits for the answer to a proposal. An unpaired sender (and every sender over Bluetooth) is
+    /// accepted only once the receiver's user taps Accept, which may take up to the receiver's own limit
+    /// (<see cref="DirectManager.DirectApprovalTimeout"/>); this waits a little longer, so the answer (yes, or "didn't
+    /// accept") arrives instead of a timeout of our own that blames Bluetooth.
+    /// </summary>
+    internal TimeSpan ProposalWait { get; set; } = DirectManager.DirectApprovalTimeout + TimeSpan.FromSeconds(15);
     private static readonly TimeSpan HostTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SightingLifetime = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
@@ -587,11 +596,23 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     async Task<IDirectControl> IBluetoothDirectControl.OpenAsync(DeviceInfo peer, string? expectedFingerprint, DirectRequestMessage propose,
         CancellationToken cancellationToken)
     {
-        async Task<IDirectControl> ProposeAsync(INearbyConnection connection, NearbyHandshake.Sender sender, PairingCode code, CancellationToken token)
+        async Task<IDirectControl> ProposeAsync(INearbyConnection connection, NearbyHandshake.Sender sender, PairingCode code, CancellationToken _)
         {
             if (code.DeviceId != peer.Id) throw new DirectLinkException(L.T("This isn't the {0} you connected to before. Beam didn't connect, to keep your files safe.", peer.Name));
-            await connection.WriteAsync(Sealed(sender, propose), token).ConfigureAwait(false);
-            await ReadUntilDoneAsync(connection, sender, peer.Name, NearbyHandshake.Status.Accepted, token).ConfigureAwait(false);
+            // Its own time limit, not the handshake's: the receiver may be asking its user.
+            using var answer = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            answer.CancelAfter(ProposalWait);
+            try
+            {
+                await connection.WriteAsync(Sealed(sender, propose), answer.Token).ConfigureAwait(false);
+                await ReadUntilDoneAsync(connection, sender, peer.Name, NearbyHandshake.Status.Accepted, answer.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (answer.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                Log.Info($"Nearby: {peer.Name} didn't answer the proposal within {ProposalWait.TotalSeconds:0} s (its user didn't decide)");
+                throw new DirectLinkException(L.T("{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.", peer.Name));
+            }
+
             return new BluetoothControl(connection, sender, code.Fingerprint, peer.Name);
         }
 
@@ -645,6 +666,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         Port = message.Port,
         Stage = message.Stage,
         Message = message.Message is { Length: > 80 } text ? text[..80] : message.Message,
+        Proof = message.Proof,
     };
 
     /// <summary>

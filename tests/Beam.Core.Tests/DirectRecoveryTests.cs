@@ -3,6 +3,7 @@ using Beam.Core;
 using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.Nearby;
+using Beam.Core.Protocol;
 using Beam.Core.Settings;
 using Beam.Core.Transfer;
 
@@ -165,13 +166,54 @@ public class DirectRecoveryTests
         Assert.Equal(1, air.Joined);
     }
 
+    [Fact]
+    public async Task TryAgainAfterADirectFailureKeepsTheNewSessionAndFinishesOnIt()
+    {
+        // From a real log: after "Try again" the transfer still read "failed" until data flowed, so the moment it
+        // reconnected the sender ended the brand-new session and turned its network off again.
+        var air = new FakeDirectAir();
+        var slow = new SlowFiles();
+        var pcLink = Fake(air.Link(Pc));
+        await using var pc = new TestNode("Laptop", externalFiles: slow, directLink: pcLink, kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Redmi", directLink: air.Link(Phone), kind: DeviceKinds.Phone);
+        air.Connect(pc.Node, () => pc.AsDevice(), phone.Node, () => phone.AsDevice());
+        phone.Trust(pc);
+        const long size = 30L * 1024 * 1024;
+        var file = pc.CreateFile("video.mp4", size, 7);
+        var session = pc.Node.Send(phone.AsDevice(), new[] { slow.Add(file) }, ConnectionMethod.Direct);
+        await Wait.UntilAsync(() => session.Path == TransferPath.Direct && session.GetSnapshot().TransferredBytes > 4_000_000, because: "sending directly");
+
+        air.FailJoins = true; // gone for now
+        air.LoseLink();
+        session.InterruptConnection(switchingPath: false);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.True(session.CanResume);
+        // As in the log: the last connection had died on its own (not dropped by Beam), which leaves no path behind.
+        session.SetPath(TransferPath.Unknown);
+        await Wait.UntilAsync(() => pcLink.Hosting == null, because: "the failed session let the network go");
+        var joined = air.Joined;
+        var hosted = pcLink.HostCalls;
+
+        air.FailJoins = false;
+        session.Resume();
+        Assert.False(session.IsFinished); // running again, not "failed" until data flows
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(90));
+        Assert.Equal(TransferState.Completed, session.State);
+        await Wait.UntilAsync(() => session.DirectSession!.IsFinished, because: "the session followed the transfer");
+        Assert.Equal(DirectSessionState.Completed, session.DirectSession!.State); // not ended as "failed" when it connected
+        Assert.Equal(joined + 1, air.Joined); // one new session, kept until the end
+        Assert.Equal(hosted + 1, pcLink.HostCalls); // started once, not turned off and started again in between
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
+    }
+
     // ---- Bluetooth as the control channel ----
 
     private static async Task<(TestNode Pc, TestNode Phone, FakeNearbyAir Bluetooth, DeviceInfo Resolved)> OverBluetoothAsync(
-        FakeDirectAir air, string pcName = "Laptop", string phoneName = "Redmi")
+        FakeDirectAir air, string pcName = "Laptop", string phoneName = "Redmi", SlowFiles? files = null)
     {
         var bluetooth = new FakeNearbyAir();
-        var pc = new TestNode(pcName, directLink: air.Link(Pc), kind: DeviceKinds.Laptop, nearbyRadio: bluetooth.Radio());
+        var pc = new TestNode(pcName, externalFiles: files, directLink: air.Link(Pc), kind: DeviceKinds.Laptop, nearbyRadio: bluetooth.Radio());
         var phone = new TestNode(phoneName, directLink: air.Link(Phone), kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
         air.ConnectDirectOnly(pc.Node, phone.Node); // no shared network: Bluetooth only
         phone.Node.Nearby.SetReceiving(true);
@@ -221,6 +263,40 @@ public class DirectRecoveryTests
         Assert.True(bluetooth.ScanStarts > starts, "scanned for the receiver");
     }
 
+    [Fact]
+    public async Task AReceiverWhoseUserTakesAWhileToAcceptIsWaitedFor()
+    {
+        // From a real log: the sender gave up ("didn't answer over Bluetooth. Move closer") at the same moment the
+        // phone was still showing its Accept prompt.
+        var air = new FakeDirectAir();
+        var (pc, phone, _, device) = await OverBluetoothAsync(air);
+        await using var _p = pc;
+        await using var _q = phone;
+        pc.Node.Nearby.HandshakeTimeout = TimeSpan.FromSeconds(1.5); // shorter than the user takes
+        phone.Handler.ApproveDirectAfter = TimeSpan.FromSeconds(3);
+
+        var session = pc.Node.Send(device, new[] { pc.CreateFile("a.jpg", 100_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+    }
+
+    [Fact]
+    public async Task WhenNobodyAcceptsOnTheReceiverTheSenderSaysSoInsteadOfBlamingBluetooth()
+    {
+        var air = new FakeDirectAir();
+        var (pc, phone, _, device) = await OverBluetoothAsync(air);
+        await using var _p = pc;
+        await using var _q = phone;
+        pc.Node.Nearby.ProposalWait = TimeSpan.FromSeconds(2);
+        phone.Handler.ApproveDirectAfter = TimeSpan.FromSeconds(20); // nobody taps
+
+        var session = pc.Node.Send(device, new[] { pc.CreateFile("a.jpg", 100_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.Contains("didn't accept the direct connection in time", session.Error!.Message);
+        Assert.DoesNotContain("Bluetooth", session.Error.Message);
+    }
+
     [Theory]
     [InlineData("Ж")] // 2 bytes in UTF-8, 6 as a JSON escape
     [InlineData("電")] // 3 bytes
@@ -239,6 +315,123 @@ public class DirectRecoveryTests
         await Wait.ForFinishAsync(session);
         Assert.True(session.State == TransferState.Completed, session.Error?.Message);
         Assert.InRange(bluetooth.Longest, 1, NearbyHandshake.MaxValueLength);
+    }
+
+    // ---- Setting a link up again over Bluetooth without asking again ----
+
+    [Fact]
+    public async Task OverBluetoothALostLinkIsSetUpAgainWithoutTheReceiversUserAcceptingAgain()
+    {
+        // From a real log: every reconnect over Bluetooth showed the phone's Accept prompt again; nobody tapped it within
+        // a minute (the phone was lying there), so the transfer failed.
+        var air = new FakeDirectAir();
+        var slow = new SlowFiles();
+        var (pc, phone, _, device) = await OverBluetoothAsync(air, files: slow);
+        await using var _p = pc;
+        await using var _q = phone;
+        var asks = 0;
+        phone.Handler.ApproveDirect = _ => Interlocked.Increment(ref asks) == 1; // yes the first time only
+        const long size = 30L * 1024 * 1024;
+        var file = pc.CreateFile("video.mp4", size, 9);
+
+        var session = pc.Node.Send(device, new[] { slow.Add(file) }, ConnectionMethod.Direct);
+        for (var drop = 1; drop <= 2; drop++)
+        {
+            var at = session.GetSnapshot().TransferredBytes;
+            await Wait.UntilAsync(() => session.Path == TransferPath.Direct && session.State == TransferState.Transferring
+                                        && session.GetSnapshot().TransferredBytes > at + 3_000_000 && air.LinkUp,
+                because: $"sending directly before drop {drop}", timeout: TimeSpan.FromSeconds(60));
+            air.LoseLink();
+            session.InterruptConnection(switchingPath: false);
+        }
+
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(120));
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.Equal(DirectControlChannel.Bluetooth, session.DirectSession!.Channel);
+        Assert.Equal(1, Volatile.Read(ref asks)); // asked once, for the first session only
+        Assert.Equal(3, air.Joined);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
+    }
+
+    [Fact]
+    public async Task OnlyAValidFreshReconnectProofSkipsTheQuestionAndTheOfferMustBeProvenToo()
+    {
+        var air = new FakeDirectAir();
+        await using var pc = new TestNode("Laptop", directLink: air.Link(Pc), kind: DeviceKinds.Laptop);
+        await using var phone = new TestNode("Redmi", directLink: air.Link(Phone), kind: DeviceKinds.Phone);
+        air.Wire(pc.Node, phone.Node);
+        var direct = phone.Node.Direct;
+        var fingerprint = pc.Node.Identity.Fingerprint;
+        direct.SetReceiving(true);
+        phone.Handler.ApproveDirect = _ => false; // whenever it asks, the answer is no
+
+        DirectRequestMessage Propose(string? proofKey, string? sessionId = null)
+        {
+            var m = new DirectRequestMessage
+            {
+                Action = DirectActions.Propose, SessionId = sessionId ?? DirectSession.NewToken(), ReceiverId = phone.Node.Identity.DeviceId,
+                SenderId = pc.Node.Identity.DeviceId, SenderName = "Laptop", SenderFingerprint = fingerprint,
+            };
+            if (proofKey != null) m.Proof = ReconnectProof.ForPropose(proofKey, m);
+            return m;
+        }
+
+        Task<DirectResponseMessage> Ask(DirectRequestMessage m) => direct.ProposeIncomingAsync(m, m.SenderId!, m.SenderName!, m.SenderFingerprint!,
+            claimedOnly: true, DirectControlChannel.Bluetooth, Array.Empty<IPEndPoint>(), CancellationToken.None);
+
+        static async Task<bool> Accepted(Task<DirectResponseMessage> answer)
+        {
+            try
+            {
+                return (await answer).Ok;
+            }
+            catch (DirectLinkException)
+            {
+                return false;
+            }
+        }
+
+        var key = direct.IssueReconnectKeyForTests(fingerprint);
+        // A proof made with another key, or one taken from another session: asked (and refused).
+        Assert.False(await Accepted(Ask(Propose(ReconnectProof.NewKey()))));
+        var replayed = Propose(key);
+        replayed.SessionId = DirectSession.NewToken(); // the proof was for another session id
+        Assert.False(await Accepted(Ask(replayed)));
+        // For another sender's certificate: asked.
+        var other = Propose(key);
+        other.SenderFingerprint = new string('c', 64);
+        other.Proof = ReconnectProof.ForPropose(key, other);
+        direct.IssueReconnectKeyForTests(new string('d', 64));
+        Assert.False(await Accepted(Ask(other)));
+        Assert.Equal(3, phone.Handler.DirectRequests.Count);
+
+        // An expired key: asked.
+        direct.ReconnectKeyLifetime = TimeSpan.Zero;
+        var expired = direct.IssueReconnectKeyForTests(fingerprint);
+        Assert.False(await Accepted(Ask(Propose(expired))));
+        Assert.Equal(4, phone.Handler.DirectRequests.Count);
+
+        // The right, fresh key: accepted without asking, even with Receive closed.
+        direct.ReconnectKeyLifetime = TimeSpan.FromMinutes(30);
+        key = direct.IssueReconnectKeyForTests(fingerprint);
+        direct.SetReceiving(false);
+        var good = Propose(key);
+        Assert.True(await Accepted(Ask(good)));
+        Assert.Equal(4, phone.Handler.DirectRequests.Count);
+
+        // Its offer must be proven with the same key, over exactly these network details.
+        var offer = new DirectRequestMessage
+        {
+            Action = DirectActions.Offer, SessionId = good.SessionId, Nonce = DirectSession.NewToken(), Ssid = "DIRECT-EL-Beam-Laptop",
+            Passphrase = "abcdefgh12345678", TtlSeconds = 120, HostIsComputer = true, Port = 47821,
+        };
+        Assert.False(direct.OfferIncoming(offer, fingerprint, out _).Ok); // no proof
+        offer.Proof = ReconnectProof.ForOffer(key, offer);
+        offer.Passphrase = "someone-elses-pass"; // changed on the way
+        Assert.False(direct.OfferIncoming(offer, fingerprint, out _).Ok);
+        offer.Passphrase = "abcdefgh12345678";
+        Assert.True(direct.OfferIncoming(offer, fingerprint, out var join).Ok);
+        Assert.NotNull(join);
     }
 
     // ---- Wi-Fi off ----

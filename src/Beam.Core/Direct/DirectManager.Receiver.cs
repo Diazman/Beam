@@ -23,6 +23,29 @@ public sealed partial class DirectManager
 
     private readonly ConcurrentDictionary<string, Incoming> _incoming = new(); // by session id
     private readonly ConcurrentDictionary<string, long> _endedSessions = new(); // session ids that may not come back (replays)
+
+    /// <summary>
+    /// Per sender certificate: the key it was given on its last verified session, to set a lost link up again without
+    /// asking the user (<see cref="ReconnectProof"/>), and until when it counts.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, (string Key, long Until)> _reconnectKeys = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How long a reconnect key counts after the session it was given on was verified.</summary>
+    internal TimeSpan ReconnectKeyLifetime { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>The sender's current reconnect key, if it hasn't expired.</summary>
+    private string? ReconnectKeyOf(string senderFingerprint) =>
+        _reconnectKeys.TryGetValue(senderFingerprint, out var entry) && Environment.TickCount64 < entry.Until ? entry.Key : null;
+
+    /// <summary>Tests: gives <paramref name="senderFingerprint"/> a reconnect key, as a verified session does.</summary>
+    internal string IssueReconnectKeyForTests(string senderFingerprint) => IssueReconnectKey(senderFingerprint);
+
+    private string IssueReconnectKey(string senderFingerprint)
+    {
+        var key = ReconnectProof.NewKey();
+        _reconnectKeys[senderFingerprint] = (key, Environment.TickCount64 + (long)ReconnectKeyLifetime.TotalMilliseconds);
+        return key;
+    }
     private readonly object _incomingGate = new();
 
     private enum IncomingStage
@@ -48,6 +71,11 @@ public sealed partial class DirectManager
 
         /// <summary>The sender's identity is only claimed (asked over Bluetooth); the direct network's TLS checks it.</summary>
         public bool ClaimedOnly { get; init; }
+
+        /// <summary>
+        /// Proposed with a valid reconnect proof: the key it was made with, which the offer must be proven with too.
+        /// </summary>
+        public string? ProofKey { get; set; }
 
         public DirectControlChannel Channel { get; init; }
 
@@ -175,7 +203,22 @@ public sealed partial class DirectManager
             // Paired only counts when the certificate proved it (not a claim made over Bluetooth); so does a sender whose
             // files this device's user accepted and that are still coming (moving them to a direct link).
             var trusted = !claimedOnly && (IsTrusted(senderId, senderFingerprint) || IsReceivingFrom(senderFingerprint));
-            if (!trusted)
+            // Setting a lost link up again: proven with the key this device gave that sender over TLS (not just claimed).
+            var proven = false;
+            if (!trusted && request.Proof != null)
+            {
+                if (ReconnectKeyOf(senderFingerprint) is { } key && ReconnectProof.Matches(ReconnectProof.ForPropose(key, request), request.Proof))
+                {
+                    proven = true;
+                    incoming.ProofKey = key;
+                }
+                else
+                {
+                    Log.Warn($"Direct: {incoming}: its reconnect proof didn't check out (expired, or not from that device); asking the user");
+                }
+            }
+
+            if (!trusted && !proven)
             {
                 if (!_receiving)
                 {
@@ -209,7 +252,7 @@ public sealed partial class DirectManager
                 incoming.Stage = IncomingStage.Accepted;
             }
 
-            Log.Info($"Direct: {incoming}: accepted ({(trusted ? "paired" : "this device's user agreed")}, over {channel})");
+            Log.Info($"Direct: {incoming}: accepted ({(trusted ? "paired" : proven ? "setting up again a link its user accepted (proven)" : "this device's user agreed")}, over {channel})");
             _ = WatchIncomingAsync(incoming);
             return new DirectResponseMessage { Ok = true };
         }
@@ -235,6 +278,9 @@ public sealed partial class DirectManager
         if (string.IsNullOrEmpty(request.Ssid) || request.Ssid.Length > 32 || request.Passphrase is not { Length: >= 8 and <= 63 }
             || request.TtlSeconds is <= 0 or > 900 || request.Port is <= 0 or > 65535 || !IsToken(request.Nonce))
             return Refuse($"{incoming}: malformed offer", "Missing network details.");
+        // Accepted without asking because of a reconnect proof: the network details must come from the same key holder.
+        if (incoming.ProofKey is { } proofKey && !ReconnectProof.Matches(ReconnectProof.ForOffer(proofKey, request), request.Proof))
+            return Refuse($"{incoming}: offer without a valid reconnect proof", "Not the device this session is with.");
 
         lock (_incomingGate)
         {
@@ -400,7 +446,8 @@ public sealed partial class DirectManager
             incoming.Stage = IncomingStage.Verified;
         }
 
-        return new DirectResponseMessage { Ok = true };
+        // Proven by its certificate over TLS just now: a key to set this link up again over Bluetooth without asking.
+        return new DirectResponseMessage { Ok = true, ReconnectKey = IssueReconnectKey(incoming.SenderFingerprint) };
     }
 
     private DirectResponseMessage EndFromSender(DirectRequestMessage request, string fingerprint)

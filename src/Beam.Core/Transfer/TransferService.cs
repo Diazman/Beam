@@ -79,6 +79,12 @@ public sealed class TransferService : IAsyncDisposable
     /// <summary>Files handed over as streams (Android content:// URIs); null on desktop.</summary>
     public IExternalFiles? ExternalFiles { get; init; }
 
+    /// <summary>
+    /// How long a running transfer keeps trying to reconnect, without any data getting through, before it fails (it
+    /// can still be resumed later).
+    /// </summary>
+    internal TimeSpan ReconnectPatience { get; set; } = TimeSpan.FromMinutes(3);
+
     /// <summary>Runs before each connection attempt to a device (sets up a direct link when that's the chosen method).</summary>
     public Func<DeviceInfo, CancellationToken, Task>? BeforeConnect { get; set; }
 

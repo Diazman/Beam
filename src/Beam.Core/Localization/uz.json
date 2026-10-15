@@ -535,5 +535,6 @@
   "Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network.": "To'g'ridan-to'g'ri yuborish uchun bu qurilmada Wi-Fi yoqilgan bo'lishi kerak. Biror tarmoqqa ulanish shart emas.",
   "Turn on Wi-Fi, then press Send again.": "Wi-Fi'ni yoqing, so'ng yana Yuborish tugmasini bosing.",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu qurilmada Wi-Fi o'chiq. Uni yoqing, so'ng Qayta urinish tugmasini bosing.",
-  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} da Wi-Fi o'chiq. Uni u yerda yoqing, so'ng Qayta urinish tugmasini bosing."
+  "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} da Wi-Fi o'chiq. Uni u yerda yoqing, so'ng Qayta urinish tugmasini bosing.",
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} toʻgʻridan-toʻgʻri ulanishni oʻz vaqtida qabul qilmadi. {0} soʻraganda «Qabul qilish»ni bosing, soʻng qayta urinib koʻring."
 }

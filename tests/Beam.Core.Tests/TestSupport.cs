@@ -79,10 +79,14 @@ public sealed class TestHandler : IIncomingTransferHandler
 
     public List<IncomingDirectRequest> DirectRequests { get; } = new();
 
-    public Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken)
+    /// <summary>How long the "user" takes to answer.</summary>
+    public TimeSpan ApproveDirectAfter { get; set; }
+
+    public async Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken)
     {
         lock (DirectRequests) DirectRequests.Add(request);
-        return Task.FromResult(ApproveDirect(request));
+        if (ApproveDirectAfter > TimeSpan.Zero) await Task.Delay(ApproveDirectAfter, cancellationToken);
+        return ApproveDirect(request);
     }
 
     public Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken)

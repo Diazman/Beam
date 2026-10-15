@@ -143,6 +143,16 @@ announcements nor beacons ever carry network details.
 
 After a verified link is lost, the sender sets up a new session (new id and nonce, the receiver authenticated again)
 on the network it keeps hosting, retrying for up to 2 minutes while the receiver can't be reached; the transfer then
-resumes from the offsets the receiver's `OfferResponse` plan confirms. A transfer gives up after two set-ups in a row
+resumes from the offsets the receiver's `OfferResponse` plan confirms.
+
+**Reconnect proof.** Answering a `verify` (over the direct network's TLS connection, with the sender's certificate),
+the receiver adds `reconnectKey`: 32 random bytes (base64), replacing any earlier key for that certificate and valid for
+30 minutes. A later `propose` from that sender may carry `proof` = the first 16 bytes (base64) of
+HMAC-SHA256(key, length-prefixed fields: `beam-reconnect-propose-1`, `sessionId`, `receiverId`, `senderId`,
+`senderFingerprint`); its `offer` then must carry `proof` over `beam-reconnect-offer-1`, `sessionId`, `nonce`, `ssid`,
+`passphrase`, `port`, `ttlSeconds`, `hostIsComputer`. A valid propose proof counts like a paired sender (no question
+to the user, also with Receive closed); a wrong or expired one is ignored (the user is asked), and an offer without a
+valid proof after a proven propose is refused. Session ids are single-use and the TLS check on the direct network
+still follows, so a proof can't be replayed or bent towards another network. A transfer gives up after two set-ups in a row
 that moved no data (30 in all). It never continues over the shared network by itself. Older versions' receiver-hosted requests (`host`, `join`,
 `prefer`, `stop`) are still answered for compatibility; this version never sends them.
