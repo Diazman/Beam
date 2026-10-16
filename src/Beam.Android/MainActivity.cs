@@ -22,8 +22,22 @@ public class MainActivity : AvaloniaMainActivity<App>
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
 
+    private static int _crashLogging;
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // A crash leaves its reason in Beam's log (before, the app just closed with nothing written).
+        if (Interlocked.Exchange(ref _crashLogging, 1) == 0)
+        {
+            global::Android.Runtime.AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Beam.Core.Diagnostics.Log.Error("Unhandled exception", e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (_, e) => Beam.Core.Diagnostics.Log.Error("Unhandled exception", e.ExceptionObject as Exception);
+            TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                Beam.Core.Diagnostics.Log.Warn("Unobserved task exception", e.Exception);
+                e.SetObserved();
+            };
+        }
+
         base.OnCreate(savedInstanceState);
         AndroidHost.RequestPermissions(this);
         if (savedInstanceState == null)
