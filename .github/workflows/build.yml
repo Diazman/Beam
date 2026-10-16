@@ -108,7 +108,7 @@ jobs:
         run: dotnet workload install ios
       - name: Build the app (not signed)
         run: |
-          dotnet publish src/Beam.iOS -c Release -f net10.0-ios -r ios-arm64 \
+          dotnet publish src/Beam.iOS -c Release -f net10.0-ios26.0 -r ios-arm64 \
             -p:EnableCodeSigning=false -p:ValidateXcodeVersion=false
           app=$(find src/Beam.iOS/bin -name "*.app" -type d -path "*ios-arm64*" | head -1)
           echo "App bundle: $app"

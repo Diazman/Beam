@@ -95,7 +95,7 @@ internal sealed class IosPlatformServices : IPlatformServices
             var share = new UIActivityViewController(new NSObject[] { NSUrl.FromFilename(newest.FullName) }, null);
             if (share.PopoverPresentationController is { } popover)
             {
-                popover.SourceView = controller.View;
+                popover.SourceView = controller.View!;
                 popover.SourceRect = controller.View!.Bounds;
             }
 
