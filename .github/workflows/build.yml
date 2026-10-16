@@ -100,8 +100,11 @@ jobs:
           dotnet-version: 10.0.x
       - name: Use the newest complete Xcode
         run: |
-          # Some Xcode folders on the runner are incomplete (no SDKs): take the newest one that has both SDKs.
+          # Take the newest real Xcode folder that has both SDKs. Some names are symlinks to another Xcode
+          # (Xcode_26.6.0.app -> Xcode_26.6.app): xcodebuild can't find its SDKs through such a path.
           for xcode in $(ls -d /Applications/Xcode_*.app | sort -rV); do
+            [ -L "$xcode" ] && continue
+            xcode=$(cd "$xcode" && pwd -P)
             if [ -d "$xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" ] \
                && [ -d "$xcode/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk" ]; then
               sudo xcode-select -s "$xcode"
