@@ -98,12 +98,20 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Use the newest Xcode
+      - name: Use the newest complete Xcode
         run: |
-          ls -d /Applications/Xcode*.app
-          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
-          sudo xcode-select -s "$newest"
+          # Some Xcode folders on the runner are incomplete (no SDKs): take the newest one that has both SDKs.
+          for xcode in $(ls -d /Applications/Xcode_*.app | sort -rV); do
+            if [ -d "$xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" ] \
+               && [ -d "$xcode/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk" ]; then
+              sudo xcode-select -s "$xcode"
+              break
+            fi
+          done
+          xcode-select -p
           xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun -f clang
       - name: Install the .NET iOS workload
         run: dotnet workload install ios
       - name: Build the app (not signed)
