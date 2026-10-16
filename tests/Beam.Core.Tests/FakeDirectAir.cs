@@ -136,6 +136,9 @@ public sealed class FakeDirectAir
 
         public bool PreferInternetSharing { get; set; }
 
+        /// <summary>Its hotspot doesn't start: the network it starts doesn't share its internet (Windows' Wi-Fi Direct instead).</summary>
+        public bool WontShare { get; set; }
+
         /// <summary>This phone's join requests to an internet-sharing network (Windows' hotspot) go unanswered.</summary>
         public bool CantJoinSharedNetworks { get; set; }
 
@@ -191,7 +194,7 @@ public sealed class FakeDirectAir
                 if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
                 LeaveLocked(); // one adapter: hosting ends a join
                 var reported = (preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]))
-                    with { SharesInternet = PreferInternetSharing && CanShareInternet };
+                    with { SharesInternet = PreferInternetSharing && CanShareInternet && !WontShare };
                 Hosting = StartsWithOtherPassphrase ? reported with { Passphrase = "not-" + reported.Passphrase } : reported;
                 HostedNetworks.Add(reported);
                 Interlocked.Increment(ref _air._hosted);

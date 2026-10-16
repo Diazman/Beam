@@ -536,5 +536,10 @@
   "Turn on Wi-Fi, then press Send again.": "Wi-Fi'yi açın, ardından tekrar Gönder'e basın.",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu cihazda Wi-Fi kapalı. Açın, ardından Tekrar dene'ye basın.",
   "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} cihazında Wi-Fi kapalı. Orada açın, ardından Tekrar dene'ye basın.",
-  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} doğrudan bağlantıyı zamanında kabul etmedi. {0} sorduğunda Kabul et'e dokunun, ardından tekrar deneyin."
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} doğrudan bağlantıyı zamanında kabul etmedi. {0} sorduğunda Kabul et'e dokunun, ardından tekrar deneyin.",
+  "{0} can't start a network that shares its internet right now.": "{0} şu anda internetini paylaşan bir ağ başlatamıyor.",
+  "{0} couldn't start its Mobile hotspot.": "{0} mobil etkin noktasını açamadı.",
+  "{0} didn't start its network.": "{0} kendi ağını başlatmadı.",
+  "This device didn't manage to join {0}'s network in time.": "Bu cihaz {0} ağına zamanında katılamadı.",
+  "This device joined {0}'s network but couldn't find it there.": "Bu cihaz {0} ağına katıldı ama {0} orada bulunamadı."
 }

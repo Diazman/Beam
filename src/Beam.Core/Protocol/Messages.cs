@@ -76,6 +76,14 @@ public static class DirectActions
 
     /// <summary>Receiver → sender (control channel): joining failed at <see cref="DirectRequestMessage.Stage"/>.</summary>
     public const string Failed = "failed";
+
+    /// <summary>
+    /// Sender (a phone) → receiver (a computer announcing <see cref="Direct.DirectRoles.HostsForSenders"/>), over Beam's
+    /// TLS connection after it accepted the proposal: "start your network that shares your internet for this session
+    /// and tell me how to join it". Answered with its name, passphrase and Beam port; the sender joins it and verifies
+    /// the receiver there as usual (<see cref="Verify"/>).
+    /// </summary>
+    public const string HostForSender = "hostforsender";
 }
 
 public sealed class DirectRequestMessage
@@ -146,6 +154,12 @@ public sealed class DirectResponseMessage
 
     /// <summary>Verify: the receiver's key for setting a lost link up again (<see cref="Direct.ReconnectProof"/>); only over TLS.</summary>
     public string? ReconnectKey { get; set; }
+
+    /// <summary>HostForSender: the receiver's Beam port on its network.</summary>
+    public int Port { get; set; }
+
+    /// <summary>HostForSender: the network shares the receiver's internet (a phone stays on it).</summary>
+    public bool SharesInternet { get; set; }
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>

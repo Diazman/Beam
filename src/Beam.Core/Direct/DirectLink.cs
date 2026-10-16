@@ -41,6 +41,13 @@ public enum DirectRoles
     /// Send is pressed and this device joins it. Devices without it only know the older receiver-hosted requests.
     /// </summary>
     SenderHosted = 64,
+
+    /// <summary>
+    /// A computer whose network would share its internet (Windows' Mobile hotspot) and that starts it for a phone that
+    /// sends to it (<see cref="Protocol.DirectActions.HostForSender"/>): the phone joins it and stays on it. Phones
+    /// that can be on one Wi-Fi network only keep one with internet; a PC on a phone's network can drop off it.
+    /// </summary>
+    HostsForSenders = 128,
 }
 
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
@@ -60,7 +67,7 @@ public static class DirectRolesText
 {
     public static string Format(DirectRoles roles)
     {
-        var parts = new List<string>(7);
+        var parts = new List<string>(8);
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
@@ -68,6 +75,7 @@ public static class DirectRolesText
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
         if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
         if (roles.HasFlag(DirectRoles.SenderHosted)) parts.Add("shost");
+        if (roles.HasFlag(DirectRoles.HostsForSenders)) parts.Add("rxhost");
         return string.Join(",", parts);
     }
 
@@ -83,6 +91,7 @@ public static class DirectRolesText
             else if (part == "share") roles |= DirectRoles.SharesInternet;
             else if (part == "rx") roles |= DirectRoles.Receiving;
             else if (part == "shost") roles |= DirectRoles.SenderHosted;
+            else if (part == "rxhost") roles |= DirectRoles.HostsForSenders;
         }
 
         return roles;
@@ -234,4 +243,10 @@ public sealed class DirectLinkException : Exception
     /// a dropped control channel.
     /// </summary>
     public bool JoinFailed { get; init; }
+
+    /// <summary>
+    /// The receiver couldn't start its network for this sender, or this device couldn't join it: the sender starts its
+    /// own network instead (as it would have without <see cref="DirectRoles.HostsForSenders"/>).
+    /// </summary>
+    public bool ReceiverHostFailed { get; init; }
 }
