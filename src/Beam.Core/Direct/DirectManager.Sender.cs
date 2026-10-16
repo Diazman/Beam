@@ -437,13 +437,15 @@ public sealed partial class DirectManager
             Log.Info($"Direct: {session}: verified at {reported} (channel {session.Channel}, reconnect {session.Reconnects}, " +
                      $"{send.BytesAtVerify} bytes already sent)");
         }
-        catch (Exception ex) when (ex is OperationCanceledException && (token.IsCancellationRequested || session.CancellationToken.IsCancellationRequested
-                                                                        || _stopping.IsCancellationRequested))
+        catch (Exception ex) when (token.IsCancellationRequested || session.CancellationToken.IsCancellationRequested || _stopping.IsCancellationRequested)
         {
-            Log.Info($"Direct: {session}: cancelled at {session.State}");
+            // Cancelled: whatever the call in progress threw (cancelling aborts its socket, which may show as a socket
+            // error rather than a cancellation), it ends as cancelled, not as a failure.
+            Log.Info($"Direct: {session}: cancelled at {session.State}{(ex is OperationCanceledException ? "" : $" ({ex.GetType().Name})")}");
             session.Cancel();
             await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
-            throw;
+            if (ex is OperationCanceledException) throw;
+            throw new OperationCanceledException(ex.Message, ex, token);
         }
         catch (Exception ex)
         {
