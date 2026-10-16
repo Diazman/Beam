@@ -21,12 +21,6 @@ namespace Beam.Core.Direct;
 /// files never go over the shared network unless the user chooses that.
 /// </para>
 /// <para>
-/// One exception to who hosts: a phone sending to a computer whose network would share its internet (Windows' Mobile
-/// hotspot, announced as <see cref="DirectRoles.HostsForSenders"/>) asks it to start that network and joins it
-/// (<see cref="DirectActions.HostForSender"/>, over Beam's TLS connection only); the phone then stays on a network with
-/// internet. Verification is the same. If that doesn't work out, the phone starts its own network as usual.
-/// </para>
-/// <para>
 /// Older Beam versions (1.5.3 and before) let the receiver host instead: their requests (<see cref="DirectActions.Host"/>,
 /// <see cref="DirectActions.Join"/>, <see cref="DirectActions.Prefer"/>, <see cref="DirectActions.Stop"/>) are still
 /// answered here, with the same checks as before; this version never sends them.
@@ -120,15 +114,8 @@ public sealed partial class DirectManager
         if (!_selfIsComputer) return traits;
         if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
         if (HostedNetwork?.SharesInternet == true) traits |= DirectRoles.SharesInternet;
-        if (CanHostForSenders) traits |= DirectRoles.HostsForSenders;
         return traits;
     }
-
-    /// <summary>
-    /// A computer that can start a network sharing its internet right now (Windows' Mobile hotspot): it starts it for a
-    /// phone that sends to it, rather than joining the phone's network (<see cref="DirectRoles.HostsForSenders"/>).
-    /// </summary>
-    private bool CanHostForSenders => _selfIsComputer && CanHost && _link is IInternetSharing { CanShareInternet: true };
 
     /// <summary>This device can join another device's network (phones any; computers as an ordinary Wi-Fi client).</summary>
     private bool CanJoinAny => (Roles & (DirectRoles.Join | DirectRoles.JoinComputers)) != 0;
@@ -427,7 +414,6 @@ public sealed partial class DirectManager
         Log.Warn("Direct: the direct network was lost");
         DirectAddresses.Invalidate();
         OnJoinedNetworkLost();
-        OnReceiversNetworkLost();
         _discovery.RescanNetworks();
         Changed?.Invoke();
     }

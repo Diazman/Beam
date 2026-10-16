@@ -624,10 +624,5 @@
   "Turn on Wi-Fi, then press Send again.": "Включите Wi-Fi и снова нажмите «Отправить».",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "На этом устройстве выключен Wi-Fi. Включите его и нажмите «Повторить».",
   "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "На {0} выключен Wi-Fi. Включите его там и нажмите «Повторить».",
-  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} не принял прямое подключение вовремя. Когда {0} спросит, нажмите «Принять» и попробуйте снова.",
-  "{0} can't start a network that shares its internet right now.": "{0} сейчас не может запустить сеть, которая раздаёт его интернет.",
-  "{0} couldn't start its Mobile hotspot.": "{0} не смог включить мобильную точку доступа.",
-  "{0} didn't start its network.": "{0} не запустил свою сеть.",
-  "This device didn't manage to join {0}'s network in time.": "Это устройство не успело подключиться к сети {0}.",
-  "This device joined {0}'s network but couldn't find it there.": "Это устройство подключилось к сети {0}, но не нашло там {0}."
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} не принял прямое подключение вовремя. Когда {0} спросит, нажмите «Принять» и попробуйте снова."
 }
