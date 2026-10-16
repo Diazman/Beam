@@ -21,6 +21,11 @@ namespace Beam.Core.Direct;
 /// files never go over the shared network unless the user chooses that.
 /// </para>
 /// <para>
+/// One exception to who hosts: a sender that can't start a network (an iPhone) sending to a computer that offers to
+/// host (<see cref="DirectRoles.HostsForSenders"/>) asks it to start its network and joins it
+/// (<see cref="DirectActions.HostForSender"/>, over Beam's TLS connection only). Verification is the same.
+/// </para>
+/// <para>
 /// Older Beam versions (1.5.3 and before) let the receiver host instead: their requests (<see cref="DirectActions.Host"/>,
 /// <see cref="DirectActions.Join"/>, <see cref="DirectActions.Prefer"/>, <see cref="DirectActions.Stop"/>) are still
 /// answered here, with the same checks as before; this version never sends them.
@@ -102,6 +107,9 @@ public sealed partial class DirectManager
     public DirectRoles AnnouncedRoles =>
         Roles == DirectRoles.None || !_settings.Current.AllowDirectSenders ? DirectRoles.None : Roles | DirectRoles.SenderHosted | Traits();
 
+    /// <summary>This device's address on the network it hosts (replaceable in tests).</summary>
+    internal Func<IPAddress?> OwnHostedAddress { get; set; } = DirectAddresses.OwnHostedAddress;
+
     /// <summary>This device's address on the network of <c>host</c> (replaceable in tests).</summary>
     internal Func<IPAddress, IPAddress?> OwnAddressNear { get; set; } = DirectAddresses.OwnAddressNear;
 
@@ -114,8 +122,15 @@ public sealed partial class DirectManager
         if (!_selfIsComputer) return traits;
         if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
         if (HostedNetwork?.SharesInternet == true) traits |= DirectRoles.SharesInternet;
+        if (CanHostForSenders) traits |= DirectRoles.HostsForSenders;
         return traits;
     }
+
+    /// <summary>
+    /// A computer that can start its network for a sender that can't start one (an iPhone) and joins it instead
+    /// (<see cref="DirectRoles.HostsForSenders"/>).
+    /// </summary>
+    private bool CanHostForSenders => _selfIsComputer && CanHost;
 
     /// <summary>This device can join another device's network (phones any; computers as an ordinary Wi-Fi client).</summary>
     private bool CanJoinAny => (Roles & (DirectRoles.Join | DirectRoles.JoinComputers)) != 0;
@@ -415,6 +430,7 @@ public sealed partial class DirectManager
         DirectAddresses.ForgetDirectNetworks(hosted: false);
         DirectAddresses.Invalidate();
         OnJoinedNetworkLost();
+        OnReceiversNetworkLost();
         _discovery.RescanNetworks();
         Changed?.Invoke();
     }

@@ -112,6 +112,12 @@ public sealed class DirectSession
     /// <summary>It failed only because the receiver couldn't be reached just then (a recovering transfer tries again).</summary>
     internal bool FailedTransiently { get; set; }
 
+    /// <summary>It failed because the receiver's own network didn't work out for it (the sender then starts its own).</summary>
+    internal bool ReceiverHostFailed { get; set; }
+
+    /// <summary>Set up on the receiver's network (it hosts, this device joined it), rather than on this device's.</summary>
+    public bool OnReceiversNetwork { get; internal set; }
+
     public DirectSessionState State
     {
         get

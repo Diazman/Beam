@@ -247,6 +247,13 @@ public sealed class DiscoveryService : IDisposable
         SendTo(CreatePacket(DiscoveryPacket.TypeQuery), endpoint);
     }
 
+    /// <summary>
+    /// Asks one address to announce itself, once (no lasting target). Devices that can't use broadcast or multicast
+    /// (iOS without Apple's multicast permission) find others this way.
+    /// </summary>
+    public void Query(IPAddress address, int port = 0) =>
+        SendTo(CreatePacket(DiscoveryPacket.TypeQuery), new IPEndPoint(address, port == 0 ? _options.Port : port));
+
     public void RemoveUnicastTarget(IPAddress address)
     {
         foreach (var key in _unicastTargets.Keys.Where(k => k.Address.Equals(address)).ToList())

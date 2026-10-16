@@ -41,6 +41,12 @@ public enum DirectRoles
     /// Send is pressed and this device joins it. Devices without it only know the older receiver-hosted requests.
     /// </summary>
     SenderHosted = 64,
+
+    /// <summary>
+    /// A computer that starts its network for a sender that can't start one itself (an iPhone: iOS doesn't let apps
+    /// host a Wi-Fi network), which joins it (<see cref="Protocol.DirectActions.HostForSender"/>).
+    /// </summary>
+    HostsForSenders = 128,
 }
 
 /// <summary>
@@ -74,7 +80,7 @@ public static class DirectRolesText
 {
     public static string Format(DirectRoles roles)
     {
-        var parts = new List<string>(7);
+        var parts = new List<string>(8);
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
@@ -82,6 +88,7 @@ public static class DirectRolesText
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
         if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
         if (roles.HasFlag(DirectRoles.SenderHosted)) parts.Add("shost");
+        if (roles.HasFlag(DirectRoles.HostsForSenders)) parts.Add("rxhost");
         return string.Join(",", parts);
     }
 
@@ -97,6 +104,7 @@ public static class DirectRolesText
             else if (part == "share") roles |= DirectRoles.SharesInternet;
             else if (part == "rx") roles |= DirectRoles.Receiving;
             else if (part == "shost") roles |= DirectRoles.SenderHosted;
+            else if (part == "rxhost") roles |= DirectRoles.HostsForSenders;
         }
 
         return roles;
@@ -123,6 +131,9 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
     /// Wi-Fi. Not part of the network's identity.
     /// </summary>
     public bool IsAccessPoint { get; init; }
+
+    /// <summary>The host's address on the network, when known beforehand (offered by the sender). Not part of the identity.</summary>
+    public IPAddress? HostAddress { get; init; }
 
     public bool Equals(DirectNetwork? other) => other is not null && Ssid == other.Ssid && Passphrase == other.Passphrase;
 
@@ -254,4 +265,7 @@ public sealed class DirectLinkException : Exception
     /// a dropped control channel.
     /// </summary>
     public bool JoinFailed { get; init; }
+
+    /// <summary>The receiver couldn't start its network for this sender, or this device couldn't join or reach it.</summary>
+    public bool ReceiverHostFailed { get; init; }
 }

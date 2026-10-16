@@ -536,5 +536,11 @@
   "Turn on Wi-Fi, then press Send again.": "Wi-Fi'ni yoqing, so'ng yana Yuborish tugmasini bosing.",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "Bu qurilmada Wi-Fi o'chiq. Uni yoqing, so'ng Qayta urinish tugmasini bosing.",
   "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "{0} da Wi-Fi o'chiq. Uni u yerda yoqing, so'ng Qayta urinish tugmasini bosing.",
-  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} toʻgʻridan-toʻgʻri ulanishni oʻz vaqtida qabul qilmadi. {0} soʻraganda «Qabul qilish»ni bosing, soʻng qayta urinib koʻring."
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} toʻgʻridan-toʻgʻri ulanishni oʻz vaqtida qabul qilmadi. {0} soʻraganda «Qabul qilish»ni bosing, soʻng qayta urinib koʻring.",
+  "{0} didn't start its network.": "{0} oʻz tarmogʻini ishga tushirmadi.",
+  "This device didn't manage to join {0}'s network in time.": "Bu qurilma {0} tarmogʻiga oʻz vaqtida ulana olmadi.",
+  "This device joined {0}'s network but couldn't find it there.": "Bu qurilma {0} tarmogʻiga ulandi, lekin u yerda {0} topilmadi.",
+  "This device sends directly to one device at a time. Send to the others when this is done.": "Bu qurilma bir vaqtda faqat bitta qurilmaga toʻgʻridan-toʻgʻri yuboradi. Bu tugagach, qolganlariga yuboring.",
+  "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} bilan faqat Bluetooth orqali bogʻlanish mumkin, u orqali esa bu qurilma uchun uning tarmogʻini sozlab boʻlmaydi. Avval ikkalasini bitta Wi-Fi tarmogʻiga ulang.",
+  "The phone's user didn't allow joining the direct network.": "Telefon foydalanuvchisi toʻgʻridan-toʻgʻri tarmoqqa ulanishga ruxsat bermadi."
 }

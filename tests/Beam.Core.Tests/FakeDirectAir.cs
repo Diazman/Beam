@@ -37,9 +37,12 @@ public sealed class FakeDirectAir
 
     public int Stopped => Volatile.Read(ref _stopped);
 
-    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null, bool canRunHotspot = false)
+    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null, bool canRunHotspot = false, bool reportsNoHost = false)
     {
-        var link = new FakeLink(this, roles) { CanShareInternet = sharesInternet, JoinError = joinError, CanRunHotspot = canRunHotspot };
+        var link = new FakeLink(this, roles)
+        {
+            CanShareInternet = sharesInternet, JoinError = joinError, CanRunHotspot = canRunHotspot, ReportsNoHost = reportsNoHost,
+        };
         lock (_gate) _links.Add(link);
         return link;
     }
@@ -92,6 +95,7 @@ public sealed class FakeDirectAir
             node.Transfers.IsDirectAddress = a => a.Equals(DirectAddress) || a.Equals(JoinerAddress);
             node.Direct.OwnAddressNear = a => a.Equals(DirectAddress) ? JoinerAddress : a.Equals(JoinerAddress) ? DirectAddress : null;
             node.Direct.HostNetworkReady = () => HostUsable;
+            node.Direct.OwnHostedAddress = () => DirectAddress;
         }
     }
 
@@ -118,6 +122,9 @@ public sealed class FakeDirectAir
 
         public bool PreferAccessPoint { get; set; }
 
+        /// <summary>Joining can't tell the host's address (iOS doesn't show the network's gateway to apps).</summary>
+        public bool ReportsNoHost { get; init; }
+
         /// <summary>This PC's join requests to a phone's hotspot fail.</summary>
         public bool CantJoinAccessPoints { get; set; }
 
@@ -143,6 +150,9 @@ public sealed class FakeDirectAir
         public bool CanShareInternet { get; init; }
 
         public bool PreferInternetSharing { get; set; }
+
+        /// <summary>Its hotspot doesn't start: the network it starts doesn't share its internet (Windows' Wi-Fi Direct instead).</summary>
+        public bool WontShare { get; set; }
 
         /// <summary>This phone's join requests to an internet-sharing network (Windows' hotspot) go unanswered.</summary>
         public bool CantJoinSharedNetworks { get; set; }
@@ -199,7 +209,7 @@ public sealed class FakeDirectAir
                 if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
                 LeaveLocked(); // one adapter: hosting ends a join
                 var reported = (preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]))
-                    with { SharesInternet = PreferInternetSharing && CanShareInternet, IsAccessPoint = PreferAccessPoint && CanRunHotspot };
+                    with { SharesInternet = PreferInternetSharing && CanShareInternet && !WontShare, IsAccessPoint = PreferAccessPoint && CanRunHotspot };
                 Hosting = StartsWithOtherPassphrase ? reported with { Passphrase = "not-" + reported.Passphrase } : reported;
                 HostedNetworks.Add(reported);
                 Interlocked.Increment(ref _air._hosted);
@@ -240,7 +250,7 @@ public sealed class FakeDirectAir
                 _air.LastJoinLink = this;
             }
 
-            return DirectAddress;
+            return ReportsNoHost ? null : DirectAddress;
         }
 
         public event Action? Lost;

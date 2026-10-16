@@ -93,13 +93,16 @@ public sealed partial class DirectManager
         /// <summary>This session's join put this device on the sender's network (only then does ending it leave).</summary>
         public bool OwnsJoin { get; set; }
 
+        /// <summary>This device started its own network for this session and the sender joins it (<see cref="DirectActions.HostForSender"/>).</summary>
+        public bool HostsHere { get; set; }
+
         public string Key => "rx:" + SessionId;
 
         public override string ToString() => $"incoming direct session {SessionId[..Math.Min(8, SessionId.Length)]} from {SenderName} ({Stage})";
     }
 
     private static bool IsSessionAction(string action) => action is DirectActions.Propose or DirectActions.Offer or DirectActions.Ready
-        or DirectActions.Verify or DirectActions.End or DirectActions.Failed;
+        or DirectActions.Verify or DirectActions.End or DirectActions.Failed or DirectActions.HostForSender;
 
     /// <summary>Session messages that came over Beam's TLS connection (shared network or direct network).</summary>
     private async Task<DirectResponseMessage> HandleSessionRequestAsync(DirectRequestMessage request, PeerConnection connection, CancellationToken token)
@@ -124,6 +127,9 @@ public sealed partial class DirectManager
 
             case DirectActions.Offer:
                 return OfferIncoming(request, fingerprint, out _);
+
+            case DirectActions.HostForSender:
+                return await HostForSenderAsync(request, fingerprint, token).ConfigureAwait(false);
 
             case DirectActions.Ready:
                 return HandleReady(request, connection);
@@ -167,6 +173,12 @@ public sealed partial class DirectManager
         if (_link == null || !CanJoinAny) throw new DirectLinkException(L.T("This device can't connect directly."));
         if (!_settings.Current.AllowDirectSenders) throw NotAllowed();
 
+        // The same sender setting a lost link up again on this device's network: its old session there gives way (it
+        // may not have heard that the link dropped). Only for a certificate proven over TLS, not one claimed over Bluetooth.
+        foreach (var stale in _incoming.Values.Where(i => !claimedOnly && i.HostsHere && i.SessionId != sessionId && i.Stage != IncomingStage.Ended
+                                                          && string.Equals(i.SenderFingerprint, senderFingerprint, StringComparison.OrdinalIgnoreCase)).ToList())
+            EndIncoming(stale, "the sender set up a new session");
+
         Incoming incoming;
         lock (_incomingGate)
         {
@@ -181,7 +193,11 @@ public sealed partial class DirectManager
 
             if (_incoming.Values.Any(i => i.Stage != IncomingStage.Ended))
                 throw new DirectLinkException(L.T("{0} is receiving over another direct connection right now. Try again when it's done.", _settings.Current.DeviceName));
-            if (_hostLeases.Count > 0 || _linkedPeers.Keys.Any(k => !k.StartsWith("rx:", StringComparison.Ordinal)) || !_joinedReceivers.IsEmpty)
+            // This device's network kept on for a moment for this same sender (its link just dropped) doesn't count.
+            var ownLease = ReceiverHostOwner(senderFingerprint);
+            bool busy;
+            lock (_hostGate) busy = _hostLeases.Any(o => o != ownLease);
+            if (busy || _linkedPeers.Keys.Any(k => !k.StartsWith("rx:", StringComparison.Ordinal) && k != LeaseKey(ownLease)) || !_joinedReceivers.IsEmpty)
                 throw new DirectLinkException(L.T("This device's direct connection is in use right now. Try again when it's done."));
             incoming = new Incoming
             {
@@ -291,7 +307,11 @@ public sealed partial class DirectManager
             incoming.Deadline = Environment.TickCount64 + request.TtlSeconds * 1000L;
         }
 
-        var network = new DirectNetwork(request.Ssid, request.Passphrase) { HostIsComputer = request.HostIsComputer };
+        var network = new DirectNetwork(request.Ssid, request.Passphrase)
+        {
+            HostIsComputer = request.HostIsComputer,
+            HostAddress = IPAddress.TryParse(request.HostAddress, out var offeredHost) ? offeredHost : null,
+        };
         join = Task.Run(() => JoinForSessionAsync(incoming, network, request.Port));
         join.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         return new DirectResponseMessage { Ok = true };
@@ -347,6 +367,7 @@ public sealed partial class DirectManager
 
             HostedNetwork = null; // joining stopped this device's own network, if it was on
             DirectAddresses.Invalidate();
+            host ??= network.HostAddress; // iOS can't read the gateway: the address the sender gave
             if (host == null) throw new DirectLinkException(L.T("{0} joined the direct network but couldn't find the sender on it.", _settings.Current.DeviceName));
             // A phone's hotspot has a subnet of its own choosing: it is the direct network all the same.
             if (!_transfers.IsDirectAddress(host) && OwnAddressNear(host) is { } ownThere) DirectAddresses.MarkDirectNetwork(ownThere, host);
@@ -470,11 +491,13 @@ public sealed partial class DirectManager
     /// Ends an incoming session once: what it joined is left (only if this session joined it, and only when nobody
     /// else uses the link), and its id can't be used again.
     /// </summary>
-    private void EndIncoming(Incoming incoming, string why)
+    private void EndIncoming(Incoming incoming, string why, bool releaseNow = false)
     {
+        IncomingStage wasStage;
         lock (_incomingGate)
         {
             if (incoming.Stage == IncomingStage.Ended) return;
+            wasStage = incoming.Stage;
             incoming.Stage = IncomingStage.Ended;
             _endedSessions[incoming.SessionId] = Environment.TickCount64;
             _incoming.TryRemove(new KeyValuePair<string, Incoming>(incoming.SessionId, incoming));
@@ -484,8 +507,111 @@ public sealed partial class DirectManager
             if (Environment.TickCount64 - at > TimeSpan.FromHours(1).TotalMilliseconds) _endedSessions.TryRemove(id, out _);
         incoming.Cts.Cancel();
         Log.Info($"Direct: {incoming}: ended ({why})");
+        // This device's network for this sender (this session's, or kept on for it after its last one).
+        if (incoming.HostsHere || HoldsHost(ReceiverHostOwner(incoming.SenderFingerprint)))
+            ReleaseReceiverHost(incoming, releaseNow || wasStage != IncomingStage.Verified);
         if (_linkedPeers.TryRemove(incoming.Key, out _)) StopLinkIfUnused();
         Changed?.Invoke();
+    }
+
+    // ---- This device's own network for a phone that sends to it ----
+
+    /// <summary>
+    /// After a session on this device's network ends, how long the network stays on for the same sender: a link that just
+    /// dropped is set up again on the same network (the phone may still be on it), without restarting it.
+    /// </summary>
+    internal TimeSpan ReceiverHostGrace { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>The share of this device's network that sessions from one sender hold (one per sender certificate).</summary>
+    private static string ReceiverHostOwner(string senderFingerprint) => "rxhost:" + senderFingerprint.ToLowerInvariant();
+
+    /// <summary>
+    /// A device that can't start a network of its own (an iPhone) sends to this computer: it asks it to start its
+    /// network for the accepted session (Windows' Mobile hotspot when it can share its internet, else its Wi-Fi Direct
+    /// network) and joins it. Only over Beam's TLS connection (the sender's certificate is proven).
+    /// </summary>
+    private async Task<DirectResponseMessage> HostForSenderAsync(DirectRequestMessage request, string senderFingerprint, CancellationToken token)
+    {
+        if (request.SessionId == null || !_incoming.TryGetValue(request.SessionId, out var incoming))
+            return Refuse($"a request for this device's network for unknown session {Short(request.SessionId)}", L.T("This direct session has already ended."));
+        if (!string.Equals(incoming.SenderFingerprint, senderFingerprint, StringComparison.OrdinalIgnoreCase))
+            return Refuse($"{incoming}: request for this device's network from another certificate", "Not the device this session is with.");
+        if (incoming.ClaimedOnly || incoming.Channel != DirectControlChannel.Lan)
+            return Refuse($"{incoming}: request for this device's network outside Beam's network connection", "Not over Beam's network connection.");
+        if (!IsToken(request.Nonce) || request.TtlSeconds is <= 0 or > 900)
+            return Refuse($"{incoming}: malformed request for this device's network", "Not a valid session.");
+        if (!CanHostForSenders) throw new DirectLinkException(L.T("This device can't connect directly."));
+
+        lock (_incomingGate)
+        {
+            if (incoming.Stage != IncomingStage.Accepted || Environment.TickCount64 > incoming.Deadline)
+                return Refuse($"{incoming}: request for this device's network while {incoming.Stage}", L.T("This direct session has already ended."));
+            incoming.Stage = IncomingStage.Joining; // from here: waiting for the sender to join and verify
+            incoming.Nonce = request.Nonce;
+            incoming.Deadline = Environment.TickCount64 + request.TtlSeconds * 1000L;
+            incoming.HostsHere = true;
+        }
+
+        DirectNetwork network;
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(token, incoming.Cts.Token, _stopping.Token);
+            limit.CancelAfter(HostStartTimeout + HostReadyTimeout + TimeSpan.FromSeconds(5));
+            Log.Info($"Direct: {incoming}: {incoming.SenderName} can't start a network; it asks this device to start one and joins it");
+            network = await AcquireHostAsync(ReceiverHostOwner(incoming.SenderFingerprint), incoming.ToString(), forPhone: true, forComputer: false, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            var cancelled = incoming.Stage == IncomingStage.Ended || _stopping.IsCancellationRequested;
+            Log.Warn($"Direct: {incoming}: {(cancelled ? "ended while starting this device's network" : $"couldn't start this device's network: {ex.GetType().Name}: {ex.Message}")}");
+            EndIncoming(incoming, "this device's network didn't start", releaseNow: true);
+            throw new DirectLinkException(ex is DirectLinkException && !cancelled ? ex.Message : L.T("{0} didn't start its network.", _settings.Current.DeviceName), ex);
+        }
+
+        if (incoming.Stage != IncomingStage.Joining)
+            return Refuse($"{incoming}: ended while starting this device's network", L.T("This direct session has already ended."));
+        Log.Info($"Direct: {incoming}: {network.Ssid} is on{(network.SharesInternet ? ", sharing this device's internet" : "")}; waiting for {incoming.SenderName} to join it");
+        return new DirectResponseMessage
+        {
+            Ok = true,
+            Ssid = network.Ssid,
+            Passphrase = network.Passphrase,
+            Port = _transfers.Port,
+            SharesInternet = network.SharesInternet,
+            Address = OwnHostedAddress()?.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// A session on this device's network ended: the network goes off (unless someone else uses it), at once when it never
+    /// carried the session (it failed or was replaced before), else after <see cref="ReceiverHostGrace"/> unless the same
+    /// sender's next session holds it by then.
+    /// </summary>
+    private void ReleaseReceiverHost(Incoming incoming, bool now)
+    {
+        var owner = ReceiverHostOwner(incoming.SenderFingerprint);
+        bool StillWanted() => _incoming.Values.Any(i => i.Stage != IncomingStage.Ended
+                                                        && string.Equals(i.SenderFingerprint, incoming.SenderFingerprint, StringComparison.OrdinalIgnoreCase));
+        if (now || _stopping.IsCancellationRequested || ReceiverHostGrace <= TimeSpan.Zero)
+        {
+            if (!StillWanted()) ReleaseHost(owner);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(ReceiverHostGrace, _stopping.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // closing: let go now
+            }
+
+            if (StillWanted()) return; // the same sender's next session uses it now
+            ReleaseHost(owner);
+        });
     }
 
     /// <summary>Ends every incoming session (closing Beam, or "Let senders connect directly" turned off).</summary>

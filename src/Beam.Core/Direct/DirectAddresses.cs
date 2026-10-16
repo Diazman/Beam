@@ -103,6 +103,18 @@ public static class DirectAddresses
         return false;
     }
 
+    /// <summary>This device's address on the direct network it hosts (.1 on a Wi-Fi Direct subnet, or a marked one); null when none.</summary>
+    public static IPAddress? OwnHostedAddress()
+    {
+        foreach (var (address, _, direct) in LocalAdapters())
+        {
+            if (IsMarked(address, out var host) && host == null) return FromUInt(address);
+            if ((address & 0xFF) == 1 && KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network)) return FromUInt(address);
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// The host of the direct network <paramref name="own"/> is on (.1 of a Wi-Fi Direct subnet), when this device is a
     /// guest there; null otherwise (including when this device is the host).

@@ -624,5 +624,11 @@
   "Turn on Wi-Fi, then press Send again.": "Включите Wi-Fi и снова нажмите «Отправить».",
   "Wi-Fi is off on this device. Turn it on, then press Try again.": "На этом устройстве выключен Wi-Fi. Включите его и нажмите «Повторить».",
   "Wi-Fi is off on {0}. Turn it on there, then press Try again.": "На {0} выключен Wi-Fi. Включите его там и нажмите «Повторить».",
-  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} не принял прямое подключение вовремя. Когда {0} спросит, нажмите «Принять» и попробуйте снова."
+  "{0} didn't accept the direct connection in time. Tap Accept on {0} when it asks, then try again.": "{0} не принял прямое подключение вовремя. Когда {0} спросит, нажмите «Принять» и попробуйте снова.",
+  "{0} didn't start its network.": "{0} не запустил свою сеть.",
+  "This device didn't manage to join {0}'s network in time.": "Это устройство не успело подключиться к сети {0}.",
+  "This device joined {0}'s network but couldn't find it there.": "Это устройство подключилось к сети {0}, но не нашло там {0}.",
+  "This device sends directly to one device at a time. Send to the others when this is done.": "Это устройство отправляет напрямую только на одно устройство за раз. Отправьте остальным, когда закончится эта передача.",
+  "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} доступен только по Bluetooth, а через него нельзя настроить его сеть для этого устройства. Сначала подключите оба устройства к одной сети Wi-Fi.",
+  "The phone's user didn't allow joining the direct network.": "Пользователь телефона не разрешил подключиться к прямой сети."
 }
