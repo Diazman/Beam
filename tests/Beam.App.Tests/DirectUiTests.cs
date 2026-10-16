@@ -224,7 +224,9 @@ public class DirectUiTests
         var xml = Beam.App.Platform.WlanProfiles.ProfileXml("DIRECT-ab-Beam-Tom & Jerry's <PC>", "p<a>ss&\"word'");
         var doc = System.Xml.Linq.XDocument.Parse(xml);
         System.Xml.Linq.XNamespace ns = "http://www.microsoft.com/networking/WLAN/profile/v1";
-        Assert.Equal("DIRECT-ab-Beam-Tom & Jerry's <PC>", doc.Root!.Element(ns + "name")!.Value);
+        // Its own name (never one Windows saved for that network earlier), for the network's SSID.
+        Assert.Equal("Beam DIRECT-ab-Beam-Tom & Jerry's <PC>", doc.Root!.Element(ns + "name")!.Value);
+        Assert.Equal("DIRECT-ab-Beam-Tom & Jerry's <PC>", doc.Descendants(ns + "SSID").Single().Element(ns + "name")!.Value);
         Assert.Equal("p<a>ss&\"word'", doc.Descendants(ns + "keyMaterial").Single().Value);
     }
 

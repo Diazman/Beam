@@ -21,16 +21,25 @@ internal sealed class WlanTuning : IDisposable
 
     private WlanTuning(IntPtr handle) => _handle = handle;
 
-    /// <summary>Opens the Wi-Fi API and applies the settings to every Wi-Fi adapter; null when there's no Wi-Fi API.</summary>
-    public static WlanTuning? Begin(string why)
+    /// <summary>
+    /// Opens the Wi-Fi API: logs Windows' reason whenever a Wi-Fi connection ends, and (<paramref name="tune"/>) applies
+    /// the settings to every Wi-Fi adapter. Null when there's no Wi-Fi API.
+    /// </summary>
+    /// <remarks>
+    /// Tuning is for hosting only. On a network this PC joined, Windows dropped the connection every 166 s with
+    /// background scans off (probably the driver forgets an access point it no longer sees in scans).
+    /// </remarks>
+    public static WlanTuning? Begin(string why, bool tune)
     {
         try
         {
             if (WlanOpenHandle(2, IntPtr.Zero, out _, out var handle) != 0) return null;
             var tuning = new WlanTuning(handle);
+            tuning.WatchDisconnects(why);
             foreach (var (id, name) in tuning.Interfaces())
             {
                 tuning.LogConnection(id, name);
+                if (!tune) continue;
                 var streaming = tuning.SetBool(id, Opcode.MediaStreamingMode, true);
                 var noScan = tuning.SetBool(id, Opcode.BackgroundScanEnabled, false);
                 Log.Info($"Wi-Fi: {name}: media streaming mode {(streaming == 0 ? "on" : $"not set ({streaming})")}, " +
@@ -68,6 +77,50 @@ internal sealed class WlanTuning : IDisposable
 
         return 0;
     }
+
+    private WlanNotificationCallback? _callback; // kept alive while registered
+
+    /// <summary>For the log: Windows' own reason when a Wi-Fi connection ends (or a connect attempt fails).</summary>
+    private void WatchDisconnects(string why)
+    {
+        _callback = (data, _) =>
+        {
+            try
+            {
+                var source = Marshal.ReadInt32(data, 0);
+                var code = Marshal.ReadInt32(data, 4);
+                var size = Marshal.ReadInt32(data, 24);
+                var payload = Marshal.ReadIntPtr(data, IntPtr.Size == 8 ? 32 : 28);
+                string? what = (source, code) switch
+                {
+                    (AcmSource, 11) => "connection attempt failed",
+                    (AcmSource, 21) => "disconnected",
+                    (MsmSource, 9) => "disassociating",
+                    (MsmSource, 10) => "link down",
+                    _ => null,
+                };
+                if (what == null || payload == IntPtr.Zero) return;
+                var reasonOffset = source == AcmSource ? 560 : 576;
+                if (size < reasonOffset + 4) return;
+                var ssidLength = Math.Clamp(Marshal.ReadInt32(payload, 516), 0, 32);
+                var ssid = new byte[ssidLength];
+                Marshal.Copy(payload + 520, ssid, 0, ssidLength);
+                var reason = Marshal.ReadInt32(payload, reasonOffset);
+                var text = new System.Text.StringBuilder(512);
+                WlanReasonCodeToString(reason, text.Capacity, text, IntPtr.Zero);
+                Log.Warn($"Wi-Fi: {System.Text.Encoding.UTF8.GetString(ssid)} {what} (Windows' reason {reason}: {text.ToString().Trim()}; while {why})");
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"Wi-Fi: reading a Wi-Fi notification failed: {ex.Message}");
+            }
+        };
+        var result = WlanRegisterNotification(_handle, AcmSource | MsmSource, true, _callback, IntPtr.Zero, IntPtr.Zero, out _);
+        if (result != 0) Log.Info($"Wi-Fi: can't watch Wi-Fi connections ({result})");
+    }
+
+    private const int AcmSource = 0x08;
+    private const int MsmSource = 0x10;
 
     private void LogConnection(Guid id, string name)
     {
@@ -157,8 +210,21 @@ internal sealed class WlanTuning : IDisposable
     public void Dispose()
     {
         var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-        if (handle != IntPtr.Zero) WlanCloseHandle(handle, IntPtr.Zero);
+        if (handle == IntPtr.Zero) return;
+        WlanRegisterNotification(handle, 0, true, null, IntPtr.Zero, IntPtr.Zero, out _);
+        WlanCloseHandle(handle, IntPtr.Zero);
+        _callback = null;
     }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate void WlanNotificationCallback(IntPtr data, IntPtr context);
+
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanRegisterNotification(IntPtr clientHandle, int notifSource, bool ignoreDuplicate, WlanNotificationCallback? callback,
+        IntPtr context, IntPtr reserved, out int prevNotifSource);
+
+    [DllImport("wlanapi.dll", CharSet = CharSet.Unicode)]
+    private static extern int WlanReasonCodeToString(int reasonCode, int bufferSize, System.Text.StringBuilder buffer, IntPtr reserved);
 
     private enum Opcode
     {

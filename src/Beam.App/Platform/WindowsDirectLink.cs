@@ -46,10 +46,10 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     /// <summary>Wi-Fi settings held while this PC hosts or is on another device's network (no background scans).</summary>
     private WlanTuning? _tuning;
 
-    private void StartTuning(string why)
+    private void StartTuning(string why, bool tune = true)
     {
         if (!OperatingSystem.IsWindows() || _tuning != null) return;
-        _tuning = WlanTuning.Begin(why);
+        _tuning = WlanTuning.Begin(why, tune);
     }
 
     private void StopTuning()
@@ -452,7 +452,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
         var host = await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
         Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host}");
-        StartTuning("on " + network.Ssid);
+        StartTuning("on " + network.Ssid, tune: false); // background scans stay on: without them Windows dropped the network
         return host;
     }
 
