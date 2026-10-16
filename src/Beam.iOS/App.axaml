@@ -1,0 +1,27 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.iOS.App"
+             Name="Beam"
+             RequestedThemeVariant="Default">
+  <Application.DataTemplates>
+    <views:ViewLocator />
+  </Application.DataTemplates>
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#FF2563EB" />
+        <ColorPaletteResources x:Key="Dark" Accent="#FF4C8DFF" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://Beam.UI/Styles/Controls.axaml" />
+  </Application.Styles>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Beam.UI/Styles/Colors.axaml" />
+        <ResourceInclude Source="avares://Beam.UI/Styles/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

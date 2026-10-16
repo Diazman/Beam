@@ -87,6 +87,41 @@ jobs:
           name: beam-msix-${{ github.sha }}
           path: artifacts/msix/*.msixbundle
 
+  ios:
+    name: iOS app (unsigned IPA)
+    needs: test
+    # macOS minutes count ten times: only when run by hand or on main.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Use the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+      - name: Install the .NET iOS workload
+        run: dotnet workload install ios
+      - name: Build the app (not signed)
+        run: |
+          dotnet publish src/Beam.iOS -c Release -f net10.0-ios -r ios-arm64 \
+            -p:EnableCodeSigning=false -p:ValidateXcodeVersion=false
+          app=$(find src/Beam.iOS/bin -name "*.app" -type d -path "*ios-arm64*" | head -1)
+          echo "App bundle: $app"
+          mkdir -p artifacts/ios/Payload
+          cp -R "$app" artifacts/ios/Payload/
+          (cd artifacts/ios && zip -qry Beam-ios-unsigned.ipa Payload)
+          ls -la artifacts/ios
+      - uses: actions/upload-artifact@v4
+        with:
+          # Unsigned: sign it while installing (e.g. Sideloadly with an Apple ID) or with a developer certificate.
+          name: beam-ios-unsigned-${{ github.sha }}
+          path: artifacts/ios/Beam-ios-unsigned.ipa
+
   android:
     name: Android app (APK)
     needs: test
