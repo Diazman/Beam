@@ -214,7 +214,8 @@ public class NearbyTests
         var bluetooth = new FakeNearbyAir();
         await using var pc = new TestNode("Laptop", directLink: new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
         await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
-        pc.Node.Nearby.ReceiveGrace = TimeSpan.FromMilliseconds(600);
+        // Long against the 300 ms below: a slow CI machine once took over 600 ms for that wait.
+        pc.Node.Nearby.ReceiveGrace = TimeSpan.FromSeconds(3);
         phone.Node.Nearby.SetLooking(true);
 
         pc.Node.Nearby.SetReceiving(true);
