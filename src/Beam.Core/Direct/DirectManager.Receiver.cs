@@ -348,6 +348,8 @@ public sealed partial class DirectManager
             HostedNetwork = null; // joining stopped this device's own network, if it was on
             DirectAddresses.Invalidate();
             if (host == null) throw new DirectLinkException(L.T("{0} joined the direct network but couldn't find the sender on it.", _settings.Current.DeviceName));
+            // A phone's hotspot has a subnet of its own choosing: it is the direct network all the same.
+            if (!_transfers.IsDirectAddress(host) && OwnAddressNear(host) is { } ownThere) DirectAddresses.MarkDirectNetwork(ownThere, host);
 
             // Report in over the direct network itself: the sender learns where this device is there, and that the route works.
             await ReportReadyAsync(incoming, new IPEndPoint(host, senderPort), limit.Token).ConfigureAwait(false);

@@ -16,6 +16,35 @@ public static class DirectAddresses
     };
 
     private static readonly object Gate = new();
+
+    // Direct networks on other subnets (a phone's hotspot picks its own): this device's address on each, and the host's
+    // (null when this device hosts it). Marked when started or joined, forgotten when left.
+    private static readonly object MarkGate = new();
+    private static readonly Dictionary<uint, uint?> Marked = new();
+
+    /// <summary>
+    /// <paramref name="own"/> (this device's address) is on a direct network whose subnet isn't one Wi-Fi Direct always
+    /// uses: hosted by this device (<paramref name="host"/> null) or by <paramref name="host"/>.
+    /// </summary>
+    public static void MarkDirectNetwork(IPAddress own, IPAddress? host)
+    {
+        if (own.AddressFamily != AddressFamily.InterNetwork) return;
+        lock (MarkGate) Marked[ToUInt(own)] = host is { AddressFamily: AddressFamily.InterNetwork } ? ToUInt(host) : null;
+        Diagnostics.Log.Info($"Direct: {own}'s network is a direct network{(host != null ? $" (host {host})" : " (this device hosts it)")}");
+    }
+
+    /// <summary>Forgets the marked networks this device hosts (<paramref name="hosted"/>) or joined.</summary>
+    public static void ForgetDirectNetworks(bool hosted)
+    {
+        lock (MarkGate)
+            foreach (var own in Marked.Where(m => m.Value == null == hosted).Select(m => m.Key).ToList())
+                Marked.Remove(own);
+    }
+
+    private static bool IsMarked(uint own, out uint? host)
+    {
+        lock (MarkGate) return Marked.TryGetValue(own, out host);
+    }
     private static List<(uint Address, uint Mask, bool Direct)> _local = new();
     private static bool _fresh;
     private static long _refreshedAt;
@@ -28,7 +57,7 @@ public static class DirectAddresses
         foreach (var (address, mask, direct) in LocalAdapters())
         {
             if ((value & mask) != (address & mask)) continue;
-            if (direct || KnownDirectSubnets.Any(s => (value & s.Mask) == s.Network)) return true;
+            if (direct || KnownDirectSubnets.Any(s => (value & s.Mask) == s.Network) || IsMarked(address, out _)) return true;
         }
 
         return false;
@@ -45,6 +74,12 @@ public static class DirectAddresses
     {
         foreach (var (address, _, _) in LocalAdapters())
         {
+            if (IsMarked(address, out var marked))
+            {
+                if (marked is { } markedHost) yield return FromUInt(markedHost);
+                continue;
+            }
+
             if (!KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network) || (address & 0xFF) == 1) continue;
             var host = (address & 0xFFFFFF00) | 1;
             yield return new IPAddress(new[] { (byte)(host >> 24), (byte)(host >> 16), (byte)(host >> 8), (byte)host });
@@ -61,6 +96,7 @@ public static class DirectAddresses
         foreach (var (address, _, direct) in LocalAdapters())
         {
             if (direct && (address >> 16) != 0xA9FE) return true; // not 169.254.x (no address handed out yet)
+            if (IsMarked(address, out var host) && host == null) return true;
             if ((address & 0xFF) == 1 && KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network)) return true;
         }
 
@@ -75,6 +111,7 @@ public static class DirectAddresses
     {
         if (own.AddressFamily != AddressFamily.InterNetwork) return null;
         var address = ToUInt(own);
+        if (IsMarked(address, out var marked)) return marked is { } markedHost ? FromUInt(markedHost) : null;
         if (!KnownDirectSubnets.Any(s => (address & s.Mask) == s.Network) || (address & 0xFF) == 1) return null;
         return FromUInt((address & 0xFFFFFF00) | 1);
     }

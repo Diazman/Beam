@@ -43,6 +43,20 @@ public enum DirectRoles
     SenderHosted = 64,
 }
 
+/// <summary>
+/// A phone's link that can host as a Wi-Fi hotspot of its own (Android's local-only hotspot: an ordinary access point
+/// beside the phone's Wi-Fi) rather than a Wi-Fi Direct group.
+/// </summary>
+public interface IAccessPointHosting
+{
+    /// <summary>
+    /// Set before a network is started: the next one should be the hotspot when this phone can run it beside its own
+    /// Wi-Fi, because a computer joins it (a PC's Wi-Fi adapter dropped off a phone's Wi-Fi Direct group every few
+    /// minutes). Otherwise the usual Wi-Fi Direct group.
+    /// </summary>
+    bool PreferAccessPoint { get; set; }
+}
+
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
 public interface IInternetSharing
 {
@@ -103,6 +117,12 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
     /// another Wi-Fi. Not part of the network's identity.
     /// </summary>
     public bool SharesInternet { get; init; }
+
+    /// <summary>
+    /// The network is a phone's hotspot (an ordinary access point, not a Wi-Fi Direct group): devices join it as ordinary
+    /// Wi-Fi. Not part of the network's identity.
+    /// </summary>
+    public bool IsAccessPoint { get; init; }
 
     public bool Equals(DirectNetwork? other) => other is not null && Ssid == other.Ssid && Passphrase == other.Passphrase;
 

@@ -412,6 +412,7 @@ public sealed partial class DirectManager
     private void OnLinkLost()
     {
         Log.Warn("Direct: the direct network was lost");
+        DirectAddresses.ForgetDirectNetworks(hosted: false);
         DirectAddresses.Invalidate();
         OnJoinedNetworkLost();
         _discovery.RescanNetworks();
@@ -729,6 +730,7 @@ public sealed partial class DirectManager
         {
             _link.Stop();
             HostedNetwork = null;
+            DirectAddresses.ForgetDirectNetworks(hosted: false); // left the network it joined
             Log.Info("Direct: link stopped");
             RotateIfPending();
         }

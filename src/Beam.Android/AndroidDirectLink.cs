@@ -18,7 +18,9 @@ namespace Beam.Droid;
 /// <para>
 /// Hosting (this phone sends): a Wi-Fi Direct group with this session's name and passphrase
 /// (WifiP2pManager.CreateGroup with a WifiP2pConfig), which also accepts ordinary Wi-Fi ("legacy") clients such as a
-/// Windows PC's Wi-Fi adapter. Group owners are 192.168.49.1.
+/// Windows PC's Wi-Fi adapter. Group owners are 192.168.49.1. When a computer joins and the phone can run a hotspot
+/// beside its own Wi-Fi (Android 11+), its local-only hotspot instead: an ordinary access point (a PC's Intel adapter
+/// dropped off the Wi-Fi Direct group every 166 s). Android picks that network's name, passphrase and subnet.
 /// </para>
 /// <para>
 /// Joining (this phone receives): a phone's group is first joined the Wi-Fi Direct way, which keeps the phone on its
@@ -30,8 +32,15 @@ namespace Beam.Droid;
 /// the route by reporting in over it. Leaving releases only that binding and request.
 /// </para>
 /// </summary>
-internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner, IDirectRadio
+internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirectNetworkScanner, IDirectRadio, IAccessPointHosting
 {
+    /// <inheritdoc />
+    public bool PreferAccessPoint { get; set; }
+
+    /// <summary>This phone's local-only hotspot while it is on (null when off).</summary>
+    private WifiManager.LocalOnlyHotspotReservation? _hotspot;
+    private DirectNetwork? _hotspotNetwork;
+
     private static readonly TimeSpan GroupTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan P2pJoinTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan WifiJoinTimeout = TimeSpan.FromSeconds(60);
@@ -217,7 +226,185 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             LeaveP2pQuietly();
         }
 
+        StopHotspot();
         await RemoveGroupIfOpenAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Starts the local-only hotspot (an ordinary Wi-Fi access point, no internet) beside this phone's own Wi-Fi. Null
+    /// when this phone can't (before Android 11, no hotspot beside its Wi-Fi, a security computers can't join, or it
+    /// doesn't start): then the usual Wi-Fi Direct group.
+    /// </summary>
+    private async Task<DirectNetwork?> TryStartHotspotAsync(CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(30))
+        {
+            Log.Info("Hotspot: needs Android 11; starting a Wi-Fi Direct group instead");
+            return null;
+        }
+
+        if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return null;
+        if (!wifi.IsStaApConcurrencySupported)
+        {
+            // Starting it would take this phone off its own Wi-Fi (and the connection the computer was asked over).
+            Log.Info("Hotspot: this phone can't run a hotspot beside its own Wi-Fi; starting a Wi-Fi Direct group instead");
+            return null;
+        }
+
+        var before = LocalAddresses().Select(a => a.Address).ToHashSet();
+        var callback = new HotspotCallback(OnHotspotStopped);
+        try
+        {
+            wifi.StartLocalOnlyHotspot(callback, new Handler(Looper.MainLooper!));
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Hotspot: Android refused to start it ({ex.GetType().Name}: {ex.Message}); starting a Wi-Fi Direct group instead");
+            return null;
+        }
+
+        WifiManager.LocalOnlyHotspotReservation reservation;
+        try
+        {
+            reservation = await callback.Started.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            callback.Abandon();
+            Log.Info("Hotspot: Android didn't start it within 15 s; starting a Wi-Fi Direct group instead");
+            return null;
+        }
+        catch (DirectLinkException ex)
+        {
+            Log.Info($"Hotspot: didn't start ({ex.Message}); starting a Wi-Fi Direct group instead");
+            return null;
+        }
+        catch (System.OperationCanceledException)
+        {
+            callback.Abandon();
+            throw;
+        }
+
+        var config = reservation.SoftApConfiguration;
+#pragma warning disable CA1422 // SoftApConfiguration.Ssid: the replacement (WifiSsid) needs Android 13
+        var ssid = (OperatingSystem.IsAndroidVersionAtLeast(33) ? config.WifiSsid?.ToString() : config.Ssid)?.Trim('"');
+#pragma warning restore CA1422
+        var passphrase = config.Passphrase;
+        var security = config.SecurityType;
+        // WPA2, or WPA3 with WPA2 beside it (transition): what a PC's Wi-Fi joins with a passphrase.
+        if (string.IsNullOrEmpty(ssid) || passphrase is not { Length: >= 8 and <= 63 } || security is not (1 or 2))
+        {
+            Log.Info($"Hotspot: started with security {security}, which Beam's computers don't join; starting a Wi-Fi Direct group instead");
+            callback.Abandon();
+            reservation.Close();
+            return null;
+        }
+
+        // Its address (Android picks the subnet): the new one on this phone, once it is up.
+        IPAddress? own = null;
+        var until = System.Environment.TickCount64 + 10_000;
+        while (own == null && System.Environment.TickCount64 < until)
+        {
+            own = LocalAddresses().Where(a => !before.Contains(a.Address) && !a.Name.StartsWith("p2p", StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Address).FirstOrDefault();
+            if (own == null) await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (own == null)
+        {
+            Log.Info("Hotspot: started, but no address came up on it in 10 s; starting a Wi-Fi Direct group instead");
+            callback.Abandon();
+            reservation.Close();
+            return null;
+        }
+
+        _hotspot = reservation;
+        _hotspotNetwork = new DirectNetwork(ssid, passphrase) { IsAccessPoint = true };
+        DirectAddresses.MarkDirectNetwork(own, null);
+        DirectAddresses.Invalidate();
+        Log.Info($"Hotspot: hosting {ssid} at {own} ({(security == 1 ? "WPA2" : "WPA2/WPA3")}) beside this phone's Wi-Fi");
+        return _hotspotNetwork;
+    }
+
+    /// <summary>Android stopped the hotspot by itself (Wi-Fi turned off, another app's hotspot): its guests are off it.</summary>
+    private void OnHotspotStopped(HotspotCallback callback)
+    {
+        if (_hotspot == null) return;
+        Log.Warn($"Hotspot: Android stopped {_hotspotNetwork?.Ssid}");
+        _hotspot = null;
+        _hotspotNetwork = null;
+        DirectAddresses.ForgetDirectNetworks(hosted: true);
+        DirectAddresses.Invalidate();
+    }
+
+    private void StopHotspot()
+    {
+        var reservation = Interlocked.Exchange(ref _hotspot, null);
+        if (reservation == null) return;
+        var ssid = _hotspotNetwork?.Ssid;
+        _hotspotNetwork = null;
+        try
+        {
+            reservation.Close();
+            Log.Info($"Hotspot: stopped {ssid}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Hotspot: stopping it failed: {ex.Message}");
+        }
+
+        DirectAddresses.ForgetDirectNetworks(hosted: true);
+        DirectAddresses.Invalidate();
+    }
+
+    private static List<(string Name, IPAddress Address)> LocalAddresses()
+    {
+        var list = new List<(string, IPAddress)>();
+        try
+        {
+            foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Down) continue;
+                foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+                    if (unicast.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(unicast.Address))
+                        list.Add((nic.Name, unicast.Address));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Hotspot: reading this phone's addresses failed: {ex.Message}");
+        }
+
+        return list;
+    }
+
+    private sealed class HotspotCallback : WifiManager.LocalOnlyHotspotCallback
+    {
+        private readonly Action<HotspotCallback> _stopped;
+        private volatile bool _abandoned;
+
+        public HotspotCallback(Action<HotspotCallback> stopped) => _stopped = stopped;
+
+        public TaskCompletionSource<WifiManager.LocalOnlyHotspotReservation> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Given up on: a hotspot that starts after all is closed again at once.</summary>
+        public void Abandon() => _abandoned = true;
+
+        public override void OnStarted(WifiManager.LocalOnlyHotspotReservation reservation)
+        {
+            if (_abandoned || !Started.TrySetResult(reservation)) reservation.Close();
+        }
+
+        public override void OnStopped()
+        {
+            Started.TrySetException(new DirectLinkException("Android stopped it."));
+            if (!_abandoned) _stopped(this);
+        }
+
+        public override void OnFailed(LocalOnlyHotspotCallbackErrorCode reason)
+        {
+            Started.TrySetException(new DirectLinkException($"Android couldn't start it ({reason})"));
+        }
     }
 
     private async Task<DirectNetwork> HostCoreAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
@@ -226,12 +413,19 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             var channel = await PrepareAsync().ConfigureAwait(false);
             await EnsureWifiOnAsync(cancellationToken).ConfigureAwait(false);
             await EnsureLocationOnAsync(cancellationToken).ConfigureAwait(false);
+            if (_hotspot != null && _hotspotNetwork is { } running) return running;
             if (await GroupInfoAsync(channel).ConfigureAwait(false) is { IsGroupOwner: true } existing
                 && !string.IsNullOrEmpty(existing.NetworkName) && !string.IsNullOrEmpty(existing.Passphrase))
                 return new DirectNetwork(existing.NetworkName, existing.Passphrase);
 
             LeaveP2pQuietly(); // one adapter: hosting ends a join
             await RemoveGroupAsync(channel).ConfigureAwait(false);
+            if (PreferAccessPoint && await TryStartHotspotAsync(cancellationToken).ConfigureAwait(false) is { } hotspot)
+            {
+                OwnedByRunningAttempt();
+                return hotspot;
+            }
+
             var network = preferred ?? DirectNetwork.Create(_deviceName());
             // On the channel of the Wi-Fi this phone stays on: one radio serving two channels takes turns between them,
             // which roughly halves the speed of both (and on 5 GHz the link is much faster to begin with).
@@ -308,6 +502,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
             if (_wifiNetwork is { Network: not null, Host: { } joinedHost } wifi && wifi.Ssid == network.Ssid) return joinedHost;
 
+            StopHotspot(); // one network at a time
             LeaveP2pQuietly();
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             ReleaseWifiNetwork();
@@ -431,6 +626,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     public void Stop()
     {
         var op = Interlocked.Increment(ref _ops);
+        StopHotspot();
         LeaveP2pQuietly(); // leaving on purpose: not a lost link
         ReleaseWifiNetwork(); // at once: Beam's connections mustn't stay bound to a network being left
         if (_manager == null || _channel == null) return;
