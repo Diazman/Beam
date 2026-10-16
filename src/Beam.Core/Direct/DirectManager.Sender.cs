@@ -102,6 +102,9 @@ public sealed partial class DirectManager
     internal IBluetoothDirectControl? Bluetooth { get; set; }
 
     private readonly ConcurrentDictionary<string, Outgoing> _outgoing = new(); // by session id on the wire
+
+    /// <summary>Phones that couldn't join this device's internet-sharing network (hotspot): they get the usual network next time.</summary>
+    private readonly ConcurrentDictionary<string, byte> _hotspotJoinFailed = new();
     private readonly ConcurrentDictionary<string, DirectSend> _sends = new(); // by transfer id
     private readonly object _hostGate = new();
     private readonly HashSet<string> _hostLeases = new(); // one per Direct transfer (shared by its setups)
@@ -356,6 +359,7 @@ public sealed partial class DirectManager
         limit.CancelAfter(SessionLifetime);
         var outgoing = new Outgoing { Session = session };
         _outgoing[session.Id] = outgoing;
+        DirectNetwork? hosted = null;
         try
         {
             var current = _discovery.Find(peer.Id) ?? peer;
@@ -374,7 +378,10 @@ public sealed partial class DirectManager
 
             // 2. This device's network, now that someone will join it.
             Move(session, DirectSessionState.Hosting);
-            var network = await AcquireHostAsync(send.Key, session, limit.Token).ConfigureAwait(false);
+            // A phone: this device's internet-sharing network when it has one (the phone then stays on it).
+            var forPhone = !IsComputer(current.Kind, current.Platform) && !_hotspotJoinFailed.ContainsKey(peer.Id);
+            var network = await AcquireHostAsync(send.Key, session, forPhone, limit.Token).ConfigureAwait(false);
+            hosted = network;
 
             // 3. Its details, for this receiver only, over the authenticated control channel.
             Move(session, DirectSessionState.OfferingCredentials);
@@ -437,6 +444,8 @@ public sealed partial class DirectManager
                 _ => L.T("Something went wrong."),
             };
             Log.Warn($"Direct: {session}: failed at {session.State}: {ex.GetType().Name}: {ex.Message}");
+            if (session.State == DirectSessionState.Joining && hosted is { SharesInternet: true } && _hotspotJoinFailed.TryAdd(peer.Id, 0))
+                Log.Info($"Direct: {peer.Name} couldn't join this device's hotspot; it gets the usual direct network next time");
             session.FailedTransiently = ex is DirectLinkException { Transient: true };
             session.Fail(message);
             await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
@@ -546,7 +555,7 @@ public sealed partial class DirectManager
     /// with a fresh passphrase), shared by the sessions that follow while it's on. Refused while the link is someone
     /// else's (the Phone page, this device being on another device's network).
     /// </summary>
-    private async Task<DirectNetwork> AcquireHostAsync(string owner, DirectSession session, CancellationToken token)
+    private async Task<DirectNetwork> AcquireHostAsync(string owner, DirectSession session, bool forPhone, CancellationToken token)
     {
         Task<DirectNetwork> start;
         lock (_hostGate)
@@ -572,7 +581,7 @@ public sealed partial class DirectManager
                         throw new DirectLinkException(L.T("This device's direct connection is in use right now. Try again when it's done."));
                     }
 
-                    _sessionHostStart = StartSessionHostAsync();
+                    _sessionHostStart = StartSessionHostAsync(forPhone);
                 }
 
                 _hostLeases.Add(owner);
@@ -595,7 +604,8 @@ public sealed partial class DirectManager
         }
     }
 
-    private async Task<DirectNetwork> StartSessionHostAsync()
+    /// <param name="forPhone">A phone joins first: this device's internet-sharing network if it can (later receivers join the same).</param>
+    private async Task<DirectNetwork> StartSessionHostAsync(bool forPhone)
     {
         await Task.Yield(); // started under the lock: run outside it
         try
@@ -609,7 +619,8 @@ public sealed partial class DirectManager
             DirectNetwork started;
             try
             {
-                Log.Info($"Direct: starting {fresh.Ssid} for direct sessions");
+                if (_link is IInternetSharing sharing) sharing.PreferInternetSharing = forPhone;
+                Log.Info($"Direct: starting {fresh.Ssid} for direct sessions{(forPhone && _link is IInternetSharing ? " (a phone joins: sharing this device's internet if it can)" : "")}");
                 started = await _link!.HostAsync(fresh, limit.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!_stopping.IsCancellationRequested)
@@ -650,7 +661,7 @@ public sealed partial class DirectManager
             }
             else
             {
-                Log.Info($"Direct: {started.Ssid} is on for direct sessions");
+                Log.Info($"Direct: {started.Ssid} is on for direct sessions{(started.SharesInternet ? ", sharing this device's internet" : "")}");
             }
 
             return started;

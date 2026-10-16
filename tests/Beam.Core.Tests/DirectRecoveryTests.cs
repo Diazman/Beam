@@ -207,6 +207,61 @@ public class DirectRecoveryTests
         Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
     }
 
+    // ---- Which network the sender starts ----
+
+    private static async Task<(TestNode Pc, TestNode Receiver, FakeDirectAir.FakeLink PcLink, FakeDirectAir.FakeLink ReceiverLink)> PcAndAsync(
+        FakeDirectAir air, bool pcOnline, DirectRoles receiverRoles, string receiverKind)
+    {
+        var pcLink = Fake(air.Link(Pc, sharesInternet: pcOnline));
+        var receiverLink = Fake(air.Link(receiverRoles));
+        var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
+        var receiver = new TestNode("Other", directLink: receiverLink, kind: receiverKind);
+        air.Connect(pc.Node, () => pc.AsDevice(), receiver.Node, () => receiver.AsDevice());
+        receiver.Trust(pc);
+        await Task.CompletedTask;
+        return (pc, receiver, pcLink, receiverLink);
+    }
+
+    [Theory]
+    [InlineData(true, true, true)] // a phone, the PC online: its Mobile hotspot (the phone stays on a network with internet)
+    [InlineData(false, true, false)] // no internet to share: the usual Wi-Fi Direct network
+    [InlineData(true, false, false)] // another PC: the usual network
+    public async Task APcSharesItsInternetOnlyWithPhonesAndOnlyWhenItIsOnline(bool pcOnline, bool toPhone, bool sharing)
+    {
+        var air = new FakeDirectAir();
+        var (pc, receiver, pcLink, _) = await PcAndAsync(air, pcOnline, toPhone ? Phone : Pc, toPhone ? DeviceKinds.Phone : DeviceKinds.Laptop);
+        await using var _p = pc;
+        await using var _r = receiver;
+
+        var session = pc.Node.Send(receiver.AsDevice(), new[] { pc.CreateFile("a.jpg", 200_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session);
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.Equal(TransferPath.Direct, session.Path);
+        Assert.Equal(sharing, pcLink.HostedNetworks.Last().SharesInternet);
+    }
+
+    [Fact]
+    public async Task APhoneThatCantJoinTheHotspotGetsTheUsualNetworkOnTryAgain()
+    {
+        var air = new FakeDirectAir();
+        var (pc, phone, pcLink, phoneLink) = await PcAndAsync(air, pcOnline: true, Phone, DeviceKinds.Phone);
+        await using var _p = pc;
+        await using var _r = phone;
+        phoneLink.CantJoinSharedNetworks = true;
+
+        var session = pc.Node.Send(phone.AsDevice(), new[] { pc.CreateFile("a.jpg", 200_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session);
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.Contains("receiver join", session.Error!.Message);
+        Assert.True(pcLink.HostedNetworks.Last().SharesInternet);
+        await Wait.UntilAsync(() => pcLink.Hosting == null, because: "the hotspot went off");
+
+        session.Resume();
+        await Wait.ForFinishAsync(session);
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.False(pcLink.HostedNetworks.Last().SharesInternet);
+    }
+
     // ---- Bluetooth as the control channel ----
 
     private static async Task<(TestNode Pc, TestNode Phone, FakeNearbyAir Bluetooth, DeviceInfo Resolved)> OverBluetoothAsync(

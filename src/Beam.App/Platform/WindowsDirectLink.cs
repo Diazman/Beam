@@ -42,6 +42,21 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
 #if WINDOWS_WINRT
     private WiFiDirectAdvertisementPublisher? _publisher;
     private NetworkOperatorTetheringManager? _hotspot;
+
+    /// <summary>Wi-Fi settings held while this PC hosts or is on another device's network (no background scans).</summary>
+    private WlanTuning? _tuning;
+
+    private void StartTuning(string why)
+    {
+        if (!OperatingSystem.IsWindows() || _tuning != null) return;
+        _tuning = WlanTuning.Begin(why);
+    }
+
+    private void StopTuning()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Interlocked.Exchange(ref _tuning, null)?.Dispose();
+    }
     private NetworkOperatorTetheringAccessPointConfiguration? _userHotspotSettings; // restored when Beam's hotspot stops
     private WiFiAdapter? _joinedAdapter; // this PC's Wi-Fi while it is on another device's direct network
     private string? _joinedSsid;
@@ -70,6 +85,9 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     /// This PC's network would share its internet: it is online and Windows can run its Mobile hotspot from here (and the
     /// user's own hotspot isn't on). Checked at most every 30 seconds; announced so two PCs agree which one hosts.
     /// </summary>
+    /// <inheritdoc />
+    public bool PreferInternetSharing { get; set; }
+
     public bool CanShareInternet
     {
         get
@@ -194,19 +212,37 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             StopPublisher();
             await StopHotspotAsync().ConfigureAwait(false);
             var network = preferred ?? DirectNetwork.Create(_deviceName());
-            // A Wi-Fi Direct network first: phones join it reliably. Windows' Mobile hotspot (which shares this PC's
-            // internet) only when that can't start: phones' join requests to it often went unanswered.
+            // A phone joins and this PC is online: Windows' Mobile hotspot first. It shares the internet, so a phone that
+            // can be on one Wi-Fi network only stays on it (on a network without internet it left after two minutes).
+            // Otherwise (or if it doesn't start) a Wi-Fi Direct network; a phone that can't join the hotspot gets that
+            // next time.
+            if (PreferInternetSharing)
+            {
+                if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
+                {
+                    _network = network with { SharesInternet = true };
+                    OwnedByRunningAttempt();
+                    StartTuning("hosting the hotspot");
+                    return _network;
+                }
+
+                Log.Info("Hotspot: not available; starting a Wi-Fi Direct network for the phone instead");
+            }
+
             try
             {
-                return await StartPublisherAsync(network, cancellationToken).ConfigureAwait(false);
+                var started = await StartPublisherAsync(network, cancellationToken).ConfigureAwait(false);
+                StartTuning("hosting the direct network");
+                return started;
             }
-            catch (DirectLinkException ex) when (!cancellationToken.IsCancellationRequested)
+            catch (DirectLinkException ex) when (!cancellationToken.IsCancellationRequested && !PreferInternetSharing)
             {
                 Log.Info($"Wi-Fi Direct: {network.Ssid} didn't start ({ex.Message}); trying the Mobile hotspot");
                 if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
                 {
                     _network = network with { SharesInternet = true };
                     OwnedByRunningAttempt();
+                    StartTuning("hosting the hotspot");
                     return _network;
                 }
 
@@ -416,6 +452,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
         var host = await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
         Log.Info($"Wi-Fi: connected to {network.Ssid}, host at {host}");
+        StartTuning("on " + network.Ssid);
         return host;
     }
 
@@ -448,6 +485,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private async Task StopAllAsync()
     {
 #if WINDOWS_WINRT
+        StopTuning();
         StopPublisher();
         await StopHotspotAsync().ConfigureAwait(false);
         await LeaveJoinedNetworkAsync().ConfigureAwait(false);
@@ -684,6 +722,42 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     /// WPA2 for Beam's hotspot, also when the user's own hotspot is set to WPA3: phones join it with a WPA2 passphrase
     /// (Android's join request has to match the network's security exactly).
     /// </summary>
+    /// <summary>
+    /// The hotspot on the band this PC's own Wi-Fi is on, so one radio isn't split between two channels far apart; and
+    /// (Windows 11 24H2) the hotspot's speed put before the PC's own connection while Beam uses it.
+    /// </summary>
+    private static void UseOwnBand(NetworkOperatorTetheringSessionAccessPointConfiguration session)
+    {
+        try
+        {
+            var type = typeof(NetworkOperatorTetheringSessionAccessPointConfiguration).FullName;
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) && ApiInformation.IsPropertyPresent(type, "Band"))
+            {
+                var band = WlanTuning.ConnectedBand() switch
+                {
+                    2 => TetheringWiFiBand.TwoPointFourGigahertz,
+                    5 => TetheringWiFiBand.FiveGigahertz,
+                    _ => TetheringWiFiBand.Auto,
+                };
+                if (band != TetheringWiFiBand.Auto && session.IsBandSupported(band))
+                {
+                    session.Band = band;
+                    Log.Info($"Hotspot: on {band}, the band this PC's own Wi-Fi is on");
+                }
+            }
+
+            if (ApiInformation.IsPropertyPresent(type, "PerformancePriority"))
+            {
+                session.PerformancePriority = TetheringWiFiPerformancePriority.TetheringOverStation;
+                Log.Info("Hotspot: its speed comes before this PC's own Wi-Fi connection");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Hotspot: couldn't choose the band ({ex.Message})");
+        }
+    }
+
     private static void UseWpa2(NetworkOperatorTetheringSessionAccessPointConfiguration session)
     {
         try
@@ -756,6 +830,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
                 // Windows 11: settings for this session only; the user's own hotspot name and password stay as they are.
                 var session = new NetworkOperatorTetheringSessionAccessPointConfiguration { Ssid = network.Ssid, Passphrase = network.Passphrase };
                 UseWpa2(session);
+                UseOwnBand(session);
                 result = await manager.StartTetheringAsync(session).AsTask(cancellationToken).ConfigureAwait(false);
             }
             else

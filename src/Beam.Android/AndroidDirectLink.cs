@@ -21,10 +21,10 @@ namespace Beam.Droid;
 /// Windows PC's Wi-Fi adapter. Group owners are 192.168.49.1.
 /// </para>
 /// <para>
-/// Joining (this phone receives): the sender's network (a phone's group, or a computer's, which Windows runs as a
-/// Wi-Fi Direct group too) is first joined the Wi-Fi Direct way. That runs beside the phone's normal Wi-Fi, which it
-/// stays on: Android has no network without internet to switch away from. A network where that failed is joined as an
-/// ordinary Wi-Fi network for Beam only (WifiNetworkSpecifier): Android shows its "Connect to DIRECT-…?" prompt, which the user must approve
+/// Joining (this phone receives): a phone's group is first joined the Wi-Fi Direct way, which keeps the phone on its
+/// normal Wi-Fi too. A computer's network (Windows' Wi-Fi Direct network, or its Mobile hotspot when it shares its
+/// internet: a phone that can be on one Wi-Fi network only stays on that one) and a group where the Wi-Fi Direct way
+/// failed are joined as an ordinary Wi-Fi network for Beam only (WifiNetworkSpecifier): Android shows its "Connect to DIRECT-…?" prompt, which the user must approve
 /// (Beam never claims it connects without that), and may approve it again without asking for the same network.
 /// Beam's process is then bound to that network, so its connections (and only Beam's) use it; Beam.Core still checks
 /// the route by reporting in over it. Leaving releases only that binding and request.
@@ -233,13 +233,26 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             LeaveP2pQuietly(); // one adapter: hosting ends a join
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             var network = preferred ?? DirectNetwork.Create(_deviceName());
-            var config = new WifiP2pConfig.Builder()
-                .SetNetworkName(network.Ssid)!
-                .SetPassphrase(network.Passphrase)!
-                .EnablePersistentMode(false)!
-                .Build();
-            await RunAsync(listener => _manager!.CreateGroup(channel, config, listener), "start a direct network",
-                () => RemoveGroupAsync(channel), cancellationToken).ConfigureAwait(false);
+            // On the channel of the Wi-Fi this phone stays on: one radio serving two channels takes turns between them,
+            // which roughly halves the speed of both (and on 5 GHz the link is much faster to begin with).
+            var own = OwnWifiFrequency();
+            var started = false;
+            if (own > 0)
+            {
+                try
+                {
+                    Log.Info($"Wi-Fi Direct: starting {network.Ssid} on this phone's own Wi-Fi channel ({own} MHz)");
+                    await CreateGroupAsync(channel, network, own, cancellationToken).ConfigureAwait(false);
+                    started = true;
+                }
+                catch (DirectLinkException ex)
+                {
+                    Log.Info($"Wi-Fi Direct: couldn't start it on {own} MHz ({ex.Message}); letting Android choose the channel");
+                    await RemoveGroupAsync(channel).ConfigureAwait(false);
+                }
+            }
+
+            if (!started) await CreateGroupAsync(channel, network, 0, cancellationToken).ConfigureAwait(false);
 
             try
             {
@@ -298,10 +311,10 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             LeaveP2pQuietly();
             await RemoveGroupAsync(channel).ConfigureAwait(false);
             ReleaseWifiNetwork();
-            // The Wi-Fi Direct way first, also for a computer's network: the phone keeps its normal Wi-Fi beside it, so
-            // Android doesn't drop the direct network for one with internet. Where that failed once (some phones and
-            // drivers can't), straight to ordinary Wi-Fi.
-            if (!_joinAsWifi.Contains(network.Ssid))
+            // A phone's group the Wi-Fi Direct way first (the phone keeps its normal Wi-Fi beside it). A computer's
+            // network (Windows' Wi-Fi Direct network or Mobile hotspot) as ordinary Wi-Fi straight away: Windows didn't
+            // answer the Wi-Fi Direct way in tests, which only cost time. So does a group where it already failed once.
+            if (!network.HostIsComputer && !_joinAsWifi.Contains(network.Ssid))
             {
                 if (await TryJoinAsP2pAsync(channel, network, cancellationToken).ConfigureAwait(false) is { } owner) return owner;
                 _joinAsWifi.Add(network.Ssid);
@@ -545,6 +558,42 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
     /// <summary>Beam is on a computer's network right now (joined and bound to it).</summary>
     public bool IsJoined => Volatile.Read(ref _wifiNetwork) is { Network: not null } || Volatile.Read(ref _p2pJoined) != null;
+
+    private Task CreateGroupAsync(WifiP2pManager.Channel channel, DirectNetwork network, int frequency, CancellationToken cancellationToken)
+    {
+        var builder = new WifiP2pConfig.Builder()
+            .SetNetworkName(network.Ssid)!
+            .SetPassphrase(network.Passphrase)!
+            .EnablePersistentMode(false)!;
+        if (frequency > 0) builder.SetGroupOperatingFrequency(frequency);
+        var config = builder.Build();
+        return RunAsync(listener => _manager!.CreateGroup(channel, config, listener), "start a direct network",
+            () => RemoveGroupAsync(channel), cancellationToken);
+    }
+
+    /// <summary>
+    /// The frequency of the Wi-Fi this phone is connected to, if a group may run there too (MHz); 0 otherwise. Not on
+    /// 5 GHz channels that need radar detection (a phone can't host there) or 2.4 GHz channel 14.
+    /// </summary>
+    private int OwnWifiFrequency()
+    {
+        try
+        {
+            if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return 0;
+#pragma warning disable CA1422 // ConnectionInfo: still how to read the connected network's channel on Android 12
+            var info = wifi.ConnectionInfo;
+#pragma warning restore CA1422
+            var frequency = info?.Frequency ?? -1;
+            if (info == null || info.NetworkId == -1 || frequency <= 0) return 0;
+            Log.Info($"Wi-Fi: this phone's own Wi-Fi is on {frequency} MHz, {info.LinkSpeed} Mbps, {info.Rssi} dBm");
+            return frequency is >= 2412 and <= 2472 or >= 5170 and <= 5250 or >= 5735 and <= 5835 ? frequency : 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"Wi-Fi: own channel unavailable: {ex.Message}");
+            return 0;
+        }
+    }
 
     /// <summary>Joined a group the Wi-Fi Direct way: watch for it going away (the host stopped it, or it went out of range).</summary>
     private void OnJoinedOverP2p(string ssid)

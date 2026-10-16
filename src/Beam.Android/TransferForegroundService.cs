@@ -91,6 +91,7 @@ internal sealed class TransferKeepAlive
     private bool _running;
     private bool _transferring;
     private WifiManager.WifiLock? _wifiLock;
+    private WifiManager.WifiLock? _lowLatencyLock;
     private PowerManager.WakeLock? _wakeLock;
 
     public TransferKeepAlive(Context context, TransferService transfers, AndroidDirectLink? link)
@@ -155,11 +156,19 @@ internal sealed class TransferKeepAlive
         {
             if (_wifiLock == null && _context.GetSystemService(Context.WifiService) is WifiManager wifi)
             {
-#pragma warning disable CA1422 // the high-performance lock is the one that still works on older phones
-                _wifiLock = wifi.CreateWifiLock(OperatingSystem.IsAndroidVersionAtLeast(29) ? global::Android.Net.WifiMode.FullLowLatency : global::Android.Net.WifiMode.FullHighPerf, "Beam transfer");
+                // High performance keeps Wi-Fi's power saving off, also with the screen off (low latency, below, only
+                // counts while Beam is on screen); power saving slows a transfer down a lot on some phones.
+#pragma warning disable CA1422 // deprecated in Android 14 (where it does nothing), still what works with the screen off before that
+                _wifiLock = wifi.CreateWifiLock(global::Android.Net.WifiMode.FullHighPerf, "Beam transfer");
 #pragma warning restore CA1422
                 _wifiLock?.SetReferenceCounted(false);
                 _wifiLock?.Acquire();
+                if (OperatingSystem.IsAndroidVersionAtLeast(29))
+                {
+                    _lowLatencyLock = wifi.CreateWifiLock(global::Android.Net.WifiMode.FullLowLatency, "Beam transfer (on screen)");
+                    _lowLatencyLock?.SetReferenceCounted(false);
+                    _lowLatencyLock?.Acquire();
+                }
             }
 
             if (_wakeLock == null && _context.GetSystemService(Context.PowerService) is PowerManager power)
@@ -180,6 +189,7 @@ internal sealed class TransferKeepAlive
         try
         {
             if (_wifiLock?.IsHeld == true) _wifiLock.Release();
+            if (_lowLatencyLock?.IsHeld == true) _lowLatencyLock.Release();
             if (_wakeLock?.IsHeld == true) _wakeLock.Release();
         }
         catch (Exception ex)
@@ -188,6 +198,7 @@ internal sealed class TransferKeepAlive
         }
 
         _wifiLock = null;
+        _lowLatencyLock = null;
         _wakeLock = null;
     }
 }

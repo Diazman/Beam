@@ -134,6 +134,11 @@ public sealed class FakeDirectAir
 
         public bool CanShareInternet { get; init; }
 
+        public bool PreferInternetSharing { get; set; }
+
+        /// <summary>This phone's join requests to an internet-sharing network (Windows' hotspot) go unanswered.</summary>
+        public bool CantJoinSharedNetworks { get; set; }
+
         /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
         public string? JoinError { get; init; }
 
@@ -185,7 +190,8 @@ public sealed class FakeDirectAir
             {
                 if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
                 LeaveLocked(); // one adapter: hosting ends a join
-                var reported = preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]);
+                var reported = (preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]))
+                    with { SharesInternet = PreferInternetSharing && CanShareInternet };
                 Hosting = StartsWithOtherPassphrase ? reported with { Passphrase = "not-" + reported.Passphrase } : reported;
                 HostedNetworks.Add(reported);
                 Interlocked.Increment(ref _air._hosted);
@@ -216,6 +222,7 @@ public sealed class FakeDirectAir
                 var host = _air._links.FirstOrDefault(l => l.Hosting?.Ssid == network.Ssid);
                 if (host == null) throw new DirectLinkException("The network isn't in range.");
                 if (host.Hosting!.Passphrase != network.Passphrase) throw new DirectLinkException("Wrong passphrase");
+                if (CantJoinSharedNetworks && host.Hosting.SharesInternet) throw new DirectLinkException("Android didn't answer the join request.");
                 if (Hosting != null) Hosting = null; // one adapter: joining ends this device's own network
                 JoinedTo = host;
                 _air.LastJoin = network;

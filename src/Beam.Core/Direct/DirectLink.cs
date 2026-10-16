@@ -47,6 +47,13 @@ public enum DirectRoles
 public interface IInternetSharing
 {
     bool CanShareInternet { get; }
+
+    /// <summary>
+    /// Set before a network is started: the next one should share this device's internet when it can (Windows' Mobile
+    /// hotspot), because a phone will join it. A phone that can be on only one Wi-Fi network leaves a network without
+    /// internet after a while; one with internet it keeps. Otherwise the usual network (Wi-Fi Direct).
+    /// </summary>
+    bool PreferInternetSharing { get; set; }
 }
 
 public static class DirectRolesText
