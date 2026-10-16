@@ -740,7 +740,23 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             await _connection.WriteAsync(Sealed(_sender, Compact(offer)), cancellationToken).ConfigureAwait(false);
             delivered();
             // "Working" while it joins; then joined (it also reports in over the direct network) or why it couldn't.
-            await ReadUntilDoneAsync(_connection, _sender, _name, NearbyHandshake.Status.Joined, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await ReadUntilDoneAsync(_connection, _sender, _name, NearbyHandshake.Status.Joined, cancellationToken).ConfigureAwait(false);
+            }
+            catch (DirectLinkException ex)
+            {
+                throw new DirectLinkException(ex.Message, ex) { JoinFailed = true }; // the receiver's answer: it couldn't join
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested
+                                       && ex is IOException or ObjectDisposedException or OperationCanceledException or TimeoutException
+                                           or CryptographicException)
+            {
+                // The Bluetooth connection went away (phones often drop it while switching Wi-Fi). The receiver has the
+                // network details: whether it joined shows when it reports in over the direct network.
+                Log.Info($"Nearby: the Bluetooth connection to {_name} dropped after the offer ({ex.GetType().Name}: {ex.Message}); " +
+                         "waiting for it to report in over the direct network");
+            }
         }
 
         public async Task TellAsync(DirectRequestMessage message)

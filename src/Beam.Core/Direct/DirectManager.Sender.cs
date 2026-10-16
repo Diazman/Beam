@@ -103,8 +103,16 @@ public sealed partial class DirectManager
 
     private readonly ConcurrentDictionary<string, Outgoing> _outgoing = new(); // by session id on the wire
 
-    /// <summary>Phones that couldn't join this device's internet-sharing network (hotspot): they get the usual network next time.</summary>
-    private readonly ConcurrentDictionary<string, byte> _hotspotJoinFailed = new();
+    /// <summary>
+    /// Phones that couldn't join this device's internet-sharing network (hotspot), and when: they get the usual network
+    /// for <see cref="HotspotRetryAfter"/>, or until one joins the hotspot after all.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, long> _hotspotJoinFailed = new();
+
+    internal TimeSpan HotspotRetryAfter { get; set; } = TimeSpan.FromMinutes(30);
+
+    private bool HotspotFailedFor(string peerId) =>
+        _hotspotJoinFailed.TryGetValue(peerId, out var at) && Environment.TickCount64 - at < HotspotRetryAfter.TotalMilliseconds;
     private readonly ConcurrentDictionary<string, DirectSend> _sends = new(); // by transfer id
     private readonly object _hostGate = new();
     private readonly HashSet<string> _hostLeases = new(); // one per Direct transfer (shared by its setups)
@@ -379,7 +387,7 @@ public sealed partial class DirectManager
             // 2. This device's network, now that someone will join it.
             Move(session, DirectSessionState.Hosting);
             // A phone: this device's internet-sharing network when it has one (the phone then stays on it).
-            var forPhone = !IsComputer(current.Kind, current.Platform) && !_hotspotJoinFailed.ContainsKey(peer.Id);
+            var forPhone = !IsComputer(current.Kind, current.Platform) && !HotspotFailedFor(peer.Id);
             var network = await AcquireHostAsync(send.Key, session, forPhone, limit.Token).ConfigureAwait(false);
             hosted = network;
 
@@ -414,12 +422,15 @@ public sealed partial class DirectManager
             }
             catch (TimeoutException)
             {
-                throw new DirectLinkException(L.T("{0} didn't join the direct network in time. If it asks to connect to a Wi-Fi network, tap Connect there.", peer.Name));
+                throw new DirectLinkException(L.T("{0} didn't join the direct network in time. If it asks to connect to a Wi-Fi network, tap Connect there.", peer.Name))
+                    { JoinFailed = true };
             }
 
             // 5. Both ends of the route, the session and the receiver's certificate, before any file data.
             Move(session, DirectSessionState.Verifying);
             send.ReconnectKey = await VerifyAsync(session, reported, limit.Token).ConfigureAwait(false);
+            if (hosted is { SharesInternet: true } && _hotspotJoinFailed.TryRemove(peer.Id, out _))
+                Log.Info($"Direct: {peer.Name} joined the hotspot after all");
             if (!session.MarkVerified(reported)) throw new OperationCanceledException(limit.Token);
             send.BytesAtVerify = send.Transfer?.GetSnapshot().TransferredBytes ?? 0;
             send.VerifiedAt = Environment.TickCount64;
@@ -444,8 +455,13 @@ public sealed partial class DirectManager
                 _ => L.T("Something went wrong."),
             };
             Log.Warn($"Direct: {session}: failed at {session.State}: {ex.GetType().Name}: {ex.Message}");
-            if (session.State == DirectSessionState.Joining && hosted is { SharesInternet: true } && _hotspotJoinFailed.TryAdd(peer.Id, 0))
-                Log.Info($"Direct: {peer.Name} couldn't join this device's hotspot; it gets the usual direct network next time");
+            // Only a join that really failed (not a cancellation, nor a dropped Bluetooth connection) says the phone can't
+            // use the hotspot.
+            if (ex is DirectLinkException { JoinFailed: true } && hosted is { SharesInternet: true } && !IsComputer(peer.Kind, peer.Platform))
+            {
+                _hotspotJoinFailed[peer.Id] = Environment.TickCount64;
+                Log.Info($"Direct: {peer.Name} couldn't join this device's hotspot; it gets the usual direct network for a while");
+            }
             session.FailedTransiently = ex is DirectLinkException { Transient: true };
             session.Fail(message);
             await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
@@ -953,7 +969,7 @@ public sealed partial class DirectManager
         if (!TryGetOutgoing(request, fingerprint, out var outgoing, out var refusal)) return refusal!;
         var message = string.IsNullOrWhiteSpace(request.Message) ? L.T("{0} couldn't join the direct network.", outgoing.Session.PeerName) : Trim(request.Message);
         Log.Warn($"Direct: {outgoing.Session}: the receiver reports it failed ({request.Stage}): {message}");
-        outgoing.Ready.TrySetException(new DirectLinkException(message));
+        outgoing.Ready.TrySetException(new DirectLinkException(message) { JoinFailed = request.Stage == "join" });
         return new DirectResponseMessage { Ok = true };
     }
 

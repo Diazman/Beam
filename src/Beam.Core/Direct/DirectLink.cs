@@ -228,4 +228,10 @@ public sealed class DirectLinkException : Exception
 
     /// <summary>This device's Wi-Fi is switched off (the user has to turn it on; Beam may open the system's Wi-Fi panel).</summary>
     public bool WifiOff { get; init; }
+
+    /// <summary>
+    /// The receiver couldn't join the network it was given (it said so, or never reported in): not a cancellation, nor
+    /// a dropped control channel.
+    /// </summary>
+    public bool JoinFailed { get; init; }
 }

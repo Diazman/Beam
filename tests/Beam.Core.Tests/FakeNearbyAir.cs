@@ -16,6 +16,12 @@ public sealed class FakeNearbyAir
     /// <summary>The longest value written or read (a GATT attribute holds at most 512 bytes; longer ones fail on real radios).</summary>
     public int Longest;
 
+    /// <summary>
+    /// Connections drop once they've had this many writes: later reads and writes fail as on Windows when the phone
+    /// closed the connection (it often does while switching Wi-Fi).
+    /// </summary>
+    public int? DropAfterWrites { get; set; }
+
     /// <summary>Scanners hear nothing from now on (out of range, or the radio stopped advertising).</summary>
     public volatile bool Silent;
 
@@ -101,8 +107,14 @@ public sealed class FakeNearbyAir
             _sender = sender;
         }
 
+        private int _writes;
+
+        private bool Dropped => _air.DropAfterWrites is { } limit && _writes >= limit;
+
         public Task WriteAsync(byte[] data, CancellationToken cancellationToken)
         {
+            if (Dropped) throw new ObjectDisposedException("GattSession");
+            _writes++;
             _air.Measure(data.Length);
             _responder.Request(_sender, data);
             return Task.CompletedTask;
@@ -110,6 +122,7 @@ public sealed class FakeNearbyAir
 
         public Task<byte[]> ReadAsync(CancellationToken cancellationToken)
         {
+            if (Dropped) throw new ObjectDisposedException("GattSession");
             var answer = _responder.Response(_sender);
             _air.Measure(answer.Length);
             return Task.FromResult(_air.Tamper is { } tamper && answer.Length > 2 && answer[1] == 1 ? tamper(answer) : answer);

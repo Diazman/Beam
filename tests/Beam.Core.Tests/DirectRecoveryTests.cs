@@ -265,10 +265,11 @@ public class DirectRecoveryTests
     // ---- Bluetooth as the control channel ----
 
     private static async Task<(TestNode Pc, TestNode Phone, FakeNearbyAir Bluetooth, DeviceInfo Resolved)> OverBluetoothAsync(
-        FakeDirectAir air, string pcName = "Laptop", string phoneName = "Redmi", SlowFiles? files = null)
+        FakeDirectAir air, string pcName = "Laptop", string phoneName = "Redmi", SlowFiles? files = null, bool pcOnline = false)
     {
         var bluetooth = new FakeNearbyAir();
-        var pc = new TestNode(pcName, externalFiles: files, directLink: air.Link(Pc), kind: DeviceKinds.Laptop, nearbyRadio: bluetooth.Radio());
+        var pc = new TestNode(pcName, externalFiles: files, directLink: air.Link(Pc, sharesInternet: pcOnline), kind: DeviceKinds.Laptop,
+            nearbyRadio: bluetooth.Radio());
         var phone = new TestNode(phoneName, directLink: air.Link(Phone), kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
         air.ConnectDirectOnly(pc.Node, phone.Node); // no shared network: Bluetooth only
         phone.Node.Nearby.SetReceiving(true);
@@ -370,6 +371,33 @@ public class DirectRecoveryTests
         await Wait.ForFinishAsync(session);
         Assert.True(session.State == TransferState.Completed, session.Error?.Message);
         Assert.InRange(bluetooth.Longest, 1, NearbyHandshake.MaxValueLength);
+    }
+
+    [Fact]
+    public async Task ABluetoothConnectionThatDropsAfterTheOfferDoesntEndTheSessionOrTheHotspot()
+    {
+        // From a real log: the phone closed the Bluetooth connection right after it got the network details (switching
+        // Wi-Fi), joined the hotspot and reported in, but the PC had already given up ("Unknown session") and took it
+        // for "this phone can't join the hotspot": the next transfer got the Wi-Fi Direct network and dropped every
+        // two minutes again.
+        var air = new FakeDirectAir();
+        var (pc, phone, bluetooth, device) = await OverBluetoothAsync(air, pcOnline: true);
+        await using var _p = pc;
+        await using var _q = phone;
+        var pcLink = Fake(air.LastHostLink ?? pc.Node.Direct.LinkForTests!);
+        bluetooth.DropAfterWrites = 3; // finding the phone out, the proposal and the offer, all on the connection kept open
+
+        var session = pc.Node.Send(device, new[] { pc.CreateFile("a.jpg", 200_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.True(pcLink.HostedNetworks.Last().SharesInternet);
+        await Wait.UntilAsync(() => pcLink.Hosting == null, because: "the hotspot went off after the transfer");
+
+        bluetooth.DropAfterWrites = null;
+        var next = pc.Node.Send(device, new[] { pc.CreateFile("b.jpg", 200_000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(next, TimeSpan.FromSeconds(60));
+        Assert.True(next.State == TransferState.Completed, next.Error?.Message);
+        Assert.True(pcLink.HostedNetworks.Last().SharesInternet); // still the hotspot
     }
 
     // ---- Setting a link up again over Bluetooth without asking again ----
