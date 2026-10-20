@@ -62,11 +62,12 @@ Works on Wi-Fi, wired networks and Windows Mobile Hotspot. If a network blocks a
 connect using the address Beam shows on the other computer.
 
 ## What's new in this version
-Version 1.4
+Version 1.6
 • Beam is now completely free: no limits on speed or the number of sends.
-• New Phone page: one code for the Beam app for Android (pairs once, then they find each other, even without Wi-Fi), or connect any phone with its browser.
-• Direct connection (beta): computer and phone connect to each other without a router.
-• Many fixes and smaller improvements.
+• Phones: the Beam app for Android pairs once with a code; any other phone can use its web browser.
+• Direct connection: a computer and a phone (or two computers) connect to each other without a router, and find each other over Bluetooth when there is no shared Wi-Fi.
+• More reliable direct transfers: a PC sending to a phone shares its internet through its Mobile hotspot, so the phone stays connected; dropped connections reconnect and continue where they stopped.
+• Faster transfers and many fixes.
 
 ## Product features (up to 20, one per line)
 Send to and from any phone by scanning a code (no app needed)

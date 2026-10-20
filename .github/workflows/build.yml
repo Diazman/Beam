@@ -63,7 +63,8 @@ jobs:
           ./build.ps1 -Runtime ${{ matrix.runtime }} -SkipTests -Installer
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-${{ matrix.runtime }}
+          # Named after the exact commit it was built from (run the workflow by hand to package any branch).
+          name: beam-${{ matrix.runtime }}-${{ github.sha }}
           path: |
             artifacts/publish/${{ matrix.runtime }}/Beam.exe
             artifacts/installer/*.exe
@@ -83,8 +84,54 @@ jobs:
         run: ./packaging/build-msix.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-msix
+          name: beam-msix-${{ github.sha }}
           path: artifacts/msix/*.msixbundle
+
+  ios:
+    name: iOS app (unsigned IPA)
+    needs: test
+    # macOS minutes count ten times: only when run by hand (Actions → Build → Run workflow).
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Use the newest complete Xcode
+        run: |
+          # Take the newest real Xcode folder that has both SDKs. Some names are symlinks to another Xcode
+          # (Xcode_26.6.0.app -> Xcode_26.6.app): xcodebuild can't find its SDKs through such a path.
+          for xcode in $(ls -d /Applications/Xcode_*.app | sort -rV); do
+            [ -L "$xcode" ] && continue
+            xcode=$(cd "$xcode" && pwd -P)
+            if [ -d "$xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" ] \
+               && [ -d "$xcode/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk" ]; then
+              sudo xcode-select -s "$xcode"
+              break
+            fi
+          done
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun -f clang
+      - name: Install the .NET iOS workload
+        run: dotnet workload install ios
+      - name: Build the app (not signed)
+        run: |
+          dotnet publish src/Beam.iOS -c Release -f net10.0-ios26.0 -r ios-arm64 \
+            -p:EnableCodeSigning=false -p:ValidateXcodeVersion=false
+          app=$(find src/Beam.iOS/bin -name "*.app" -type d -path "*ios-arm64*" | head -1)
+          echo "App bundle: $app"
+          mkdir -p artifacts/ios/Payload
+          cp -R "$app" artifacts/ios/Payload/
+          (cd artifacts/ios && zip -qry Beam-ios-unsigned.ipa Payload)
+          ls -la artifacts/ios
+      - uses: actions/upload-artifact@v4
+        with:
+          # Unsigned: sign it while installing (e.g. Sideloadly with an Apple ID) or with a developer certificate.
+          name: beam-ios-unsigned-${{ github.sha }}
+          path: artifacts/ios/Beam-ios-unsigned.ipa
 
   android:
     name: Android app (APK)
@@ -111,7 +158,7 @@ jobs:
           ls -la artifacts/android
       - uses: actions/upload-artifact@v4
         with:
-          name: beam-android
+          name: beam-android-${{ github.sha }}
           path: artifacts/android/*-Signed.apk
       # Testers download the newest APK from the Releases page ("Android test build"), not from Actions artifacts.
       - name: Publish Android test build

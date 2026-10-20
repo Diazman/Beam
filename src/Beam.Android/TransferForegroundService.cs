@@ -25,6 +25,34 @@ public sealed class TransferForegroundService : Service
     /// <summary>Intent extra: true while files transfer, false while Beam only stays on a computer's network.</summary>
     internal const string TransferringExtra = "transferring";
 
+    // Android kills the app ("startForegroundService() did not then call startForeground()") when a service started
+    // that way is stopped before it called StartForeground. A send that fails at once (Wi-Fi off) did exactly that, so
+    // it is never stopped from outside before then: it goes to the foreground first, then stops itself if no longer wanted.
+    private static readonly object StateGate = new();
+    private static bool _wanted;
+    private static bool _inForeground;
+
+    /// <summary>Asks for the service (true) or lets it go (false); it is stopped only once it is in the foreground.</summary>
+    internal static void Want(Context context, bool wanted, bool transferring)
+    {
+        var intent = new Intent(context, typeof(TransferForegroundService)).PutExtra(TransferringExtra, transferring);
+        lock (StateGate)
+        {
+            _wanted = wanted;
+            if (wanted)
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(26)) context.StartForegroundService(intent);
+                else context.StartService(intent);
+            }
+            else if (_inForeground)
+            {
+                _inForeground = false;
+                context.StopService(intent);
+            }
+            // else: still starting; it stops itself right after StartForeground (OnStartCommand)
+        }
+    }
+
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         try
@@ -36,9 +64,29 @@ public sealed class TransferForegroundService : Service
         catch (Exception ex)
         {
             Log.Warn("Could not keep Beam running in the background", ex);
+            lock (StateGate) _inForeground = false;
             StopSelf();
+            return StartCommandResult.NotSticky;
         }
 
+        lock (StateGate)
+        {
+            if (_wanted)
+            {
+                _inForeground = true;
+                return StartCommandResult.NotSticky;
+            }
+
+            _inForeground = false;
+        }
+
+        // Let go while it was starting (the transfer already ended).
+        Log.Info("Beam no longer needs to keep running; stopping the transfer service");
+        if (OperatingSystem.IsAndroidVersionAtLeast(24)) StopForeground(StopForegroundFlags.Remove);
+#pragma warning disable CA1422
+        else StopForeground(true);
+#pragma warning restore CA1422
+        StopSelf();
         return StartCommandResult.NotSticky;
     }
 
@@ -91,6 +139,7 @@ internal sealed class TransferKeepAlive
     private bool _running;
     private bool _transferring;
     private WifiManager.WifiLock? _wifiLock;
+    private WifiManager.WifiLock? _lowLatencyLock;
     private PowerManager.WakeLock? _wakeLock;
 
     public TransferKeepAlive(Context context, TransferService transfers, AndroidDirectLink? link)
@@ -120,13 +169,11 @@ internal sealed class TransferKeepAlive
             }
 
             if (active == _running) return;
-            var intent = new Intent(_context, typeof(TransferForegroundService)).PutExtra(TransferForegroundService.TransferringExtra, transferring);
             try
             {
                 if (active)
                 {
-                    if (OperatingSystem.IsAndroidVersionAtLeast(26)) _context.StartForegroundService(intent);
-                    else _context.StartService(intent);
+                    TransferForegroundService.Want(_context, true, transferring);
                     _running = true;
                     _transferring = transferring;
                     AcquireLocks();
@@ -135,7 +182,7 @@ internal sealed class TransferKeepAlive
                 else
                 {
                     _running = false;
-                    _context.StopService(intent);
+                    TransferForegroundService.Want(_context, false, transferring);
                     ReleaseLocks();
                 }
             }
@@ -155,11 +202,19 @@ internal sealed class TransferKeepAlive
         {
             if (_wifiLock == null && _context.GetSystemService(Context.WifiService) is WifiManager wifi)
             {
-#pragma warning disable CA1422 // the high-performance lock is the one that still works on older phones
-                _wifiLock = wifi.CreateWifiLock(OperatingSystem.IsAndroidVersionAtLeast(29) ? global::Android.Net.WifiMode.FullLowLatency : global::Android.Net.WifiMode.FullHighPerf, "Beam transfer");
+                // High performance keeps Wi-Fi's power saving off, also with the screen off (low latency, below, only
+                // counts while Beam is on screen); power saving slows a transfer down a lot on some phones.
+#pragma warning disable CA1422 // deprecated in Android 14 (where it does nothing), still what works with the screen off before that
+                _wifiLock = wifi.CreateWifiLock(global::Android.Net.WifiMode.FullHighPerf, "Beam transfer");
 #pragma warning restore CA1422
                 _wifiLock?.SetReferenceCounted(false);
                 _wifiLock?.Acquire();
+                if (OperatingSystem.IsAndroidVersionAtLeast(29))
+                {
+                    _lowLatencyLock = wifi.CreateWifiLock(global::Android.Net.WifiMode.FullLowLatency, "Beam transfer (on screen)");
+                    _lowLatencyLock?.SetReferenceCounted(false);
+                    _lowLatencyLock?.Acquire();
+                }
             }
 
             if (_wakeLock == null && _context.GetSystemService(Context.PowerService) is PowerManager power)
@@ -180,6 +235,7 @@ internal sealed class TransferKeepAlive
         try
         {
             if (_wifiLock?.IsHeld == true) _wifiLock.Release();
+            if (_lowLatencyLock?.IsHeld == true) _lowLatencyLock.Release();
             if (_wakeLock?.IsHeld == true) _wakeLock.Release();
         }
         catch (Exception ex)
@@ -188,6 +244,7 @@ internal sealed class TransferKeepAlive
         }
 
         _wifiLock = null;
+        _lowLatencyLock = null;
         _wakeLock = null;
     }
 }

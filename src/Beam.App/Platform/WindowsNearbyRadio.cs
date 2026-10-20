@@ -25,6 +25,12 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
     private readonly object _gate = new();
     private readonly ConcurrentDictionary<string, byte[]> _writes = new();
     private readonly ConcurrentDictionary<ulong, long> _serviceSeen = new();
+
+    /// <summary>
+    /// Whether each address heard is public or random. Phones advertise from random (private) addresses; connecting to
+    /// one as if it were public can fail or time out, so the type heard is the type connected to.
+    /// </summary>
+    private readonly ConcurrentDictionary<ulong, BluetoothAddressType> _addressTypes = new();
     private BluetoothAdapter? _adapter;
     private Radio? _radio;
     private BluetoothLEAdvertisementPublisher? _publisher;
@@ -174,17 +180,24 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
             var key = args.Session.DeviceId.Id;
             var data = request.Value.ToArray();
             // A long write arrives in pieces (offsets); the request is complete once it has all its bytes.
+            // Write events can run at the same time (async handlers): pieces are put together one at a time.
             var offset = (int)request.Offset;
-            var buffer = offset == 0 ? data : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, data);
-            if (NearbyHandshake.ExpectedLength(buffer) is { } length && buffer.Length >= length)
+            byte[]? complete = null;
+            lock (_writes)
             {
-                _writes.TryRemove(key, out _);
-                _responder?.Request(key, buffer[..length]);
+                var buffer = offset == 0 ? data : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, data);
+                if (NearbyHandshake.ExpectedLength(buffer) is { } length && buffer.Length >= length)
+                {
+                    _writes.TryRemove(key, out _);
+                    complete = buffer[..length];
+                }
+                else
+                {
+                    _writes[key] = buffer;
+                }
             }
-            else
-            {
-                _writes[key] = buffer;
-            }
+
+            if (complete != null) _responder?.Request(key, complete);
 
             if (request.Option == GattWriteOption.WriteWithResponse) request.Respond();
         }
@@ -287,6 +300,7 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
     {
         try
         {
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _addressTypes[args.BluetoothAddress] = args.BluetoothAddressType;
             if (args.Advertisement.ServiceUuids.Contains(NearbyUuids.Service)) _serviceSeen[args.BluetoothAddress] = Environment.TickCount64;
             foreach (var data in args.Advertisement.ManufacturerData)
             {
@@ -323,10 +337,23 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
     public IReadOnlyList<string> RecentServiceAddresses() =>
         _serviceSeen.Where(s => Environment.TickCount64 - s.Value < 30_000).OrderByDescending(s => s.Value).Select(s => s.Key.ToString("X12")).ToList();
 
+    /// <summary>The device at <paramref name="address"/>, as the address type it was heard with (Windows 10 2004+).</summary>
+    private Windows.Foundation.IAsyncOperation<BluetoothLEDevice> OpenDeviceAsync(ulong address)
+    {
+        if (_addressTypes.TryGetValue(address, out var type) && type != BluetoothAddressType.Unspecified
+            && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+        {
+            Log.Info($"Nearby: connecting to {address:X12} ({type} address)");
+            return BluetoothLEDevice.FromBluetoothAddressAsync(address, type);
+        }
+
+        return BluetoothLEDevice.FromBluetoothAddressAsync(address);
+    }
+
     public async Task<INearbyConnection> ConnectAsync(string address, CancellationToken cancellationToken)
     {
-        var device = await BluetoothLEDevice.FromBluetoothAddressAsync(Convert.ToUInt64(address, 16)).AsTask(cancellationToken)
-                     ?? throw new IOException("The device isn't in range.");
+        var value = Convert.ToUInt64(address, 16);
+        var device = await OpenDeviceAsync(value).AsTask(cancellationToken) ?? throw new IOException("The device isn't in range.");
         try
         {
             var services = await device.GetGattServicesForUuidAsync(NearbyUuids.Service, BluetoothCacheMode.Uncached).AsTask(cancellationToken);

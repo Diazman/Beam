@@ -400,6 +400,96 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task ALinkThatDropsAgainAfterDataGotThroughIsReconnectedEveryTime()
+    {
+        // From a real log: drops a few minutes apart, data moving in between. The second drop used to end the transfer
+        // ("ConnectionLost"), because the reconnect patience counted from the first drop ever.
+        await using var sender = new TestNode("PC");
+        await using var receiver = new TestNode("Phone");
+        sender.Node.Transfers.ReconnectPatience = TimeSpan.FromMilliseconds(500); // the drops are further apart than this
+        var file = sender.CreateFile("video.mp4", 40L * 1024 * 1024, 21);
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
+
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { file });
+        for (var drop = 1; drop <= 3; drop++)
+        {
+            var at = session.GetSnapshot().TransferredBytes;
+            await Wait.UntilAsync(() => session.State == TransferState.Transferring && session.GetSnapshot().TransferredBytes > at + 6L * 1024 * 1024,
+                because: $"data moving before drop {drop}", timeout: TimeSpan.FromSeconds(30));
+            proxy.CutAll();
+        }
+
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+        Assert.Single(receiver.Handler.Requests); // one transfer, resumed each time
+    }
+
+    [Fact]
+    public async Task AReceiverThatStaysUnreachableStillEndsTheTransferAfterThePatience()
+    {
+        // Regression: without data getting through, giving up works as before (and the transfer can be resumed).
+        await using var sender = new TestNode("PC");
+        await using var receiver = new TestNode("Phone");
+        sender.Node.Transfers.ReconnectPatience = TimeSpan.FromSeconds(2);
+        var file = sender.CreateFile("video.mp4", 40L * 1024 * 1024, 22);
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
+
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { file });
+        await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 8L * 1024 * 1024, because: "transferring");
+        proxy.Unreachable = true;
+        proxy.CutAll();
+
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Failed, session.State);
+        Assert.True(session.CanResume);
+    }
+
+    [Fact]
+    public async Task TryAgainRunsAsRunningFromTheStartAndOnlyTheRealEndLooksFinished()
+    {
+        // Whoever watches a transfer (the Direct coordinator, the UI) must not see "failed" while "Try again" runs.
+        await using var sender = new TestNode("PC");
+        await using var receiver = new TestNode("Phone");
+        sender.Node.Transfers.ReconnectPatience = TimeSpan.FromSeconds(1);
+        var file = sender.CreateFile("video.mp4", 24L * 1024 * 1024, 23);
+        using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
+        var session = sender.Node.Send(receiver.AsDevice(proxy.Port), new[] { file });
+        // Raised once the failure's event has gone to every listener (so the watcher below doesn't get that one).
+        var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.StateChanged += s =>
+        {
+            if (s.State == TransferState.Failed) failed.TrySetResult();
+        };
+        await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 4L * 1024 * 1024, because: "transferring");
+        proxy.Unreachable = true;
+        proxy.CutAll();
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal(TransferState.Failed, session.State);
+
+        var finishedSeen = new List<TransferState>();
+        void Watch(TransferSession s)
+        {
+            if (s.IsFinished) lock (finishedSeen) finishedSeen.Add(s.State);
+        }
+
+        session.StateChanged += Watch;
+        session.PathChanged += Watch;
+        proxy.Unreachable = false;
+        session.Resume();
+        Assert.False(session.IsFinished);
+        await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(60));
+
+        Assert.Equal(TransferState.Completed, session.State);
+        await Wait.UntilAsync(() =>
+        {
+            lock (finishedSeen) return finishedSeen.Count > 0;
+        }, because: "the end reached the watcher");
+        lock (finishedSeen) Assert.Equal(new[] { TransferState.Completed }, finishedSeen.Distinct());
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "video.mp4")));
+    }
+
+    [Fact]
     public async Task ReconnectTakesOverWhenTheReceiverHasNotNoticedTheOldConnectionDied()
     {
         // The phone dropped off the computer's network and came back: the computer's side of the old connection

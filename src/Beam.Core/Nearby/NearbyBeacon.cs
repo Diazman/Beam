@@ -88,4 +88,7 @@ public enum NearbyBeaconFlags : byte
 
     /// <summary>Can start its own network (otherwise a sender needs a shared network with it).</summary>
     CanHost = 4,
+
+    /// <summary>Takes sender-hosted direct sessions (joins the sender's network when it sends); older versions don't.</summary>
+    SenderHosted = 8,
 }

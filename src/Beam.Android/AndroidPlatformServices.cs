@@ -261,8 +261,8 @@ internal sealed class AndroidPlatformServices : IPlatformServices
 
             var send = new Intent(Intent.ActionSend);
             send.SetType("text/plain");
-            send.PutExtra(Intent.ExtraSubject, $"Beam log ({Build.Manufacturer} {Build.Model}, Android {Build.VERSION.Release}, Beam {Core.AppInfo.Version})");
-            send.PutExtra(Intent.ExtraText, $"Beam {Core.AppInfo.Version} · {Build.Manufacturer} {Build.Model} · Android {Build.VERSION.Release}\n\n{text}");
+            send.PutExtra(Intent.ExtraSubject, $"Beam log ({Build.Manufacturer} {Build.Model}, Android {Build.VERSION.Release}, Beam {Core.AppInfo.Version}, build {Core.AppInfo.Build})");
+            send.PutExtra(Intent.ExtraText, $"Beam {Core.AppInfo.Version} (build {Core.AppInfo.Build}) · {Build.Manufacturer} {Build.Model} · Android {Build.VERSION.Release}\n\n{text}");
             Start(Intent.CreateChooser(send, (string?)null)!);
         }
         catch (Exception ex)

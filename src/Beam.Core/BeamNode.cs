@@ -14,6 +14,9 @@ using Beam.Core.Localization;
 
 namespace Beam.Core;
 
+/// <summary>Where a listed device can be reached from here (see <see cref="BeamNode.ChannelsOf"/>).</summary>
+public readonly record struct DeviceChannels(bool LocalNetwork, bool Bluetooth);
+
 public sealed class BeamNodeOptions
 {
     public required AppDataPaths Paths { get; init; }
@@ -122,19 +125,40 @@ public sealed class BeamNode : IAsyncDisposable
     {
         if (_started) return;
         _started = true;
-        Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
+        Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} (build {AppInfo.Build}) as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
         Transfers.Start(_options.TransferPort);
         Discovery.Start();
         Direct.Start();
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
-    /// <summary>Starts sending to one device.</summary>
-    public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths)
+    /// <summary>Starts sending to one device over the shared network (Same Network: the usual path).</summary>
+    public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths) => Send(device, paths, ConnectionMethod.SameNetwork);
+
+    /// <summary>
+    /// Starts sending to one device in <paramref name="mode"/>. Direct: this device starts its direct network, the
+    /// receiver joins it, and the files go only over that verified link (a failure is reported, never sent another way).
+    /// </summary>
+    public TransferSession Send(DeviceInfo device, IReadOnlyList<string> paths, ConnectionMethod mode)
     {
         if (paths.Count == 0) throw new ArgumentException("Nothing to send.", nameof(paths));
-        return Transfers.Send(device, paths, () => Direct.Order(Discovery.Find(device.Id) ?? device));
+        return Direct.Send(device, paths, mode);
     }
+
+    /// <summary>
+    /// The user chose to send a failed Direct transfer over the shared network instead: a separate Same Network transfer
+    /// of the same files. Throws <see cref="TransferException"/> when the device isn't on this network.
+    /// </summary>
+    public TransferSession SendOverNetworkInstead(TransferSession failedDirect) => Direct.SendOverNetworkInstead(failedDirect);
+
+    /// <summary>
+    /// How <paramref name="device"/> can be reached for setting up a direct session right now: on the shared network
+    /// (it announced an address there, or was added by address), over Bluetooth (its beacon was heard just now), or both.
+    /// One entry per device id either way; whether it really is that device is checked when connecting.
+    /// </summary>
+    public DeviceChannels ChannelsOf(DeviceInfo device) => new(
+        !Beam.Core.Nearby.NearbyService.IsPlaceholder(device) && device.Endpoints.Any(e => !Transfers.IsDirectAddress(e.Address)),
+        Nearby.IsNearby(device.Id));
 
     /// <summary>
     /// This device's pairing code (shown as a QR code on the PC): who it is, where it is, and its direct network,
@@ -333,7 +357,6 @@ public sealed class BeamNode : IAsyncDisposable
         Discovery.Discoverable = settings.Discoverable;
         Discovery.AnnounceNow();
         if (!settings.AllowDirectSenders) Direct.OnDirectSendersNotAllowed();
-        else Direct.OnDirectSendersAllowed();
         if (settings.Connection != _connection)
         {
             _connection = settings.Connection;
@@ -428,5 +451,8 @@ public sealed class BeamNode : IAsyncDisposable
         public Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken) =>
             Inner?.ResolveConflictsAsync(request, conflicts, cancellationToken)
             ?? Task.FromResult<IReadOnlyList<ConflictAction>>(conflicts.Select(_ => ConflictAction.KeepBoth).ToList());
+
+        public Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken) =>
+            Inner?.ApproveDirectConnectionAsync(request, cancellationToken) ?? Task.FromResult(false);
     }
 }

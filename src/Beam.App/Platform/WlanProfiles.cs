@@ -26,7 +26,7 @@ internal static class WlanProfiles
                 return false;
             }
 
-            var (connected, connectOutput) = await NetshAsync($"wlan connect name=\"{Quote(ssid)}\" ssid=\"{Quote(ssid)}\"", cancellationToken).ConfigureAwait(false);
+            var (connected, connectOutput) = await NetshAsync($"wlan connect name=\"{Quote(ProfileName(ssid))}\" ssid=\"{Quote(ssid)}\"", cancellationToken).ConfigureAwait(false);
             if (connected != 0) Log.Warn($"Wi-Fi: connecting to {ssid} by name failed ({connected}): {connectOutput.Trim()}");
             return connected == 0;
         }
@@ -60,7 +60,7 @@ internal static class WlanProfiles
         try
         {
             await Task.Delay(3000).ConfigureAwait(false); // after Windows has moved on to the previous network
-            await NetshAsync($"wlan delete profile name=\"{Quote(ssid)}\"", CancellationToken.None).ConfigureAwait(false);
+            await NetshAsync($"wlan delete profile name=\"{Quote(ProfileName(ssid))}\"", CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -68,15 +68,22 @@ internal static class WlanProfiles
         }
     }
 
+    /// <summary>
+    /// The profile's own name: not the network's, so it never collides with a profile Windows saved for that network
+    /// earlier for all users (joining through Windows' Wi-Fi API does that), which a per-user profile can't replace.
+    /// </summary>
+    internal static string ProfileName(string ssid) => "Beam " + ssid;
+
     internal static string ProfileXml(string ssid, string passphrase)
     {
-        var name = SecurityElement.Escape(ssid);
+        var name = SecurityElement.Escape(ProfileName(ssid));
+        var network = SecurityElement.Escape(ssid);
         var key = SecurityElement.Escape(passphrase);
         return $"""
             <?xml version="1.0"?>
             <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
               <name>{name}</name>
-              <SSIDConfig><SSID><name>{name}</name></SSID></SSIDConfig>
+              <SSIDConfig><SSID><name>{network}</name></SSID></SSIDConfig>
               <connectionType>ESS</connectionType>
               <connectionMode>manual</connectionMode>
               <MSM>

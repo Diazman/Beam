@@ -21,6 +21,7 @@ internal sealed class OutgoingTransfer
     private readonly TransferSession _session;
     private readonly IReadOnlyList<string> _sourcePaths;
     private readonly Func<DeviceInfo> _target;
+    private readonly SendOptions? _options;
     private Manifest? _manifest;
     private List<OfferEntry>? _offer;
     private bool _accepted;
@@ -29,8 +30,10 @@ internal sealed class OutgoingTransfer
     /// <summary>Until when (TickCount64) reconnect failures don't count: the user is switching the connection method.</summary>
     private long _switchingUntil;
 
-    public OutgoingTransfer(TransferService service, TransferSession session, IReadOnlyList<string> sourcePaths, Func<DeviceInfo> target)
+    public OutgoingTransfer(TransferService service, TransferSession session, IReadOnlyList<string> sourcePaths, Func<DeviceInfo> target,
+        SendOptions? options = null)
     {
+        _options = options;
         _service = service;
         _session = session;
         _sourcePaths = sourcePaths;
@@ -41,6 +44,9 @@ internal sealed class OutgoingTransfer
     public void Start()
     {
         if (Interlocked.Exchange(ref _running, 1) == 1) return;
+        // "Try again" after a failure: running again from now on. (It used to read "failed" until data flowed, and
+        // whoever watched the transfer took that for the end of the new run.)
+        if (_session.IsFinished) _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
         // RunAsync handles every exception and always ends in Finish(), which clears _running,
         // or in a completed transfer (which can't be resumed).
         _ = Task.Run(RunAsync);
@@ -78,6 +84,7 @@ internal sealed class OutgoingTransfer
 
             var failures = 0;
             long firstFailure = 0;
+            long bytesAtFailure = -1;
             while (true)
             {
                 token.ThrowIfCancellationRequested();
@@ -91,13 +98,19 @@ internal sealed class OutgoingTransfer
                     // While switching between Wi-Fi and a direct link the devices need a moment to find each
                     // other on the new path: keep trying for a while instead of giving up after a few attempts.
                     var switching = Environment.TickCount64 < Volatile.Read(ref _switchingUntil);
+                    // A connection that moved data since the last failure: this is a new drop, not the same one still
+                    // failing, so the count (and the patience below) starts over. Without this a long transfer whose
+                    // link drops every few minutes gave up at the second drop.
+                    var bytes = _session.GetSnapshot().TransferredBytes;
+                    if (!switching && failures > 0 && bytes > bytesAtFailure) failures = 0;
+                    if (!switching) bytesAtFailure = bytes;
                     if (!switching) failures++;
                     if (failures == 1 && !switching) firstFailure = Environment.TickCount64;
                     Log.Warn($"Transfer {_session.Id} to {PeerName}: attempt failed{(switching ? " while switching connection" : $" ({failures})")} ({ex.GetType().Name}: {ex.Message})");
                     // Before the other side accepted, give up quickly. A running transfer keeps trying for a while: the
                     // devices may be re-joining a direct network, walking back into Wi-Fi range or waking up.
                     if (!_accepted && failures >= 2) throw;
-                    if (_accepted && failures >= 2 && Environment.TickCount64 - firstFailure > (long)ReconnectPatience.TotalMilliseconds) throw;
+                    if (_accepted && failures >= 2 && Environment.TickCount64 - firstFailure > (long)_service.ReconnectPatience.TotalMilliseconds) throw;
                     _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
                     if (!switching) _session.SetPath(TransferPath.Unknown);
                     await Task.Delay(switching ? TimeSpan.FromSeconds(1.5) : Backoff(failures), token).ConfigureAwait(false);
@@ -132,8 +145,6 @@ internal sealed class OutgoingTransfer
         _session.SetState(state, error);
     }
 
-    /// <summary>How long a running transfer keeps trying to reconnect before it fails (it can still be resumed later).</summary>
-    internal static TimeSpan ReconnectPatience { get; set; } = TimeSpan.FromMinutes(3);
 
     private static TimeSpan Backoff(int failures) => TimeSpan.FromSeconds(failures switch
     {
@@ -145,9 +156,10 @@ internal sealed class OutgoingTransfer
 
     private async Task RunAttemptAsync(CancellationToken token)
     {
-        if (_service.BeforeConnect is { } prepare) await prepare(_target(), token).ConfigureAwait(false);
-        var target = _target();
+        // Connecting covers the preparation too (a direct session's setup, whose stage the session itself reports).
         if (!_accepted) _session.SetState(TransferState.Connecting);
+        if ((_options?.BeforeConnect ?? _service.BeforeConnect) is { } prepare) await prepare(_target(), token).ConfigureAwait(false);
+        var target = _target();
 
         await using var connection = await SecureTransport.ConnectAsync(
             _service.Identity,
@@ -155,7 +167,22 @@ internal sealed class OutgoingTransfer
             target.Endpoints,
             string.IsNullOrEmpty(target.Fingerprint) ? null : target.Fingerprint,
             PeerName,
-            token).ConfigureAwait(false);
+            token,
+            _options?.LocalAddressFor).ConfigureAwait(false);
+
+        // A direct session: nothing (not even the list of files) goes anywhere but the verified direct endpoint.
+        if (_options is { RequiredEndpoint: { } required } && _options.RequiresEndpoint?.Invoke() != false)
+        {
+            var allowed = required();
+            if (allowed == null || !connection.RemoteEndPoint.Address.Equals(allowed.Address) || connection.RemoteEndPoint.Port != allowed.Port)
+            {
+                Log.Warn($"Transfer {_session.Id} to {PeerName}: connected at {connection.RemoteEndPoint}, not the verified direct endpoint " +
+                         $"{allowed?.ToString() ?? "(none)"}; nothing sent");
+                throw new TransferException(TransferErrorKind.DirectFailed,
+                    L.T("The direct connection to {0} couldn't be verified, so nothing was sent.", PeerName),
+                    $"connected at {connection.RemoteEndPoint}, verified {allowed?.ToString() ?? "none"}");
+            }
+        }
 
         await connection.Channel.SendAsync(FrameType.Offer,
             new OfferMessage { TransferId = _session.Id, Entries = _offer!, Resume = _accepted }, token).ConfigureAwait(false);

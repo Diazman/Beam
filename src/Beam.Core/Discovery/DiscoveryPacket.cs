@@ -43,7 +43,7 @@ internal sealed class DiscoveryPacket
     [JsonPropertyName("ver")]
     public string AppVersion { get; set; } = "";
 
-    /// <summary>Direct Wi-Fi link support: "host", "join" or "host,join"; empty when unsupported.</summary>
+    /// <summary>Direct Wi-Fi link support and traits (<see cref="Direct.DirectRolesText"/>); empty when unsupported.</summary>
     [JsonPropertyName("direct")]
     public string Direct { get; set; } = "";
 
@@ -72,7 +72,7 @@ internal sealed class DiscoveryPacket
             packet.Platform = Truncate(packet.Platform, 16);
             packet.Kind = Truncate(packet.Kind, 16);
             packet.AppVersion = Truncate(packet.AppVersion, 32);
-            packet.Direct = Truncate(packet.Direct, 16);
+            packet.Direct = Truncate(packet.Direct, 64); // "host,joinpc,wired,share,rx,shost" is longer than the 16 kept before
             return packet;
         }
         catch (JsonException)

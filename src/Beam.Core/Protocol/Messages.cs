@@ -56,6 +56,34 @@ public static class DirectActions
 
     /// <summary>"I no longer need the direct link."</summary>
     public const string Stop = "stop";
+
+    // Sender-hosted sessions (one per receiver, identified by SessionId; later messages carry its Nonce):
+
+    /// <summary>Sender → receiver (control channel): "will you take a direct session from me?" Nothing is started yet.</summary>
+    public const string Propose = "propose";
+
+    /// <summary>Sender → receiver (control channel): this session's network name and passphrase; join it.</summary>
+    public const string Offer = "offer";
+
+    /// <summary>Receiver → sender, over the direct network: "I joined; my Beam is at this port."</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Sender → receiver, over the direct network: confirms both ends of the route before any file data.</summary>
+    public const string Verify = "verify";
+
+    /// <summary>Either side: the session is over (done, cancelled or failed); leave or stop what was set up for it.</summary>
+    public const string End = "end";
+
+    /// <summary>Receiver → sender (control channel): joining failed at <see cref="DirectRequestMessage.Stage"/>.</summary>
+    public const string Failed = "failed";
+
+    /// <summary>
+    /// Sender that can't start a network (an iPhone) → receiver (a computer announcing
+    /// <see cref="Direct.DirectRoles.HostsForSenders"/>), over Beam's TLS connection after it accepted the proposal:
+    /// "start your network for this session and tell me how to join it". Answered with its name, passphrase and Beam port; the sender joins it and verifies
+    /// the receiver there as usual (<see cref="Verify"/>).
+    /// </summary>
+    public const string HostForSender = "hostforsender";
 }
 
 public sealed class DirectRequestMessage
@@ -68,6 +96,49 @@ public sealed class DirectRequestMessage
 
     /// <summary>For <see cref="DirectActions.Prefer"/>: "direct" or "network".</summary>
     public string? Method { get; set; }
+
+    /// <summary>Sender-hosted sessions: which session (128 random bits, hex).</summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>Sender-hosted sessions: proves a message belongs to the current setup of the session.</summary>
+    public string? Nonce { get; set; }
+
+    /// <summary>Propose/Offer: the device this is meant for (a receiver refuses one meant for another device).</summary>
+    public string? ReceiverId { get; set; }
+
+    /// <summary>Over Bluetooth (no TLS): who the sender says it is; checked later on the direct network's TLS connection.</summary>
+    public string? SenderId { get; set; }
+
+    public string? SenderName { get; set; }
+
+    public string? SenderFingerprint { get; set; }
+
+    /// <summary>Offer: how long the details are good for, in seconds (relative, so the devices' clocks don't matter).</summary>
+    public int TtlSeconds { get; set; }
+
+    /// <summary>Offer: the sender is a computer (phones join its network as ordinary Wi-Fi).</summary>
+    public bool HostIsComputer { get; set; }
+
+    /// <summary>Offer: the sender's Beam port; Ready: the receiver's Beam port.</summary>
+    public int Port { get; set; }
+
+    /// <summary>
+    /// Offer: the sender's address on its network, for a receiver that can't read the network's gateway (iOS). Not
+    /// trusted for anything else: the receiver reports in there over TLS, checked against the sender's certificate.
+    /// </summary>
+    public string? HostAddress { get; set; }
+
+    /// <summary>Failed: where it failed (e.g. "join").</summary>
+    public string? Stage { get; set; }
+
+    /// <summary>Failed/End: why, for the other device's user.</summary>
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// Propose/Offer setting a lost link up again: made with the key the receiver gave on the last verified session
+    /// (<see cref="Direct.ReconnectProof"/>), so the receiver needn't ask its user again.
+    /// </summary>
+    public string? Proof { get; set; }
 }
 
 public sealed class DirectResponseMessage
@@ -86,6 +157,15 @@ public sealed class DirectResponseMessage
 
     /// <summary>For a join: the joined device's own address on the direct network, so the host can reach it right away.</summary>
     public string? Address { get; set; }
+
+    /// <summary>Verify: the receiver's key for setting a lost link up again (<see cref="Direct.ReconnectProof"/>); only over TLS.</summary>
+    public string? ReconnectKey { get; set; }
+
+    /// <summary>HostForSender: the receiver's Beam port on its network.</summary>
+    public int Port { get; set; }
+
+    /// <summary>HostForSender: the network shares the receiver's internet (a phone stays on it).</summary>
+    public bool SharesInternet { get; set; }
 }
 
 /// <summary>Reasons sent in <see cref="OfferResponseMessage"/> and <see cref="CancelMessage"/>.</summary>

@@ -35,6 +35,16 @@ public static class AppInfo
         ?? typeof(AppInfo).Assembly.GetName().Version?.ToString(3)
         ?? "1.0.0";
 
+    /// <summary>
+    /// The commit this build was made from (the part after "+" in the informational version, first 12 characters), or
+    /// "unknown". Only for logs: two test builds of one version tell apart by it.
+    /// </summary>
+    public static string Build { get; } =
+        typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion is { } full
+        && full.IndexOf('+') is var plus and >= 0 && plus + 1 < full.Length
+            ? full[(plus + 1)..Math.Min(full.Length, plus + 13)]
+            : "unknown";
+
     public static string Platform =>
         OperatingSystem.IsWindows() ? "windows" :
         OperatingSystem.IsMacOS() ? "macos" :

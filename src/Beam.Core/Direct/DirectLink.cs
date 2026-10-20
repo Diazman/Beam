@@ -15,8 +15,10 @@ public enum DirectRoles
     Join = 2,
 
     /// <summary>
-    /// Can join another computer's direct network, but not a phone's (Windows: its Wi-Fi joins the other PC's network).
-    /// Announced as its own word, so older Beam versions on phones see only "host" and keep joining the PC.
+    /// Joins a direct network as an ordinary Wi-Fi client (Windows: its Wi-Fi adapter leaves the current Wi-Fi and joins
+    /// the WPA2 network by name and passphrase). That works for another PC's network and for a phone's Wi-Fi Direct group,
+    /// which accepts such "legacy" clients (Android 10+ groups created with a name and passphrase). Announced as its own
+    /// word ("joinpc") so Beam 1.5.3 and older on phones keep their old behavior.
     /// </summary>
     JoinComputers = 4,
 
@@ -34,25 +36,59 @@ public enum DirectRoles
     /// </summary>
     Receiving = 32,
 
+    /// <summary>
+    /// Speaks the sender-hosted session protocol (propose, offer, ready, verify, end): the sender starts its network when
+    /// Send is pressed and this device joins it. Devices without it only know the older receiver-hosted requests.
+    /// </summary>
+    SenderHosted = 64,
+
+    /// <summary>
+    /// A computer that starts its network for a sender that can't start one itself (an iPhone: iOS doesn't let apps
+    /// host a Wi-Fi network), which joins it (<see cref="Protocol.DirectActions.HostForSender"/>).
+    /// </summary>
+    HostsForSenders = 128,
+}
+
+/// <summary>
+/// A phone's link that can host as a Wi-Fi hotspot of its own (Android's local-only hotspot: an ordinary access point
+/// beside the phone's Wi-Fi) rather than a Wi-Fi Direct group.
+/// </summary>
+public interface IAccessPointHosting
+{
+    /// <summary>
+    /// Set before a network is started: the next one should be the hotspot when this phone can run it beside its own
+    /// Wi-Fi, because a computer joins it (a PC's Wi-Fi adapter dropped off a phone's Wi-Fi Direct group every few
+    /// minutes). Otherwise the usual Wi-Fi Direct group.
+    /// </summary>
+    bool PreferAccessPoint { get; set; }
 }
 
 /// <summary>A direct link that can tell whether its network would share this device's internet (Windows' hotspot).</summary>
 public interface IInternetSharing
 {
     bool CanShareInternet { get; }
+
+    /// <summary>
+    /// Set before a network is started: the next one should share this device's internet when it can (Windows' Mobile
+    /// hotspot), because a phone will join it. A phone that can be on only one Wi-Fi network leaves a network without
+    /// internet after a while; one with internet it keeps. Otherwise the usual network (Wi-Fi Direct).
+    /// </summary>
+    bool PreferInternetSharing { get; set; }
 }
 
 public static class DirectRolesText
 {
     public static string Format(DirectRoles roles)
     {
-        var parts = new List<string>(6);
+        var parts = new List<string>(8);
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
         if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
         if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
+        if (roles.HasFlag(DirectRoles.SenderHosted)) parts.Add("shost");
+        if (roles.HasFlag(DirectRoles.HostsForSenders)) parts.Add("rxhost");
         return string.Join(",", parts);
     }
 
@@ -67,6 +103,8 @@ public static class DirectRolesText
             else if (part == "wired") roles |= DirectRoles.Wired;
             else if (part == "share") roles |= DirectRoles.SharesInternet;
             else if (part == "rx") roles |= DirectRoles.Receiving;
+            else if (part == "shost") roles |= DirectRoles.SenderHosted;
+            else if (part == "rxhost") roles |= DirectRoles.HostsForSenders;
         }
 
         return roles;
@@ -87,6 +125,15 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
     /// another Wi-Fi. Not part of the network's identity.
     /// </summary>
     public bool SharesInternet { get; init; }
+
+    /// <summary>
+    /// The network is a phone's hotspot (an ordinary access point, not a Wi-Fi Direct group): devices join it as ordinary
+    /// Wi-Fi. Not part of the network's identity.
+    /// </summary>
+    public bool IsAccessPoint { get; init; }
+
+    /// <summary>The host's address on the network, when known beforehand (offered by the sender). Not part of the identity.</summary>
+    public IPAddress? HostAddress { get; init; }
 
     public bool Equals(DirectNetwork? other) => other is not null && Ssid == other.Ssid && Passphrase == other.Passphrase;
 
@@ -110,6 +157,12 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
 
         return new DirectNetwork(name.ToString().TrimEnd(' ', '-'), Random(12));
     }
+
+    /// <summary>
+    /// The network for a send's direct sessions: this device's usual name (a phone that approved joining it before may
+    /// connect without asking again), with a passphrase made just for it (about 115 bits), useless once it goes off.
+    /// </summary>
+    public static DirectNetwork ForSession(string ssid) => new(ssid, Random(20));
 
     private static string Random(int length)
     {
@@ -163,6 +216,22 @@ public interface IDirectLinkEvents
     event Action? Lost;
 }
 
+/// <summary>
+/// A link whose Wi-Fi the user may have switched off, and that can't switch it on by itself (Android 10+ doesn't let
+/// apps): it can only show the system's Wi-Fi panel and wait for the user.
+/// </summary>
+public interface IDirectRadio
+{
+    /// <summary>False when Wi-Fi is switched off; null when that can't be told.</summary>
+    bool? IsWifiEnabled { get; }
+
+    /// <summary>
+    /// Shows the system's Wi-Fi panel (when Beam is in front) and waits up to <paramref name="wait"/> for Wi-Fi to be on
+    /// and ready. True when it is.
+    /// </summary>
+    Task<bool> RequestWifiOnAsync(TimeSpan wait, CancellationToken cancellationToken);
+}
+
 /// <summary>A link that can also list the Wi-Fi networks in range (phones: to notice a paired PC's direct network).</summary>
 public interface IDirectNetworkScanner
 {
@@ -172,12 +241,31 @@ public interface IDirectNetworkScanner
 
 public sealed class DirectLinkException : Exception
 {
-    public DirectLinkException(string message, Exception? inner = null, bool declined = false)
+    public DirectLinkException(string message, Exception? inner = null, bool declined = false, bool transient = false)
         : base(message, inner)
     {
         Declined = declined;
+        Transient = transient;
     }
 
     /// <summary>The other device's user said no (so don't try another way that would ask again).</summary>
     public bool Declined { get; }
+
+    /// <summary>
+    /// The other device couldn't be reached just now (e.g. a phone between networks after its direct link dropped):
+    /// worth trying again shortly when recovering a running transfer. Never set for refusals or identity problems.
+    /// </summary>
+    public bool Transient { get; }
+
+    /// <summary>This device's Wi-Fi is switched off (the user has to turn it on; Beam may open the system's Wi-Fi panel).</summary>
+    public bool WifiOff { get; init; }
+
+    /// <summary>
+    /// The receiver couldn't join the network it was given (it said so, or never reported in): not a cancellation, nor
+    /// a dropped control channel.
+    /// </summary>
+    public bool JoinFailed { get; init; }
+
+    /// <summary>The receiver couldn't start its network for this sender, or this device couldn't join or reach it.</summary>
+    public bool ReceiverHostFailed { get; init; }
 }

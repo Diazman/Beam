@@ -79,6 +79,8 @@ public sealed class TransferSession
     private Action? _interrupt;
     private TransferPath _path;
     private bool _switchingPath;
+    private Settings.ConnectionMethod _mode;
+    private Direct.DirectSession? _directSession;
 
     internal TransferSession(string id, TransferDirection direction, string peerId, string peerName, string peerFingerprint)
     {
@@ -119,6 +121,60 @@ public sealed class TransferSession
 
     /// <summary>Receiver: full local paths of the top-level items that were saved.</summary>
     public IReadOnlyList<string> SavedRootPaths { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Sender: how the user chose to send this (the shared network, or Direct, where files only go over a verified direct
+    /// link). Changes only when the user switches it.
+    /// </summary>
+    public Settings.ConnectionMethod Mode
+    {
+        get
+        {
+            lock (_gate) return _mode;
+        }
+    }
+
+    /// <summary>Sender, Direct mode: the direct session behind this transfer (its stage, or where it failed).</summary>
+    public Direct.DirectSession? DirectSession
+    {
+        get
+        {
+            lock (_gate) return _directSession;
+        }
+    }
+
+    /// <summary>Sender: what was chosen to send (so the user can send it another way after a failure).</summary>
+    public IReadOnlyList<string> SourcePaths { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>Raised (on a background thread) when <see cref="Mode"/> or <see cref="DirectSession"/>'s state changes.</summary>
+    public event Action<TransferSession>? DirectChanged;
+
+    internal void SetMode(Settings.ConnectionMethod mode, Direct.DirectSession? direct)
+    {
+        Direct.DirectSession? previous;
+        lock (_gate)
+        {
+            previous = _directSession;
+            _mode = mode;
+            _directSession = direct;
+        }
+
+        if (previous != null && !ReferenceEquals(previous, direct)) previous.Changed -= OnDirectChanged;
+        if (direct != null && !ReferenceEquals(previous, direct)) direct.Changed += OnDirectChanged;
+        OnDirectChanged(direct);
+    }
+
+    private void OnDirectChanged(Direct.DirectSession? _)
+    {
+        try
+        {
+            DirectChanged?.Invoke(this);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error("DirectChanged handler threw", ex);
+        }
+    }
 
     /// <summary>The connection the transfer is running over right now (Unknown while not connected).</summary>
     public TransferPath Path

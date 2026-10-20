@@ -51,11 +51,12 @@ Wi-Fi, simli tarmoq va Windows mobil hotspoti orqali ishlaydi. Agar tarmoq avtom
 bloklasa, Beam boshqa kompyuterda koʻrsatgan manzil orqali ulaning.
 
 ## Ushbu versiyadagi yangiliklar (What's new in this version)
-Versiya 1.4
+Versiya 1.6
 • Beam endi butunlay bepul: tezlik va yuborishlar soni boʻyicha hech qanday cheklov yoʻq.
-• Yangi «Telefon» sahifasi: Android uchun Beam ilovasiga bitta kod (bir marta juftlanadi, keyin Wi-Fi boʻlmasa ham bir-birini topadi) yoki istalgan telefonni brauzeri orqali ulang.
-• Toʻgʻridan-toʻgʻri ulanish (beta): kompyuter va telefon routersiz bir-biriga ulanadi.
-• Koʻplab tuzatishlar va kichik yaxshilanishlar.
+• Telefonlar: Android uchun Beam ilovasi kod orqali bir marta juftlanadi; boshqa telefonlar veb-brauzerdan foydalanishi mumkin.
+• Toʻgʻridan-toʻgʻri ulanish: kompyuter va telefon (yoki ikki kompyuter) routersiz bir-biriga ulanadi va umumiy Wi-Fi boʻlmasa, bir-birini Bluetooth orqali topadi.
+• Ishonchliroq toʻgʻridan-toʻgʻri uzatish: telefonga yuborayotgan kompyuter internetini Mobil hotspot orqali ulashadi, shuning uchun telefon uzilib qolmaydi; uzilgan ulanish qayta tiklanadi va uzatish toʻxtagan joyidan davom etadi.
+• Tezroq uzatish va koʻplab tuzatishlar.
 
 ## Mahsulot imkoniyatlari (Product features)
 Kodni skanerlab istalgan telefonga yuboring va undan qabul qiling (ilovasiz)

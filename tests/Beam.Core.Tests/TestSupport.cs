@@ -74,6 +74,21 @@ public sealed class TestHandler : IIncomingTransferHandler
         return Decide(request);
     }
 
+    /// <summary>What the receiving "user" answers to "join this unpaired sender's direct network?".</summary>
+    public Func<IncomingDirectRequest, bool> ApproveDirect { get; set; } = _ => true;
+
+    public List<IncomingDirectRequest> DirectRequests { get; } = new();
+
+    /// <summary>How long the "user" takes to answer.</summary>
+    public TimeSpan ApproveDirectAfter { get; set; }
+
+    public async Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken)
+    {
+        lock (DirectRequests) DirectRequests.Add(request);
+        if (ApproveDirectAfter > TimeSpan.Zero) await Task.Delay(ApproveDirectAfter, cancellationToken);
+        return ApproveDirect(request);
+    }
+
     public Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken)
     {
         lock (Conflicts) Conflicts.Add(conflicts);
@@ -153,6 +168,15 @@ public sealed class TestNode : IAsyncDisposable
         TestFiles.Write(path, size, seed);
         return path;
     }
+
+    /// <summary>Pairs: this device trusts <paramref name="other"/> (as after scanning its code or "always accept").</summary>
+    public void Trust(TestNode other) =>
+        Node.Settings.Update(s => s.TrustedDevices.Add(new Settings.TrustedDevice
+        {
+            Fingerprint = other.Node.Identity.Fingerprint,
+            DeviceId = other.Node.Identity.DeviceId,
+            Name = other.Node.Settings.Current.DeviceName,
+        }));
 
     public string SourcePath(string relativePath) => Path.Combine(Root, "source", relativePath.Replace('/', Path.DirectorySeparatorChar));
 
@@ -373,6 +397,10 @@ public sealed class FlakyProxy : IDisposable
 public sealed class SlowFiles : Files.IExternalFiles
 {
     private readonly Dictionary<string, string> _files = new();
+    private long _bytesRead;
+
+    /// <summary>Bytes read from the files so far (a transfer that started over reads them again).</summary>
+    public long BytesRead => Interlocked.Read(ref _bytesRead);
 
     public string Add(string path)
     {
@@ -386,15 +414,20 @@ public sealed class SlowFiles : Files.IExternalFiles
         file = null;
         if (!_files.TryGetValue(address, out var path)) return false;
         var info = new FileInfo(path);
-        file = new Files.ExternalFile(info.Name, info.Length, info.LastWriteTimeUtc, () => new SlowStream(File.OpenRead(path)));
+        file = new Files.ExternalFile(info.Name, info.Length, info.LastWriteTimeUtc, () => new SlowStream(File.OpenRead(path), this));
         return true;
     }
 
     private sealed class SlowStream : Stream
     {
         private readonly Stream _inner;
+        private readonly SlowFiles _owner;
 
-        public SlowStream(Stream inner) => _inner = inner;
+        public SlowStream(Stream inner, SlowFiles owner)
+        {
+            _inner = inner;
+            _owner = owner;
+        }
 
         public override bool CanRead => true;
         public override bool CanSeek => _inner.CanSeek;
@@ -409,7 +442,9 @@ public sealed class SlowFiles : Files.IExternalFiles
         public override int Read(byte[] buffer, int offset, int count)
         {
             Thread.Sleep(6);
-            return _inner.Read(buffer, offset, Math.Min(count, 64 * 1024));
+            var read = _inner.Read(buffer, offset, Math.Min(count, 64 * 1024));
+            Interlocked.Add(ref _owner._bytesRead, read);
+            return read;
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)

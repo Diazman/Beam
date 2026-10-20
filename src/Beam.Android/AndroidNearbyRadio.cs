@@ -158,16 +158,22 @@ internal sealed class AndroidNearbyRadio : INearbyRadio
     private void OnWrite(BluetoothDevice device, int requestId, bool prepared, bool responseNeeded, int offset, byte[] value)
     {
         var key = device.Address ?? "";
-        var buffer = offset == 0 && !prepared ? value : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, value);
-        if (prepared) _writes[key] = buffer; // completed by OnExecuteWrite
-        else Deliver(key, buffer);
+        // Binder threads can deliver callbacks at the same time: pieces of a long write are put together one at a time.
+        lock (_writes)
+        {
+            var buffer = offset == 0 && !prepared ? value : Place(_writes.GetValueOrDefault(key) ?? Array.Empty<byte>(), offset, value);
+            if (prepared) _writes[key] = buffer; // completed by OnExecuteWrite
+            else Deliver(key, buffer);
+        }
+
         if (responseNeeded) _server?.SendResponse(device, requestId, GattStatus.Success, offset, value);
     }
 
     private void OnExecuteWrite(BluetoothDevice device, int requestId, bool execute)
     {
         var key = device.Address ?? "";
-        if (_writes.TryRemove(key, out var buffer) && execute) Deliver(key, buffer);
+        lock (_writes)
+            if (_writes.TryRemove(key, out var buffer) && execute) Deliver(key, buffer);
         _server?.SendResponse(device, requestId, GattStatus.Success, 0, null);
     }
 

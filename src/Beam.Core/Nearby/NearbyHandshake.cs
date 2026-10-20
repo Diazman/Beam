@@ -29,6 +29,9 @@ public static class NearbyHandshake
 
         /// <summary>The receiver joined the sender's network; the text is its address there (may be empty).</summary>
         Joined = 3,
+
+        /// <summary>The receiver accepts the proposed direct session (sender-hosted); the text is empty.</summary>
+        Accepted = 4,
     }
 
     /// <summary>What the sender asks for with its request.</summary>
@@ -83,7 +86,7 @@ public static class NearbyHandshake
         {
             if (response.Length < 2 || response[0] != Version) throw new CryptographicException("Not a Beam handshake answer.");
             var status = (Status)response[1];
-            if (status == Status.Joined) return (status, Encoding.UTF8.GetString(response, 2, response.Length - 2));
+            if (status is Status.Joined or Status.Accepted) return (status, Encoding.UTF8.GetString(response, 2, response.Length - 2));
             if (status != Status.Ready) return (status, response.Length > 2 ? Encoding.UTF8.GetString(response, 2, response.Length - 2) : null);
             if (response.Length < 2 + PointLength + IvLength + 16 + MacLength) throw new CryptographicException("Answer too short.");
             var theirs = response.AsSpan(2, PointLength).ToArray();
@@ -138,12 +141,17 @@ public static class NearbyHandshake
     public static byte[] Working() => new[] { Version, (byte)Status.Working };
 
     /// <summary>The receiver joined the sender's network and is at <paramref name="address"/> there.</summary>
-    public static byte[] Joined(string address)
+    public static byte[] Joined(string address) => Plain(Status.Joined, address);
+
+    /// <summary>The receiver accepts the proposed sender-hosted session.</summary>
+    public static byte[] Accepted() => Plain(Status.Accepted, "");
+
+    private static byte[] Plain(Status status, string value)
     {
-        var text = Encoding.UTF8.GetBytes(address);
+        var text = Encoding.UTF8.GetBytes(value);
         var answer = new byte[2 + text.Length];
         answer[0] = Version;
-        answer[1] = (byte)Status.Joined;
+        answer[1] = (byte)status;
         text.CopyTo(answer, 2);
         return answer;
     }
@@ -165,6 +173,15 @@ public static class NearbyHandshake
         return partial.Length < 4 ? null : 4 + (partial[2] << 8 | partial[3]);
     }
 
+    /// <summary>
+    /// The longest value a Bluetooth LE attribute may hold (Core spec: 512 bytes). Every handshake message must fit:
+    /// longer ones are cut off or refused by the Bluetooth stack, and the handshake then fails or times out.
+    /// </summary>
+    public const int MaxValueLength = 512;
+
+    /// <summary>Whether <paramref name="text"/>, sealed (<see cref="Sender.JoinRequest"/>), fits <see cref="MaxValueLength"/>.</summary>
+    public static bool Fits(string text) => 4 + IvLength + (Encoding.UTF8.GetByteCount(text) / 16 + 1) * 16 + MacLength <= MaxValueLength;
+
     /// <summary>[version, marker, length (2 bytes), IV, AES-CBC ciphertext, HMAC over all before it].</summary>
     private static byte[] Seal(byte marker, byte[] plain, Keys keys)
     {
@@ -173,7 +190,8 @@ public static class NearbyHandshake
         var iv = RandomNumberGenerator.GetBytes(IvLength);
         var cipher = aes.EncryptCbc(plain, iv);
         var length = IvLength + cipher.Length + MacLength;
-        if (length > 0xFFFF) throw new ArgumentException("Too long.");
+        if (4 + length > MaxValueLength)
+            throw new ArgumentException($"A {plain.Length}-byte message doesn't fit in a Bluetooth attribute ({MaxValueLength} bytes).");
         var message = new byte[4 + length];
         message[0] = Version;
         message[1] = marker;

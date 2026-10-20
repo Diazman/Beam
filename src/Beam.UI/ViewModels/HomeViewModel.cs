@@ -16,9 +16,12 @@ public sealed class DeviceViewModel : ObservableObject
     private DeviceInfo _device;
     private bool _isSelected;
 
-    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select)
+    private readonly Func<DeviceInfo, DeviceChannels>? _channels;
+
+    public DeviceViewModel(DeviceInfo device, Action<DeviceViewModel> select, Func<DeviceInfo, DeviceChannels>? channels = null)
     {
         _device = device;
+        _channels = channels;
         SelectCommand = new RelayCommand(() => select(this));
     }
 
@@ -55,10 +58,16 @@ public sealed class DeviceViewModel : ObservableObject
                 Beam.Core.Nearby.NearbyService.BluetoothPlatform => _device.Kind == DeviceKinds.Phone ? L.T("Phone") : L.T("Computer"),
                 _ => L.T("Computer"),
             };
-            // A paired PC seen only by its direct network (no shared Wi-Fi): Beam joins that network when sending.
-            if (_device.Endpoints.Count == 0 && _device.DirectRoles.HasFlag(Beam.Core.Direct.DirectRoles.Host))
-                return L.T("{0} · Nearby · connects directly", platform);
-            return _device.IsManual ? $"{platform} · {_device.AddressText}" : L.T("{0} · Nearby", platform);
+            if (_device.IsManual && _device.Endpoints.Count > 0 && _device.Platform != Beam.Core.Nearby.NearbyService.BluetoothPlatform
+                && _channels?.Invoke(_device) is not { Bluetooth: true }) return $"{platform} · {_device.AddressText}";
+            // One entry per device, whichever way it was found; how it can be reached is shown separately.
+            return _channels?.Invoke(_device) switch
+            {
+                { LocalNetwork: true, Bluetooth: true } => L.T("{0} · Found over local network and Bluetooth", platform),
+                { LocalNetwork: true } => L.T("{0} · Found over local network", platform),
+                { Bluetooth: true } => L.T("{0} · Found over Bluetooth", platform),
+                _ => L.T("{0} · Nearby", platform),
+            };
         }
     }
 
@@ -173,6 +182,9 @@ public sealed class HomeViewModel : ObservableObject
             OnPropertyChanged(nameof(HasBluetoothNotice));
             OnPropertyChanged(nameof(BluetoothNotice));
             OnPropertyChanged(nameof(BluetoothNeedsPermission));
+            OnPropertyChanged(nameof(DiscoveryStatus));
+            OnPropertyChanged(nameof(HasDiscoveryStatus));
+            foreach (var device in Devices) device.RefreshDirect();
         });
 
         Items.CollectionChanged += (_, _) => OnItemsChanged();
@@ -198,6 +210,8 @@ public sealed class HomeViewModel : ObservableObject
             OnPropertyChanged(nameof(IsDiscoverable));
             OnPropertyChanged(nameof(VisibilityText));
             OnPropertyChanged(nameof(PreferDirect));
+            OnPropertyChanged(nameof(DiscoveryStatus));
+            OnPropertyChanged(nameof(HasDiscoveryStatus));
         });
     }
 
@@ -219,8 +233,8 @@ public sealed class HomeViewModel : ObservableObject
     public bool HasNoDevices => Devices.Count == 0;
 
     /// <summary>
-    /// Prefer direct connection (the Connection setting): sending connects to the other device directly first (it starts
-    /// its own Wi-Fi, this device joins it) and uses the shared Wi-Fi when that isn't possible.
+    /// Send directly (the Connection setting): pressing Send starts this device's own direct Wi-Fi link, the chosen
+    /// receivers join it, and the files go only over it. Off: over the Wi-Fi network, as always.
     /// </summary>
     public bool PreferDirect
     {
@@ -228,7 +242,20 @@ public sealed class HomeViewModel : ObservableObject
         set => _ = SetPreferDirectAsync(value);
     }
 
-    public bool CanConnectDirectly => _node.Direct.IsSupported;
+    public bool CanConnectDirectly => _node.Direct.CanHost;
+
+    /// <summary>What the Send page is doing to find receivers ("Searching over Bluetooth and the local network…").</summary>
+    public string DiscoveryStatus
+    {
+        get
+        {
+            if (!PreferDirect) return "";
+            var bluetooth = _node.Nearby.State == Beam.Core.Nearby.NearbyRadioState.Ready;
+            return bluetooth ? L.T("Searching over Bluetooth and the local network…") : L.T("Searching over the local network…");
+        }
+    }
+
+    public bool HasDiscoveryStatus => DiscoveryStatus.Length > 0;
 
     private async Task SetPreferDirectAsync(bool value)
     {
@@ -496,7 +523,7 @@ public sealed class HomeViewModel : ObservableObject
         {
             var index = 0;
             while (index < Devices.Count && string.Compare(Devices[index].Name, device.Name, StringComparison.CurrentCultureIgnoreCase) < 0) index++;
-            Devices.Insert(index, new DeviceViewModel(device, SelectDevice));
+            Devices.Insert(index, new DeviceViewModel(device, SelectDevice, _node.ChannelsOf));
             _main.OnDeviceAppeared(device);
         }
 
@@ -675,28 +702,43 @@ public sealed class HomeViewModel : ObservableObject
 
         var device = _node.Pair(code);
         Log.Info($"Paired with {device.Name} by scanning its code");
-        // Not on the same Wi-Fi? Join the computer's own network now: one scan pairs and connects.
-        if (code.Network != null && await _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices))
-            _ = _node.Direct.ConnectAfterPairingAsync(device, code.ConnectDirectly, CancellationToken.None);
+        // Pairing only: nothing is joined. A direct link is set up when files are sent with Direct chosen.
         await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Paired with {0}", device.Name),
-            code.Network != null
-                ? L.T("{0} appears here whenever it's nearby: on the same Wi-Fi, or directly when there's no Wi-Fi (set the computer to Direct connection in its Settings). Files from it are accepted without asking.", device.Name)
-                : L.T("{0} appears here whenever it's on the same Wi-Fi. Files from it are accepted without asking.", device.Name),
+            L.T("{0} appears here whenever it's on the same Wi-Fi, or nearby over Bluetooth with Receive open. Files from it are accepted without asking.", device.Name),
             L.T("OK"), ""));
     }
 
     private async Task SendTextAsync()
     {
         if (_selected.Count == 0) return;
+        if (!await EnsureWifiForDirectAsync()) return;
         var targets = _selected.Select(d => d.Device).ToList();
         // Starts empty: reading the clipboard unasked could show a copied password (and Android announces every read).
         if (await _main.ShowDialogAsync(new Dialogs.SendTextViewModel(TargetsText, "", _ui)) is not string text) return;
         foreach (var target in targets) await _main.StartSendTextAsync(target, text);
     }
 
+    /// <summary>
+    /// Direct chosen and Wi-Fi off on this device: offer to turn it on (the system's Wi-Fi panel on Android) before
+    /// anything starts. False when it stays off; nothing is then sent (and never over another connection instead).
+    /// </summary>
+    private async Task<bool> EnsureWifiForDirectAsync()
+    {
+        if (!PreferDirect || !_node.Direct.IsWifiOff) return true;
+        var ask = new Dialogs.ConfirmViewModel(L.T("Wi-Fi is off"),
+            L.T("Sending directly needs Wi-Fi turned on on this device. It doesn't need to be connected to a network."),
+            L.T("Turn on Wi-Fi"));
+        if (await _main.ShowDialogAsync(ask) is not true) return false;
+        if (await _node.Direct.RequestWifiOnAsync(TimeSpan.FromSeconds(60))) return true;
+        await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Wi-Fi is off"),
+            L.T("Turn on Wi-Fi, then press Send again."), L.T("OK"), ""));
+        return false;
+    }
+
     private async Task SendAsync()
     {
         if (!CanSend) return;
+        if (!await EnsureWifiForDirectAsync()) return;
         var targets = _selected.Select(d => d.Device).ToList();
         var paths = Items.Select(i => i.Path).ToList();
         var text = _sharedText;
