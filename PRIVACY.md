@@ -1,6 +1,6 @@
 # Beam privacy policy
 
-_Last updated: October 11, 2026_
+_Last updated: October 20, 2026_
 
 Beam is an app for Windows and Android that sends files directly between nearby devices. This policy explains
 what Beam does with information. In short: **Beam does not collect, sell or share any personal data, has no
@@ -39,6 +39,22 @@ When Beam is open, it announces the device's Beam name, a device identifier and 
 When you send files, the names, sizes and contents of the files you selected go **directly** to the device you
 chose. Transfers between devices running the Beam app are encrypted. When someone sends you files, nothing is
 saved unless you accept (or you chose to trust that device).
+
+## Direct connections
+
+A direct connection links two of your devices over Wi-Fi without a router. The device that sends starts a
+Wi-Fi network for that transfer, and the receiving device joins it with a name and password made for that
+transfer only. They are exchanged over Beam's encrypted connection (or Beam's Bluetooth handshake), never over the
+internet.
+
+- **Windows Mobile hotspot** – when a Windows PC that is online sends directly to a phone, Beam may turn on the
+  PC's Mobile hotspot for that transfer, sharing the PC's internet with that phone only, so the phone stays
+  connected. Beam turns it off again when the transfer is done.
+- **Bluetooth** – Beam uses Bluetooth Low Energy only to find your nearby Beam devices and to set up a direct
+  connection when there is no shared Wi-Fi network. It sends the device's Beam name and identifier, nothing else.
+- **Wi-Fi and location (Windows)** – Windows lets an app see nearby Wi-Fi networks only when location access is
+  allowed for it. Beam uses that only to find the direct network it was told to join and **never reads, uses or
+  stores your location**.
 
 ## Phones without the app (Phone page in a web browser)
 

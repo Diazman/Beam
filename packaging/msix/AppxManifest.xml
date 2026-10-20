@@ -106,5 +106,10 @@
     <rescap:Capability Name="runFullTrust" />
     <!-- Receive / Send without a shared Wi-Fi: devices find each other over Bluetooth LE. -->
     <DeviceCapability Name="bluetooth" />
+    <!-- Direct connections: joining another device's network (WiFiAdapter) and starting this PC's own
+         (Wi-Fi Direct, Mobile hotspot). Location: Windows 11 shows nearby Wi-Fi networks only to apps that have it;
+         Beam never reads the PC's location. -->
+    <DeviceCapability Name="wiFiControl" />
+    <DeviceCapability Name="location" />
   </Capabilities>
 </Package>

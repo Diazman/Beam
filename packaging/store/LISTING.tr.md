@@ -50,11 +50,12 @@ Wi-Fi, kablolu ağ ve Windows Mobil Erişim Noktası ile çalışır. Ağ otomat
 diğer bilgisayarda Beam'in gösterdiği adresle bağlanın.
 
 ## Bu sürümdeki yenilikler (What's new in this version)
-Sürüm 1.4
+Sürüm 1.6
 • Beam artık tamamen ücretsiz: hızda da gönderim sayısında da sınır yok.
-• Yeni Telefon sayfası: Android için Beam uygulamasına tek bir kod (bir kez eşleşir, sonra Wi-Fi olmadan bile birbirlerini bulurlar) ya da herhangi bir telefonu tarayıcısıyla bağlayın.
-• Doğrudan bağlantı (beta): bilgisayar ve telefon, modem olmadan birbirine bağlanır.
-• Birçok düzeltme ve küçük iyileştirme.
+• Telefonlar: Android için Beam uygulaması bir kodla bir kez eşleşir; diğer telefonlar web tarayıcısını kullanabilir.
+• Doğrudan bağlantı: bilgisayar ve telefon (ya da iki bilgisayar) modem olmadan birbirine bağlanır ve ortak bir Wi-Fi yoksa birbirini Bluetooth ile bulur.
+• Daha güvenilir doğrudan aktarım: telefona gönderen bilgisayar internetini Mobil etkin nokta ile paylaşır, böylece telefon bağlı kalır; kopan bağlantılar yeniden kurulur ve aktarım kaldığı yerden devam eder.
+• Daha hızlı aktarım ve birçok düzeltme.
 
 ## Ürün özellikleri (Product features)
 Kod okutarak her telefona gönderin ve telefondan alın (uygulama gerekmez)

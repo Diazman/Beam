@@ -90,8 +90,8 @@ jobs:
   ios:
     name: iOS app (unsigned IPA)
     needs: test
-    # macOS minutes count ten times: only when run by hand or on main.
-    if: github.event_name != 'pull_request'
+    # macOS minutes count ten times: only when run by hand (Actions → Build → Run workflow).
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
