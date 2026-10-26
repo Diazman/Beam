@@ -7,8 +7,8 @@ namespace Beam.Core.Direct;
 
 /// <summary>
 /// What a PC's QR code tells the Beam app on a phone, so the two can find each other from then on: who the PC is
-/// (id, name, certificate fingerprint for the encrypted connection), where it is on the network, and the name and
-/// passphrase of its own direct network. The same code also works with a phone's camera: it is the Phone page's
+/// (id, name, certificate fingerprint for the encrypted connection), where it is on the network, and what it can do
+/// directly. It carries no Wi-Fi passphrase: each direct session gets its own. The same code also works with a phone's camera: it is the Phone page's
 /// link with this information after "#beam=" (a URL fragment, which browsers never send anywhere).
 /// </summary>
 public sealed class PairingCode
@@ -31,18 +31,7 @@ public sealed class PairingCode
     [JsonPropertyName("a")]
     public List<string> Addresses { get; set; } = new();
 
-    [JsonPropertyName("s")]
-    public string? Ssid { get; set; }
-
-    [JsonPropertyName("p")]
-    public string? Passphrase { get; set; }
-
-    /// <summary>
-    /// Shown while the computer's own network is on for phones (Phone page, Connect directly): the app joins that
-    /// network right away, even when both are on the same Wi-Fi, so one scan pairs and connects directly.
-    /// </summary>
-    [JsonPropertyName("d")]
-    public bool ConnectDirectly { get; set; }
+    // "s", "p" and "d" were a computer's own network and "connect to it now" (Beam 1.5.3 and older): no longer used.
 
     /// <summary>What the device can do with direct links (as discovery announces it), so the other side picks who hosts.</summary>
     [JsonPropertyName("r")]
@@ -110,17 +99,8 @@ public sealed class PairingCode
         code.Name = Settings.AppSettings.NormalizeDeviceName(code.Name);
         code.Fingerprint = code.Fingerprint.ToLowerInvariant();
         code.Addresses = code.Addresses.Where(a => TryParseEndPoint(a, out _)).Take(8).ToList();
-        if (string.IsNullOrEmpty(code.Ssid) || string.IsNullOrEmpty(code.Passphrase) || code.Ssid.Length > 32 || code.Passphrase.Length is < 8 or > 63)
-        {
-            code.Ssid = null;
-            code.Passphrase = null;
-            code.ConnectDirectly = false;
-        }
-
         return code;
     }
-
-    public DirectNetwork? Network => Ssid != null && Passphrase != null ? new DirectNetwork(Ssid, Passphrase) : null;
 
     /// <summary>The PC as a device this phone can send to (addresses with Beam's port).</summary>
     public Discovery.DeviceInfo ToDevice() => new()
@@ -129,7 +109,7 @@ public sealed class PairingCode
         Name = Name,
         Fingerprint = Fingerprint,
         Kind = string.IsNullOrEmpty(Kind) ? Discovery.DeviceKinds.Desktop : Kind,
-        DirectRoles = !string.IsNullOrEmpty(Roles) ? DirectRolesText.Parse(Roles) : Network != null ? DirectRoles.Host : DirectRoles.None,
+        DirectRoles = !string.IsNullOrEmpty(Roles) ? DirectRolesText.Parse(Roles) : DirectRoles.None,
         Endpoints = Addresses.Select(a => TryParseEndPoint(a, out var e) ? e : null).OfType<IPEndPoint>().ToList(),
     };
 

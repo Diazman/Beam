@@ -39,7 +39,6 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     /// accept") arrives instead of a timeout of our own that blames Bluetooth.
     /// </summary>
     internal TimeSpan ProposalWait { get; set; } = DirectManager.DirectApprovalTimeout + TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan HostTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SightingLifetime = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
 
@@ -48,7 +47,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     private readonly DiscoveryService _discovery;
     private readonly SettingsStore _settings;
     private readonly Func<string> _selfId;
-    private readonly Func<bool, PairingCode> _pairingCode;
+    private readonly Func<PairingCode> _pairingCode;
     private readonly bool _selfIsComputer;
     private readonly ConcurrentDictionary<string, (Task<byte[]> Answer, long At)> _answers = new();
     private readonly ConcurrentDictionary<string, NearbyHandshake.Keys> _keys = new(); // per sender, for its join request
@@ -61,7 +60,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     private bool _looking;
 
     internal NearbyService(INearbyRadio? radio, DirectManager direct, DiscoveryService discovery, SettingsStore settings, Func<string> selfId,
-        Func<bool, PairingCode> pairingCode, bool selfIsComputer, Func<bool> transfersRunning)
+        Func<PairingCode> pairingCode, bool selfIsComputer, Func<bool> transfersRunning)
     {
         _transfersRunning = transfersRunning;
         _radio = radio;
@@ -235,7 +234,6 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
 
             var flags = (_selfIsComputer ? NearbyBeaconFlags.Computer : NearbyBeaconFlags.None)
                         | (_direct.CanHost ? NearbyBeaconFlags.CanHost : NearbyBeaconFlags.None)
-                        | (_direct.HostedNetwork != null ? NearbyBeaconFlags.Hosting : NearbyBeaconFlags.None)
                         | (_direct.AnnouncedRoles.HasFlag(DirectRoles.SenderHosted) ? NearbyBeaconFlags.SenderHosted : NearbyBeaconFlags.None);
             var beacon = new NearbyBeacon(NearbyBeacon.HashOf(_selfId()), _settings.Current.DeviceName, flags).ToBytes();
             lock (_gate)
@@ -287,9 +285,9 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         }
 
         _senderHashes[sender] = NearbyHandshake.SenderHash(data);
-        _answers[sender] = (Task.Run(async () =>
+        _answers[sender] = (Task.Run(() =>
         {
-            var (answer, keys) = await AnswerAsync(data).ConfigureAwait(false);
+            var (answer, keys) = AnswerHandshake(data);
             if (keys != null) _keys[sender] = keys;
             return answer;
         }), Environment.TickCount64);
@@ -315,40 +313,17 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     /// <summary>The certificate fingerprint each Bluetooth sender claimed when its proposal was accepted (per connection).</summary>
     private readonly ConcurrentDictionary<string, string> _claims = new();
 
-    private async Task<(byte[] Answer, NearbyHandshake.Keys? Keys)> AnswerAsync(byte[] request)
+    private (byte[] Answer, NearbyHandshake.Keys? Keys) AnswerHandshake(byte[] request)
     {
-        DirectNetwork? network = null;
-        var senderHosts = NearbyHandshake.FlagsOf(request).HasFlag(NearbyHandshake.RequestFlags.SenderHosts);
-        Log.Info($"Nearby: a sender asked over Bluetooth{(senderHosts ? " (it will host; asks this device to join)" : "")}");
-        if (!senderHosts)
+        // Senders since 1.6 host themselves; older ones asked this device to start its network, which it no longer does.
+        if (!NearbyHandshake.FlagsOf(request).HasFlag(NearbyHandshake.RequestFlags.SenderHosts))
         {
-            try
-            {
-                using var timeout = new CancellationTokenSource(HostTimeout);
-                network = await _direct.HostForNearbyAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"Nearby: starting the network for a sender failed: {ex.Message}");
-            }
+            Log.Info("Nearby: an older Beam (1.5.3 or before) asked over Bluetooth for this device's network; refused");
+            return (NearbyHandshake.Refuse(_direct.OlderBeamMessage()), null);
         }
 
-        var code = _pairingCode(network != null);
-        // A network's details only go to a sender this device started it for (an older sender that asked for it). This
-        // version's senders host themselves and get none: anyone nearby can run this handshake.
-        code.Ssid = network?.Ssid;
-        code.Passphrase = network?.Passphrase;
-
-        if (network == null && code.Addresses.Count == 0 && !senderHosts)
-            return (NearbyHandshake.Refuse(_settings.Current.AllowDirectSenders
-                ? L.T("{0} couldn't start its own Wi-Fi. Connect both devices to the same Wi-Fi.", _settings.Current.DeviceName)
-                : L.T("{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.", _settings.Current.DeviceName)), null);
-
-        // A sender that isn't trusted here gets the passphrase only until Receive closes: then the network gets a new one.
-        var senderHash = NearbyHandshake.SenderHash(request);
-        var trusted = _settings.Current.TrustedDevices.Any(t => NearbyBeacon.HashOf(t.DeviceId).AsSpan().SequenceEqual(senderHash));
-        if (network != null && !trusted) _direct.RotateWhenOff();
-        Log.Info($"Nearby: answered a sender over Bluetooth{(network != null ? $" with {network.Ssid}" : "")}{(trusted ? " (paired)" : "")}");
+        Log.Info("Nearby: answering a sender over Bluetooth (it will host; asks this device to join)");
+        var code = _pairingCode();
         // At most 512 bytes over Bluetooth: leave out addresses (the least needed part) until it fits.
         var answer = NearbyHandshake.Answer(request, code.ToJson(), out var keys);
         while (answer.Length > NearbyHandshake.MaxValueLength && code.Addresses.Count > 0)

@@ -8,8 +8,8 @@ using Beam.Core.Transfer;
 namespace Beam.Core.Tests;
 
 /// <summary>
-/// Who may make this device start its network, join another, or stop its link. Any device on the network can open a
-/// connection with a self-signed certificate and claim any device id in its hello, so neither is enough on its own.
+/// What may make this device start its network or join another: only a direct session the user chose (or accepted
+/// files moving to). Older Beams' receiver-hosted requests are refused, and Same Wi-Fi never starts anything.
 /// </summary>
 public class DirectSecurityTests
 {
@@ -26,120 +26,31 @@ public class DirectSecurityTests
 
     private static FakeDirectAir.FakeLink Fake(IDirectLink link) => (FakeDirectAir.FakeLink)link;
 
-    [Fact]
-    public async Task AnUnpairedDeviceCantMakeThisDeviceJoinItsNetworkEvenWithReceiveOpen()
+    [Theory]
+    [InlineData("host")]
+    [InlineData("join")]
+    [InlineData("prefer")]
+    [InlineData("stop")]
+    public async Task AnOlderBeamsReceiverHostedRequestIsRefusedAndStartsNothing(string action)
     {
+        // Beam 1.5.3 and older asked the receiver to start its network ("host") or to join the sender's ("join"). Even a
+        // paired device, with Receive open, gets a refusal that says to update; nothing is started or joined.
         var air = new FakeDirectAir();
         var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
         await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var stranger = new TestNode("Stranger");
-        pc.Node.Nearby.SetReceiving(true); // senders may connect directly (the default)
-        Assert.True(pc.Node.Settings.Current.AllowDirectSenders);
-
-        var reply = await AskAsync(stranger, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = "DIRECT-xx-Evil", Passphrase = "passphrase123" });
-
-        Assert.False(reply.Ok);
-        Assert.True(reply.Declined);
-        Assert.Equal(0, Fake(pcLink).JoinCalls);
-        Assert.Null(pc.Node.Direct.KnownNetworkFor(stranger.Node.Identity.DeviceId)); // nothing remembered to join later
-    }
-
-    [Fact]
-    public async Task AnUnpairedDeviceCantStartTheNetworkOfADeviceWithReceiveClosed()
-    {
-        var air = new FakeDirectAir();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var stranger = new TestNode("Stranger");
-
-        var reply = await AskAsync(stranger, pc, new DirectRequestMessage { Action = DirectActions.Host });
-
-        Assert.False(reply.Ok);
-        Assert.True(reply.Declined);
-        Assert.Null(reply.Passphrase);
-        Assert.Equal(0, Fake(pcLink).HostCalls);
-        Assert.Null(pc.Node.Direct.HostedNetwork);
-    }
-
-    [Fact]
-    public async Task WithReceiveOpenAnUnpairedSenderGetsTheNetworkOnlyUntilItGoesOff()
-    {
-        var air = new FakeDirectAir();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var sender = new TestNode("Galaxy", kind: DeviceKinds.Phone);
+        await using var phone = new TestNode("Galaxy", directLink: air.Link(DirectRoles.Host | DirectRoles.Join), kind: DeviceKinds.Phone);
+        pc.Trust(phone);
         pc.Node.Nearby.SetReceiving(true);
 
-        var reply = await AskAsync(sender, pc, new DirectRequestMessage { Action = DirectActions.Host });
-        Assert.True(reply.Ok);
-        Assert.Equal(pc.Node.Direct.OwnNetwork().Passphrase, reply.Passphrase);
+        var reply = await AskAsync(phone, pc, new DirectRequestMessage { Action = action, Ssid = "DIRECT-xx-Old", Passphrase = "passphrase123" });
 
-        // Receive closes and the network goes off: it gets a new passphrase, so that sender can't join it later unasked.
-        await AskAsync(sender, pc, new DirectRequestMessage { Action = DirectActions.Stop });
-        pc.Node.Nearby.SetReceiving(false);
-        await Wait.UntilAsync(() => pc.Node.Direct.HostedNetwork == null, because: "the network went off");
-        Assert.NotEqual(reply.Passphrase, pc.Node.Direct.OwnNetwork().Passphrase);
-    }
-
-    [Fact]
-    public async Task APairedDeviceMayAskThisDeviceToJoinItsNetwork()
-    {
-        var air = new FakeDirectAir();
-        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        pc.Trust(phone);
-        var network = await phoneLink.HostAsync(null, CancellationToken.None);
-
-        var reply = await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = network.Ssid, Passphrase = network.Passphrase });
-
-        Assert.True(reply.Ok);
-        Assert.Equal(1, Fake(pcLink).JoinCalls);
-        Assert.Equal(phone.Node.Identity.Fingerprint, pc.Node.Direct.KnownNetworkFor(phone.Node.Identity.DeviceId)!.Fingerprint, ignoreCase: true);
-    }
-
-    [Fact]
-    public async Task ADeviceClaimingAPairedDevicesIdIsRefused()
-    {
-        var air = new FakeDirectAir();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone);
-        await using var impostor = new TestNode("Galaxy");
-        pc.Trust(phone);
-        var phoneId = phone.Node.Identity.DeviceId;
-
-        // Same id in its hello, but its own certificate: not the paired phone.
-        var join = await AskAsync(impostor, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = "DIRECT-xx-Evil", Passphrase = "passphrase123" }, claimedId: phoneId);
-        var host = await AskAsync(impostor, pc, new DirectRequestMessage { Action = DirectActions.Host }, claimedId: phoneId);
-        var prefer = await AskAsync(impostor, pc, new DirectRequestMessage { Action = DirectActions.Prefer, Method = "direct" }, claimedId: phoneId);
-
-        Assert.All(new[] { join, host, prefer }, r => Assert.False(r.Ok));
-        Assert.Equal(0, Fake(pcLink).JoinCalls);
+        Assert.False(reply.Ok);
+        Assert.Contains("needs a newer Beam", reply.Message);
+        Assert.Null(reply.Ssid);
+        Assert.Null(reply.Passphrase);
         Assert.Equal(0, Fake(pcLink).HostCalls);
-        Assert.Null(pc.Node.Direct.KnownNetworkFor(phoneId));
-        Assert.Equal(ConnectionMethod.SameNetwork, pc.Node.Direct.MethodFor(phoneId));
-    }
-
-    [Fact]
-    public async Task OnlyTheDeviceALinkWasStartedForCanStopIt()
-    {
-        var air = new FakeDirectAir();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone);
-        await using var stranger = new TestNode("Stranger");
-        pc.Trust(phone);
-        Assert.True((await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok);
-
-        var reply = await AskAsync(stranger, pc, new DirectRequestMessage { Action = DirectActions.Stop });
-        Assert.True(reply.Ok); // nothing to stop for it
-        Assert.Equal(0, air.Stopped);
-        Assert.NotNull(pc.Node.Direct.HostedNetwork);
-
-        await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Stop });
-        Assert.Equal(1, air.Stopped);
+        Assert.Equal(0, Fake(pcLink).JoinCalls);
+        Assert.Null(pc.Node.Direct.HostedNetwork);
     }
 
     [Fact]
@@ -177,142 +88,9 @@ public class DirectSecurityTests
     }
 
     [Fact]
-    public async Task AnUnpairedSenderDoesntKeepTheNetworkOnAfterReceiveCloses()
-    {
-        // Receive left (and its grace time over): the network goes off, whoever asked for it while Receive was open.
-        var air = new FakeDirectAir();
-        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
-        await using var stranger = new TestNode("Stranger");
-        await using var browser = new TestNode("Other");
-        pc.Node.Nearby.SetReceiving(true);
-        Assert.True((await AskAsync(stranger, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok);
-        await Wait.UntilAsync(() => pc.Node.Direct.HostedNetwork != null, because: "on");
-        Assert.True((await AskAsync(browser, pc, new DirectRequestMessage { Action = DirectActions.Prefer, Method = "direct" })).Ok);
-
-        pc.Node.Nearby.SetReceiving(false);
-        await Wait.UntilAsync(() => pc.Node.Direct.HostedNetwork == null, because: "the network went off when Receive closed");
-        Assert.True(air.Stopped >= 1);
-    }
-
-    [Fact]
-    public async Task APairedDeviceStillKeepsTheNetworkAfterReceiveCloses()
-    {
-        var air = new FakeDirectAir();
-        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone);
-        pc.Trust(phone);
-        pc.Node.Nearby.SetReceiving(true);
-        Assert.True((await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok);
-
-        pc.Node.Nearby.SetReceiving(false);
-        await Task.Delay(300);
-        Assert.NotNull(pc.Node.Direct.HostedNetwork); // until the phone says it is done
-        await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Stop });
-        Assert.Null(pc.Node.Direct.HostedNetwork);
-    }
-
-    [Fact]
-    public async Task AFakedWiFiAnnouncementDoesntLetAnotherDeviceStopALinkOrLockOutAPairedDevice()
-    {
-        var air = new FakeDirectAir();
-        await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", kind: DeviceKinds.Phone);
-        await using var paired = new TestNode("Pixel", kind: DeviceKinds.Phone);
-        await using var attacker = new TestNode("Galaxy");
-        pc.Trust(paired);
-        pc.Node.Nearby.SetReceiving(true);
-        Assert.True((await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok);
-
-        // Anyone can announce any device id with their own certificate's fingerprint (the last announcement wins).
-        pc.Node.Discovery.ReportReachable(phone.AsDevice() with { Fingerprint = attacker.Node.Identity.Fingerprint });
-        pc.Node.Discovery.ReportReachable(paired.AsDevice() with { Fingerprint = attacker.Node.Identity.Fingerprint });
-
-        var stop = await AskAsync(attacker, pc, new DirectRequestMessage { Action = DirectActions.Stop }, claimedId: phone.Node.Identity.DeviceId);
-        Assert.False(stop.Ok);
-        Assert.NotNull(pc.Node.Direct.HostedNetwork);
-        Assert.Equal(ConnectionMethod.Direct, pc.Node.Direct.MethodFor(phone.Node.Identity.DeviceId));
-
-        // The paired phone is still recognised by its own certificate.
-        Assert.True((await AskAsync(paired, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok);
-    }
-
-    [Fact]
-    public async Task AnUnpairedDeviceCantPullThisDeviceOffANetworkItJoinedToReceive()
-    {
-        var air = new FakeDirectAir();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
-        await using var stranger = new TestNode("Stranger");
-        pc.Trust(phone);
-        pc.Node.Settings.Update(s => s.AllowDirectSenders = true);
-        var network = await phoneLink.HostAsync(null, CancellationToken.None);
-        Assert.True((await AskAsync(phone, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = network.Ssid, Passphrase = network.Passphrase })).Ok);
-        pc.Node.Nearby.SetReceiving(true); // Receive open, but on the phone's network now
-        var hosted = Fake(pcLink).HostCalls;
-
-        var reply = await AskAsync(stranger, pc, new DirectRequestMessage { Action = DirectActions.Host });
-
-        Assert.False(reply.Ok);
-        Assert.Equal(hosted, Fake(pcLink).HostCalls);
-    }
-
-    [Fact]
-    public async Task AnAcceptedButUnpairedSenderCantMakeThisDeviceJoinItsNetworkWhileAPairedDeviceUsesTheLink()
-    {
-        var air = new FakeDirectAir();
-        var slow = new SlowFiles();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var paired = new TestNode("Galaxy", kind: DeviceKinds.Phone);
-        await using var sender = new TestNode("Stranger", externalFiles: slow);
-        pc.Trust(paired);
-        Assert.True((await AskAsync(paired, pc, new DirectRequestMessage { Action = DirectActions.Host })).Ok); // the paired phone's link
-
-        // The user accepted files from the stranger, and they are still coming.
-        var session = sender.Node.Send(pc.AsDevice(), new[] { slow.Add(sender.CreateFile("video.mp4", 20L * 1024 * 1024, 4)) });
-        await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "accepted");
-
-        var reply = await AskAsync(sender, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = "DIRECT-xx-Other", Passphrase = "passphrase123" });
-
-        Assert.False(reply.Ok);
-        Assert.Equal(0, Fake(pcLink).JoinCalls);
-        Assert.NotNull(pc.Node.Direct.HostedNetwork); // the paired phone's network stays on
-        session.Cancel();
-    }
-
-    [Fact]
-    public async Task AnAcceptedButUnpairedSenderCantPullThisDeviceOffAPairedDevicesNetwork()
-    {
-        var air = new FakeDirectAir();
-        var slow = new SlowFiles();
-        var pcLink = air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
-        var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
-        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
-        await using var paired = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
-        await using var sender = new TestNode("Stranger", externalFiles: slow);
-        pc.Trust(paired);
-        var network = await phoneLink.HostAsync(null, CancellationToken.None);
-        Assert.True((await AskAsync(paired, pc, new DirectRequestMessage { Action = DirectActions.Join, Ssid = network.Ssid, Passphrase = network.Passphrase })).Ok);
-
-        var session = sender.Node.Send(pc.AsDevice(), new[] { slow.Add(sender.CreateFile("video.mp4", 20L * 1024 * 1024, 5)) });
-        await Wait.UntilAsync(() => session.State == TransferState.Transferring, because: "accepted");
-        var hosted = Fake(pcLink).HostCalls;
-
-        var reply = await AskAsync(sender, pc, new DirectRequestMessage { Action = DirectActions.Host });
-
-        Assert.False(reply.Ok);
-        Assert.Equal(hosted, Fake(pcLink).HostCalls);
-        session.Cancel();
-    }
-
-    // ---- Same Wi-Fi stays same Wi-Fi ----
-
-    [Fact]
     public async Task WithSameWiFiChosenASenderNeverStartsOrJoinsANetwork()
     {
-        // Everything that could tempt it: the receiver has Receive open, the sender is paired and knows its network.
+        // Everything that could tempt it: the receiver has Receive open, and the sender is paired with it.
         var air = new FakeDirectAir();
         var phoneLink = air.Link(DirectRoles.Host | DirectRoles.Join);
         await using var pc = new TestNode("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), kind: DeviceKinds.Laptop);
@@ -321,7 +99,6 @@ public class DirectSecurityTests
         pc.Node.Nearby.SetReceiving(true);
         phone.Node.Pair(PairingCode.TryParse(pc.Node.CreatePairingCode().AppendTo(null))!);
         Assert.NotNull(phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId));
-        Assert.Equal(ConnectionMethod.SameNetwork, phone.Node.Direct.MethodFor(pc.Node.Identity.DeviceId));
 
         var paths = new List<TransferPath>();
         var session = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("photo.jpg", 400_000) });

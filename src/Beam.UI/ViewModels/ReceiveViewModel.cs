@@ -151,7 +151,7 @@ public sealed class ReceiveViewModel : ObservableObject
 
     private void Refresh()
     {
-        if (_shown && _showsCode) Code = QrCode.Create(_node.CreatePairingCode(connectDirectly: NetworkOn).AppendTo(null)).Geometry;
+        if (_shown && _showsCode) Code = QrCode.Create(_node.CreatePairingCode().AppendTo(null)).Geometry;
         foreach (var name in new[]
                  {
                      nameof(DeviceName), nameof(VerificationCode), nameof(AllowDirect), nameof(CanConnectDirectly),

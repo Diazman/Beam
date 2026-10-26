@@ -80,7 +80,7 @@ public enum NearbyBeaconFlags : byte
 {
     None = 0,
 
-    /// <summary>Its own network is on right now (a sender can join it straight away).</summary>
+    /// <summary>Its own network was on (for senders up to Beam 1.5.3, which joined it). No longer sent; others ignore it.</summary>
     Hosting = 1,
 
     /// <summary>A computer (otherwise a phone).</summary>

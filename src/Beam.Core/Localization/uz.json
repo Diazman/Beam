@@ -452,14 +452,12 @@
   "Turn on Bluetooth to also find devices that aren't on your Wi-Fi (they need Receive open).": "Wi-Fi'ingizda bo'lmagan qurilmalarni ham topish uchun Bluetooth'ni yoqing (ularda Qabul qilish ochiq bo'lishi kerak).",
   "Turn on Bluetooth to connect to {0}.": "{0} ga ulanish uchun Bluetooth'ni yoqing.",
   "Verification code:": "Tasdiqlash kodi:",
-  "{0} couldn't start its own Wi-Fi. Connect both devices to the same Wi-Fi.": "{0} o'z Wi-Fi'sini yoqa olmadi. Ikkala qurilmani bir xil Wi-Fi'ga ulang.",
   "{0} didn't answer over Bluetooth. Move closer and try again.": "{0} Bluetooth orqali javob bermadi. Yaqinroq keling va qayta urinib ko'ring.",
   "{0} didn't answer.": "{0} javob bermadi.",
   "{0} isn't nearby anymore. Open Receive on it and try again.": "{0} endi yaqinda emas. Unda Qabul qilishni oching va qayta urinib ko'ring.",
   "Let senders connect directly": "Yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat berish",
   "Senders connect over the shared Wi-Fi.": "Yuboruvchilar umumiy Wi-Fi orqali ulanadi.",
   "Turn on Wi-Fi to connect directly.": "To'g'ridan-to'g'ri ulanish uchun Wi-Fi'ni yoqing.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0} yuboruvchilarga to'g'ridan-to'g'ri ulanishga ruxsat bermaydi. Ikkala qurilmani bir xil Wi-Fi'ga ulang.",
   "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "To'g'ridan-to'g'ri ulanish uchun Joylashuvni yoqing. Android to'g'ridan-to'g'ri ulanishlar uchun buni talab qiladi; Beam joylashuvingizdan foydalanmaydi.",
   "A sender that sends directly starts its own Wi-Fi when it sends, and this device joins it for the transfer (a phone may ask you to tap Connect). Opening Receive starts nothing. Faster, and no router needed.": "Toʻgʻridan-toʻgʻri yuboruvchi yuborayotganda oʻz Wi-Fi tarmogʻini yoqadi, bu qurilma esa uzatish davomida unga ulanadi (telefon Ulanish tugmasini bosishni soʻrashi mumkin). Qabul qilishni ochish hech narsani yoqmaydi. Tezroq va router kerak emas.",
   "Asking {0} to accept a direct connection…": "{0} qurilmasidan toʻgʻridan-toʻgʻri ulanishni qabul qilish soʻralmoqda…",
@@ -542,5 +540,6 @@
   "This device joined {0}'s network but couldn't find it there.": "Bu qurilma {0} tarmogʻiga ulandi, lekin u yerda {0} topilmadi.",
   "This device sends directly to one device at a time. Send to the others when this is done.": "Bu qurilma bir vaqtda faqat bitta qurilmaga toʻgʻridan-toʻgʻri yuboradi. Bu tugagach, qolganlariga yuboring.",
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} bilan faqat Bluetooth orqali bogʻlanish mumkin, u orqali esa bu qurilma uchun uning tarmogʻini sozlab boʻlmaydi. Avval ikkalasini bitta Wi-Fi tarmogʻiga ulang.",
-  "The phone's user didn't allow joining the direct network.": "Telefon foydalanuvchisi toʻgʻridan-toʻgʻri tarmoqqa ulanishga ruxsat bermadi."
+  "The phone's user didn't allow joining the direct network.": "Telefon foydalanuvchisi toʻgʻridan-toʻgʻri tarmoqqa ulanishga ruxsat bermadi.",
+  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} bilan to'g'ridan-to'g'ri ulanish uchun qurilmangizdagi Beam'ni yangilang yoki ikkala qurilmani bir xil Wi-Fi'ga ulang."
 }

@@ -45,17 +45,7 @@ public static class ConnectionPurpose
 
 public static class DirectActions
 {
-    /// <summary>"Start your direct network and tell me how to join it."</summary>
-    public const string Host = "host";
-
-    /// <summary>"Join my direct network" (carries its name and passphrase).</summary>
-    public const string Join = "join";
-
-    /// <summary>"Send to me over this connection method from now on" (<see cref="DirectRequestMessage.Method"/>).</summary>
-    public const string Prefer = "prefer";
-
-    /// <summary>"I no longer need the direct link."</summary>
-    public const string Stop = "stop";
+    // "host", "join", "prefer" and "stop" were Beam 1.5.3 and older's (receiver-hosted) requests: refused now.
 
     // Sender-hosted sessions (one per receiver, identified by SessionId; later messages carry its Nonce):
 
@@ -93,9 +83,6 @@ public sealed class DirectRequestMessage
     public string? Ssid { get; set; }
 
     public string? Passphrase { get; set; }
-
-    /// <summary>For <see cref="DirectActions.Prefer"/>: "direct" or "network".</summary>
-    public string? Method { get; set; }
 
     /// <summary>Sender-hosted sessions: which session (128 random bits, hex).</summary>
     public string? SessionId { get; set; }

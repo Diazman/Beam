@@ -179,6 +179,33 @@ public class NearbyTests
     }
 
     [Fact]
+    public async Task AnOlderBluetoothSenderThatAsksForTheReceiversNetworkIsRefused()
+    {
+        // Beam 1.5.3 and older didn't host: it asked the receiver to start its network over Bluetooth.
+        var bluetooth = new FakeNearbyAir();
+        var pcLink = (FakeDirectAir.FakeLink)new FakeDirectAir().Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, nearbyRadio: bluetooth.Radio());
+        pc.Node.Nearby.SetReceiving(true);
+        var radio = bluetooth.Radio();
+
+        await using var connection = await radio.ConnectAsync(radio.RecentServiceAddresses().Single(), CancellationToken.None);
+        using var sender = new NearbyHandshake.Sender(NearbyBeacon.HashOf("old-phone"), NearbyHandshake.RequestFlags.None);
+        await connection.WriteAsync(sender.Request(), CancellationToken.None);
+        (NearbyHandshake.Status Status, string? Text) answer;
+        do
+        {
+            await Task.Delay(50);
+            answer = sender.Open(await connection.ReadAsync(CancellationToken.None));
+        }
+        while (answer.Status == NearbyHandshake.Status.Working);
+
+        Assert.Equal(NearbyHandshake.Status.Refused, answer.Status);
+        Assert.Contains("needs a newer Beam", answer.Text);
+        Assert.Equal(0, pcLink.HostCalls);
+        Assert.Null(pc.Node.Direct.HostedNetwork);
+    }
+
+    [Fact]
     public async Task ABluetoothHandshakeNeverHandsOutTheReceiversOwnNetworkDetailsToThisVersionsSenders()
     {
         var bluetooth = new FakeNearbyAir();
@@ -202,9 +229,7 @@ public class NearbyTests
         Assert.Equal(NearbyHandshake.Status.Ready, answer.Status);
         var code = PairingCode.FromJson(answer.Text!)!;
         Assert.Equal(pc.Node.Identity.DeviceId, code.DeviceId);
-        Assert.Null(code.Ssid);
-        Assert.Null(code.Passphrase);
-        Assert.DoesNotContain(pc.Node.Direct.OwnNetwork().Passphrase, answer.Text);
+        Assert.DoesNotContain("\"s\"", answer.Text); // no network details: the sender hosts
         Assert.Equal(0, pcLink.HostCalls); // and nothing was started for it
     }
 

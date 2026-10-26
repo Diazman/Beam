@@ -197,7 +197,7 @@ public sealed partial class DirectManager
             var ownLease = ReceiverHostOwner(senderFingerprint);
             bool busy;
             lock (_hostGate) busy = _hostLeases.Any(o => o != ownLease);
-            if (busy || _linkedPeers.Keys.Any(k => !k.StartsWith("rx:", StringComparison.Ordinal) && k != LeaseKey(ownLease)) || !_joinedReceivers.IsEmpty)
+            if (busy || _linkedPeers.Keys.Any(k => !k.StartsWith("rx:", StringComparison.Ordinal) && k != LeaseKey(ownLease)))
                 throw new DirectLinkException(L.T("This device's direct connection is in use right now. Try again when it's done."));
             incoming = new Incoming
             {

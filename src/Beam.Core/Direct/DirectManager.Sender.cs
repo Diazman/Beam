@@ -395,7 +395,7 @@ public sealed partial class DirectManager
     private bool IsOnlyDirectSend(DirectSend send)
     {
         if (_sends.Values.Any(s => !ReferenceEquals(s, send) && s.Mode == ConnectionMethod.Direct && s.Transfer is not { IsFinished: true })) return false;
-        if (!_incoming.IsEmpty || !_joinedReceivers.IsEmpty) return false;
+        if (!_incoming.IsEmpty) return false;
         lock (_hostGate)
             if (_hostLeases.Count > 0) return false;
         return _linkedPeers.Keys.All(k => k == ReceiverJoinKey(send.Key));
@@ -780,7 +780,7 @@ public sealed partial class DirectManager
     /// <summary>
     /// A share of this device's direct network for <paramref name="session"/>: started on the first one (after Send,
     /// with a fresh passphrase), shared by the sessions that follow while it's on. Refused while the link is someone
-    /// else's (a legacy peer, this device being on another device's network).
+    /// else's (this device being on another device's network).
     /// </summary>
     private async Task<DirectNetwork> AcquireHostAsync(string owner, string session, bool forPhone, bool forComputer, CancellationToken token)
     {
@@ -801,9 +801,9 @@ public sealed partial class DirectManager
                 {
                     // Nobody else may be using the radio: starting would end their network (one Wi-Fi adapter).
                     var others = _linkedPeers.Keys.Where(k => !k.StartsWith("session:", StringComparison.Ordinal)).ToList();
-                    if (others.Count > 0 || !_joinedReceivers.IsEmpty)
+                    if (others.Count > 0)
                     {
-                        Log.Info($"Direct: not starting a network for {session}: the link is in use ({string.Join(", ", others.Concat(_joinedReceivers.Keys))})");
+                        Log.Info($"Direct: not starting a network for {session}: the link is in use ({string.Join(", ", others)})");
                         throw new DirectLinkException(L.T("This device's direct connection is in use right now. Try again when it's done."));
                     }
 
@@ -840,7 +840,7 @@ public sealed partial class DirectManager
             await PrepareAsync().ConfigureAwait(false);
             // The same name as always (so a phone that approved it before may connect without asking again), with a
             // passphrase made for these sessions: it is useless once the network goes off.
-            var fresh = DirectNetwork.ForSession(OwnNetwork().Ssid);
+            var fresh = DirectNetwork.ForSession(OwnNetworkName());
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(_stopping.Token);
             limit.CancelAfter(HostStartTimeout);
             DirectNetwork started;

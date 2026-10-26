@@ -169,8 +169,7 @@ public class DirectConnectionTests
         // The sender hosted (on demand, with a fresh passphrase) and the receiver joined.
         Assert.Same(senderLink, air.LastHostLink);
         Assert.Same(receiverLink, air.LastJoinLink);
-        Assert.NotEqual(sender.Node.Direct.OwnNetwork().Passphrase, senderLink.HostedNetworks.Single().Passphrase);
-        Assert.Equal(sender.Node.Direct.OwnNetwork().Ssid, senderLink.HostedNetworks.Single().Ssid);
+        Assert.Equal(sender.Node.Direct.OwnNetworkName(), senderLink.HostedNetworks.Single().Ssid);
         Assert.Equal(20, senderLink.HostedNetworks.Single().Passphrase.Length);
         // Each stage in order; "started" was never taken for "joined", nor "joined" for "verified".
         lock (states)
@@ -957,8 +956,7 @@ public class PairingTests
             Fingerprint = new string('a', 64),
             Kind = DeviceKinds.Laptop,
             Addresses = new() { "192.168.0.109", "10.0.0.5:47822", "not-an-address" },
-            Ssid = "DIRECT-ab-Beam-DILSHODJON",
-            Passphrase = "k3Zp9qWx2mNb",
+            Roles = DirectRolesText.Format(DirectRoles.Host | DirectRoles.JoinComputers),
         };
         var link = code.AppendTo("http://192.168.0.109:47831/0123abcd/");
         Assert.StartsWith("http://192.168.0.109:47831/0123abcd/#beam=", link);
@@ -966,7 +964,8 @@ public class PairingTests
         var parsed = PairingCode.TryParse(link)!;
         Assert.Equal(code.DeviceId, parsed.DeviceId);
         Assert.Equal("DILSHODJON", parsed.Name);
-        Assert.Equal(new DirectNetwork("DIRECT-ab-Beam-DILSHODJON", "k3Zp9qWx2mNb"), parsed.Network);
+        Assert.Equal(DirectRoles.Host | DirectRoles.JoinComputers, parsed.ToDevice().DirectRoles);
+        Assert.DoesNotContain("\"s\"", code.ToJson()); // no network name or passphrase in the code
         Assert.Equal(new[] { "192.168.0.109", "10.0.0.5:47822" }, parsed.Addresses);
         Assert.Equal(new[] { new IPEndPoint(IPAddress.Parse("192.168.0.109"), AppInfo.TransferPort), new IPEndPoint(IPAddress.Parse("10.0.0.5"), 47822) },
             parsed.ToDevice().Endpoints);
@@ -976,5 +975,18 @@ public class PairingTests
         Assert.Null(PairingCode.TryParse("WIFI:T:WPA;S:x;P:y;;"));
         Assert.Null(PairingCode.TryParse("beam:%%%"));
         Assert.Null(PairingCode.TryParse("beam:" + Convert.ToBase64String("{\"i\":\"\"}"u8.ToArray())));
+    }
+
+    [Fact]
+    public void ACodeFromAnOlderBeamStillPairsAndItsNetworkDetailsAreIgnored()
+    {
+        // Beam 1.5.3 and older put the computer's own network (name, passphrase, "connect now") in its code.
+        var old = "{\"i\":\"25e3dae905a447668a7b90283ce5fb79\",\"n\":\"PC\",\"f\":\"" + new string('b', 64)
+                  + "\",\"k\":\"laptop\",\"a\":[\"192.168.0.109\"],\"s\":\"DIRECT-ab-Beam-PC\",\"p\":\"k3Zp9qWx2mNb\",\"d\":true}";
+        var parsed = PairingCode.FromJson(old)!;
+        Assert.Equal("25e3dae905a447668a7b90283ce5fb79", parsed.DeviceId);
+        Assert.Equal("PC", parsed.Name);
+        Assert.Single(parsed.ToDevice().Endpoints);
+        Assert.DoesNotContain("k3Zp9qWx2mNb", parsed.ToJson()); // not kept, not passed on
     }
 }

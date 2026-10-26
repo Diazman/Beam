@@ -82,7 +82,7 @@ public sealed class BeamNode : IAsyncDisposable
         Direct = new DirectManager(Transfers, Discovery, Settings, () => Identity.DeviceId, options.DirectLink,
             selfIsComputer: selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop);
         Nearby = new Nearby.NearbyService(options.NearbyRadio, Direct, Discovery, Settings, () => Identity.DeviceId,
-            connectDirectly => CreatePairingCode(connectDirectly), selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
+            CreatePairingCode, selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
             () => Transfers.Sessions.Any(s => !s.IsFinished));
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
@@ -160,26 +160,22 @@ public sealed class BeamNode : IAsyncDisposable
         Nearby.IsNearby(device.Id));
 
     /// <summary>
-    /// This device's pairing code (shown as a QR code on the PC): who it is, where it is, and its direct network,
+    /// This device's pairing code (shown as a QR code on the PC): who it is, where it is, and what it can do directly,
     /// so a phone's Beam app that scans it can find and reach it from then on, with or without a shared Wi-Fi.
     /// </summary>
-    /// <param name="connectDirectly">This computer's network is on for phones: the app should join it right away.</param>
-    public PairingCode CreatePairingCode(bool connectDirectly = false) => new()
+    public PairingCode CreatePairingCode() => new()
     {
         DeviceId = Identity.DeviceId,
         Name = Settings.Current.DeviceName,
         Fingerprint = Identity.Fingerprint,
         Kind = _options.DeviceKind ?? DeviceKinds.Desktop,
         Addresses = GetLocalAddresses().Where(a => !a.StartsWith("192.168.137.", StringComparison.Ordinal)).Take(4).ToList(),
-        Ssid = Direct.CanHost ? Direct.OwnNetwork().Ssid : null,
-        Passphrase = Direct.CanHost ? Direct.OwnNetwork().Passphrase : null,
-        ConnectDirectly = connectDirectly && Direct.CanHost,
         Roles = DirectRolesText.Format(Direct.AnnouncedRoles),
     };
 
     /// <summary>
-    /// Pairs with the device whose code was scanned: trusts it (its files are accepted without asking), remembers
-    /// its direct network, and looks for it at the addresses in the code. Returns the device.
+    /// Pairs with the device whose code was scanned: trusts it (its files are accepted without asking), remembers it
+    /// (to know it when heard over Bluetooth), and looks for it at the addresses in the code. Returns the device.
     /// </summary>
     public DeviceInfo Pair(PairingCode code)
     {
@@ -189,7 +185,7 @@ public sealed class BeamNode : IAsyncDisposable
             s.TrustedDevices.RemoveAll(t => string.Equals(t.Fingerprint, code.Fingerprint, StringComparison.OrdinalIgnoreCase));
             s.TrustedDevices.Add(new TrustedDevice { Fingerprint = code.Fingerprint, DeviceId = code.DeviceId, Name = code.Name });
         });
-        if (code.Network != null) Direct.Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind);
+        Direct.Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind);
         foreach (var endpoint in device.Endpoints) Discovery.AddUnicastTarget(endpoint.Address);
         Discovery.Refresh();
         Log.Info($"Paired with {code.Name} ({code.DeviceId}) from its code");

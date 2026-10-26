@@ -452,14 +452,12 @@
   "Turn on Bluetooth to also find devices that aren't on your Wi-Fi (they need Receive open).": "Wi-Fi'nizde olmayan cihazları da bulmak için Bluetooth'u açın (onlarda Al açık olmalı).",
   "Turn on Bluetooth to connect to {0}.": "{0} cihazına bağlanmak için Bluetooth'u açın.",
   "Verification code:": "Doğrulama kodu:",
-  "{0} couldn't start its own Wi-Fi. Connect both devices to the same Wi-Fi.": "{0} kendi Wi-Fi'sini açamadı. İki cihazı da aynı Wi-Fi'ye bağlayın.",
   "{0} didn't answer over Bluetooth. Move closer and try again.": "{0} Bluetooth üzerinden yanıt vermedi. Yaklaşıp tekrar deneyin.",
   "{0} didn't answer.": "{0} yanıt vermedi.",
   "{0} isn't nearby anymore. Open Receive on it and try again.": "{0} artık yakında değil. Onda Al'ı açıp tekrar deneyin.",
   "Let senders connect directly": "Gönderenlerin doğrudan bağlanmasına izin ver",
   "Senders connect over the shared Wi-Fi.": "Gönderenler ortak Wi-Fi üzerinden bağlanır.",
   "Turn on Wi-Fi to connect directly.": "Doğrudan bağlanmak için Wi-Fi'yi açın.",
-  "{0} doesn't let senders connect directly. Connect both devices to the same Wi-Fi.": "{0}, gönderenlerin doğrudan bağlanmasına izin vermiyor. İki cihazı da aynı Wi-Fi'ye bağlayın.",
   "Turn on Location to connect directly. Android needs it for direct connections; Beam doesn't use your location.": "Doğrudan bağlanmak için Konum'u açın. Android doğrudan bağlantılar için buna ihtiyaç duyar; Beam konumunuzu kullanmaz.",
   "A sender that sends directly starts its own Wi-Fi when it sends, and this device joins it for the transfer (a phone may ask you to tap Connect). Opening Receive starts nothing. Faster, and no router needed.": "Doğrudan gönderen cihaz, gönderirken kendi Wi-Fi'sini açar ve bu cihaz aktarım süresince ona katılır (telefon sizden Bağlan'a dokunmanızı isteyebilir). Al'ı açmak hiçbir şeyi başlatmaz. Daha hızlı ve modem gerekmez.",
   "Asking {0} to accept a direct connection…": "{0} cihazından doğrudan bağlantıyı kabul etmesi isteniyor…",
@@ -542,5 +540,6 @@
   "This device joined {0}'s network but couldn't find it there.": "Bu cihaz {0} ağına katıldı ama {0} orada bulunamadı.",
   "This device sends directly to one device at a time. Send to the others when this is done.": "Bu cihaz aynı anda yalnızca bir cihaza doğrudan gönderir. Bu bitince diğerlerine gönderin.",
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} cihazına yalnızca Bluetooth ile ulaşılabiliyor ve bununla bu cihaz için ağı kurulamıyor. Önce ikisini aynı Wi-Fi ağına bağlayın.",
-  "The phone's user didn't allow joining the direct network.": "Telefonun kullanıcısı doğrudan ağa katılmaya izin vermedi."
+  "The phone's user didn't allow joining the direct network.": "Telefonun kullanıcısı doğrudan ağa katılmaya izin vermedi.",
+  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} cihazına doğrudan bağlanmak için cihazınızdaki Beam'i güncelleyin veya iki cihazı da aynı Wi-Fi'ye bağlayın."
 }

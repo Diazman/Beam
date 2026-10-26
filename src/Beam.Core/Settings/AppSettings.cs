@@ -76,12 +76,10 @@ public sealed class AppSettings
 
     public bool NotificationsEnabled { get; set; } = true;
 
-    /// <summary>This device's own direct network (name and passphrase), created once so paired devices can find it again.</summary>
+    /// <summary>The name of this device's direct networks, created once (each session gets its own passphrase).</summary>
     public string? DirectNetworkName { get; set; }
 
-    public string? DirectNetworkPassphrase { get; set; }
-
-    /// <summary>Paired devices known from scanning their code, or an earlier direct connection.</summary>
+    /// <summary>Paired devices known from scanning their code (the stored name is kept from older versions).</summary>
     public List<KnownDirectNetwork> KnownDirectNetworks { get; set; } = new();
 
     public bool NotifyOnIncomingRequest { get; set; } = true;
