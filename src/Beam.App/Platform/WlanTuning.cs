@@ -55,14 +55,6 @@ internal sealed class WlanTuning : IDisposable
         }
     }
 
-    /// <summary>For the log only: this PC's Wi-Fi connections (channel, band, rates).</summary>
-    public static void LogConnections()
-    {
-        using var tuning = WlanOpenHandle(2, IntPtr.Zero, out _, out var handle) == 0 ? new WlanTuning(handle) : null;
-        if (tuning == null) return;
-        foreach (var (id, name) in tuning.Interfaces()) tuning.LogConnection(id, name);
-    }
-
     /// <summary>The band this PC's Wi-Fi is connected on (2 or 5 GHz, 6 for 6 GHz), or 0 when it isn't connected.</summary>
     public static int ConnectedBand()
     {

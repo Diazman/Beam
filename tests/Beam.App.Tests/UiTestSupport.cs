@@ -32,23 +32,19 @@ public sealed class FakeUi : IUiServices
 {
     public List<string> FilesToPick { get; } = new();
 
-    public List<string> FoldersToPick { get; } = new();
-
     public string? FolderToPick { get; set; }
 
     public bool IsWindowActive { get; set; } = true;
-
-    public int BringToFrontCount { get; private set; }
 
     public string? Clipboard { get; set; }
 
     public Task<IReadOnlyList<string>> PickFilesAsync() => Task.FromResult<IReadOnlyList<string>>(FilesToPick.ToList());
 
-    public Task<IReadOnlyList<string>> PickFoldersAsync() => Task.FromResult<IReadOnlyList<string>>(FoldersToPick.ToList());
+    public Task<IReadOnlyList<string>> PickFoldersAsync() => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
 
     public Task<string?> PickFolderAsync(string title, string? startFolder) => Task.FromResult(FolderToPick);
 
-    public void BringToFront() => BringToFrontCount++;
+    public void BringToFront() { }
 
     public Task CopyToClipboardAsync(string text)
     {
@@ -197,7 +193,6 @@ public sealed class UiHarness : IAsyncDisposable
             s.ReceiveFolder = ReceiveFolder;
             s.FirstRunCompleted = firstRunDone;
         });
-        Node.Direct.HasWiredInternet = () => false; // not the test machine's own cable
         Node.Nearby.ReceiveGrace = TimeSpan.Zero;
         Ui = new FakeUi();
         Platform = new FakePlatform { IsPhone = phone };

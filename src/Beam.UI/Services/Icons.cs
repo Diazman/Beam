@@ -13,10 +13,6 @@ public static class Icons
     public const string Phone = "IconPhone";
     public const string File = "IconFile";
     public const string Folder = "IconFolder";
-    public const string Check = "IconCheckCircle";
-    public const string Error = "IconError";
-    public const string Warning = "IconWarning";
-    public const string Close = "IconClose";
 
     public static Geometry? Get(string key)
     {

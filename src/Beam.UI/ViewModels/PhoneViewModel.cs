@@ -26,7 +26,6 @@ public sealed class PhoneViewModel : ObservableObject
     private readonly DispatcherTimer _idleTimer;
     private DateTime _lastActivity = DateTime.UtcNow;
     private Geometry? _qr;
-    private bool _browserMode = true; // the Beam app uses Send and Receive; this page is for phones' browsers
     private string _link = "";
     private string _problem = "";
     private string _copyStatus = "";
@@ -36,7 +35,6 @@ public sealed class PhoneViewModel : ObservableObject
         _node = node;
         _ui = ui;
         _main = main;
-        ShowBrowserCommand = new RelayCommand(ShowBrowser);
         CopyLinkCommand = new AsyncCommand(CopyLinkAsync);
         ShareFilesCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFilesAsync()));
         ShareFolderCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFoldersAsync()));
@@ -56,10 +54,7 @@ public sealed class PhoneViewModel : ObservableObject
     /// <summary>Beam's page for phone browsers is running.</summary>
     public bool IsOn => _node.PhoneLink.IsRunning;
 
-    /// <summary>Showing the code that opens Beam's page in a phone's browser.</summary>
-    public bool ShowsBrowserCode => _browserMode;
-
-    /// <summary>The browser page's code (also pairs the Beam app, over the shared Wi-Fi).</summary>
+    /// <summary>The code that opens Beam's page in a phone's browser.</summary>
     public Geometry? Qr
     {
         get => _qr;
@@ -114,8 +109,6 @@ public sealed class PhoneViewModel : ObservableObject
         private set => SetProperty(ref _copyStatus, value);
     }
 
-    public RelayCommand ShowBrowserCommand { get; }
-
     public AsyncCommand CopyLinkCommand { get; }
 
     public AsyncCommand ShareFilesCommand { get; }
@@ -129,21 +122,14 @@ public sealed class PhoneViewModel : ObservableObject
     /// <summary>The page became visible: Beam's page for phone browsers starts.</summary>
     internal void OnShown()
     {
-        if (!IsOn) ShowBrowser();
+        if (!IsOn) StartBrowserLink();
         Refresh();
     }
 
-    internal void OnHidden()
-    {
-        // The page keeps running for the phone (it stops after a while without activity).
-    }
-
     /// <summary>Shares paths with the phone's browser (the page's buttons and drag and drop).</summary>
-    public async Task ShareAsync(IReadOnlyList<string> paths)
+    public Task ShareAsync(IReadOnlyList<string> paths)
     {
-        if (paths.Count == 0) return;
-        if (!_browserMode) ShowBrowser();
-        if (!IsOn) return;
+        if (paths.Count == 0 || !IsOn) return Task.CompletedTask;
         try
         {
             _node.PhoneLink.Share(paths);
@@ -154,13 +140,13 @@ public sealed class PhoneViewModel : ObservableObject
             Problem = ex.Error.Message;
         }
 
-        await Task.CompletedTask;
         Refresh();
+        return Task.CompletedTask;
     }
 
-    private void ShowBrowser()
+    /// <summary>Starts Beam's page for phone browsers (it stops after a while without activity).</summary>
+    private void StartBrowserLink()
     {
-        _browserMode = true;
         try
         {
             if (!IsOn) _node.PhoneLink.Start();
@@ -207,7 +193,7 @@ public sealed class PhoneViewModel : ObservableObject
                 Qr = link.Length > 0 ? QrCode.Create(link).Geometry : null;
             }
 
-            if (link.Length == 0 && _browserMode) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
+            if (link.Length == 0) Problem = L.T("This computer isn't connected to a network. Connect to Wi-Fi, then try again.");
             OtherLinks = links.Count > 1 ? L.T("Other networks: {0}", string.Join("  ·  ", links.Skip(1))) : "";
         }
         else
@@ -219,7 +205,7 @@ public sealed class PhoneViewModel : ObservableObject
 
         foreach (var name in new[]
                  {
-                     nameof(IsOn), nameof(ShowsBrowserCode), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText), nameof(IsConnected),
+                     nameof(IsOn), nameof(OtherLinks), nameof(HasOtherLinks), nameof(ConnectionText), nameof(IsConnected),
                      nameof(SharedNames), nameof(IsSharing), nameof(SharedSummary),
                  })
         {

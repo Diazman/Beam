@@ -21,7 +21,6 @@ public class PhoneUiTests
         var phone = app.ViewModel.Phone;
         // The page is for phones' browsers: its code is there right away.
         await UiHarness.WaitForAsync(() => phone.IsOn, "browser page on");
-        Assert.True(phone.ShowsBrowserCode);
         Assert.Contains("Send to your phone", app.VisibleTexts());
         Assert.NotNull(phone.Qr);
         Assert.Contains(app.Node.PhoneLink.Token, phone.Link);

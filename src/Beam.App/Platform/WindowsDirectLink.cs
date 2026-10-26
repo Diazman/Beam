@@ -81,13 +81,13 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private long _canShareCheckedAt = long.MinValue / 2;
 #endif
 
+    /// <inheritdoc />
+    public bool PreferInternetSharing { get; set; }
+
     /// <summary>
     /// This PC's network would share its internet: it is online and Windows can run its Mobile hotspot from here (and the
     /// user's own hotspot isn't on). Checked at most every 30 seconds; announced so two PCs agree which one hosts.
     /// </summary>
-    /// <inheritdoc />
-    public bool PreferInternetSharing { get; set; }
-
     public bool CanShareInternet
     {
         get
@@ -195,125 +195,121 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
 
     private async Task<DirectNetwork> HostCoreAsync(DirectNetwork? preferred, CancellationToken cancellationToken)
     {
-        {
 #if WINDOWS_WINRT
-            await WaitForRestoreAsync(cancellationToken).ConfigureAwait(false);
-            await EnsureWifiOnAsync().ConfigureAwait(false);
-            if (_joinedAdapter != null)
-            {
-                Log.Info($"Wi-Fi: leaving {_joinedSsid} before starting this PC's own network");
-                await LeaveJoinedNetworkAsync().ConfigureAwait(false);
-            }
-
-            if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
-                && (preferred == null || preferred == _network)) return _network;
-            if (_hotspot?.TetheringOperationalState == TetheringOperationalState.On && _network != null
-                && (preferred == null || preferred == _network)) return _network;
-            StopPublisher();
-            await StopHotspotAsync().ConfigureAwait(false);
-            var network = preferred ?? DirectNetwork.Create(_deviceName());
-            // A phone joins and this PC is online: Windows' Mobile hotspot first. It shares the internet, so a phone that
-            // can be on one Wi-Fi network only stays on it (on a network without internet it left after two minutes).
-            // Otherwise (or if it doesn't start) a Wi-Fi Direct network; a phone that can't join the hotspot gets that
-            // next time.
-            if (PreferInternetSharing)
-            {
-                if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
-                {
-                    _network = network with { SharesInternet = true };
-                    OwnedByRunningAttempt();
-                    StartTuning("hosting the hotspot");
-                    return _network;
-                }
-
-                Log.Info("Hotspot: not available; starting a Wi-Fi Direct network for the phone instead");
-            }
-
-            try
-            {
-                var started = await StartPublisherAsync(network, cancellationToken).ConfigureAwait(false);
-                StartTuning("hosting the direct network");
-                return started;
-            }
-            catch (DirectLinkException ex) when (!cancellationToken.IsCancellationRequested && !PreferInternetSharing)
-            {
-                Log.Info($"Wi-Fi Direct: {network.Ssid} didn't start ({ex.Message}); trying the Mobile hotspot");
-                if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
-                {
-                    _network = network with { SharesInternet = true };
-                    OwnedByRunningAttempt();
-                    StartTuning("hosting the hotspot");
-                    return _network;
-                }
-
-                throw;
-            }
-#else
-            await Task.CompletedTask.ConfigureAwait(false);
-            throw new DirectLinkException(L.T("This device can't connect directly."));
-#endif
+        await WaitForRestoreAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureWifiOnAsync().ConfigureAwait(false);
+        if (_joinedAdapter != null)
+        {
+            Log.Info($"Wi-Fi: leaving {_joinedSsid} before starting this PC's own network");
+            await LeaveJoinedNetworkAsync().ConfigureAwait(false);
         }
+
+        if (_publisher?.Status == WiFiDirectAdvertisementPublisherStatus.Started && _network != null
+            && (preferred == null || preferred == _network)) return _network;
+        if (_hotspot?.TetheringOperationalState == TetheringOperationalState.On && _network != null
+            && (preferred == null || preferred == _network)) return _network;
+        StopPublisher();
+        await StopHotspotAsync().ConfigureAwait(false);
+        var network = preferred ?? DirectNetwork.Create(_deviceName());
+        // A phone joins and this PC is online: Windows' Mobile hotspot first. It shares the internet, so a phone that
+        // can be on one Wi-Fi network only stays on it (on a network without internet it left after two minutes).
+        // Otherwise (or if it doesn't start) a Wi-Fi Direct network; a phone that can't join the hotspot gets that
+        // next time.
+        if (PreferInternetSharing)
+        {
+            if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
+            {
+                _network = network with { SharesInternet = true };
+                OwnedByRunningAttempt();
+                StartTuning("hosting the hotspot");
+                return _network;
+            }
+
+            Log.Info("Hotspot: not available; starting a Wi-Fi Direct network for the phone instead");
+        }
+
+        try
+        {
+            var started = await StartPublisherAsync(network, cancellationToken).ConfigureAwait(false);
+            StartTuning("hosting the direct network");
+            return started;
+        }
+        catch (DirectLinkException ex) when (!cancellationToken.IsCancellationRequested && !PreferInternetSharing)
+        {
+            Log.Info($"Wi-Fi Direct: {network.Ssid} didn't start ({ex.Message}); trying the Mobile hotspot");
+            if (await TryStartHotspotAsync(network, cancellationToken).ConfigureAwait(false))
+            {
+                _network = network with { SharesInternet = true };
+                OwnedByRunningAttempt();
+                StartTuning("hosting the hotspot");
+                return _network;
+            }
+
+            throw;
+        }
+#else
+        await Task.CompletedTask.ConfigureAwait(false);
+        throw new DirectLinkException(L.T("This device can't connect directly."));
+#endif
     }
 
 #if WINDOWS_WINRT
     private async Task<DirectNetwork> StartPublisherAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
+        Log.Info($"Wi-Fi Direct: starting {network.Ssid}");
+        var publisher = new WiFiDirectAdvertisementPublisher();
+        var advertisement = publisher.Advertisement;
+        advertisement.IsAutonomousGroupOwnerEnabled = true;
+        advertisement.ListenStateDiscoverability = WiFiDirectAdvertisementListenStateDiscoverability.Normal;
+        advertisement.LegacySettings.IsEnabled = true;
+        advertisement.LegacySettings.Ssid = network.Ssid;
+        advertisement.LegacySettings.Passphrase = new PasswordCredential { Password = network.Passphrase };
+
+        var started = new TaskCompletionSource<WiFiDirectAdvertisementPublisherStatusChangedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        publisher.StatusChanged += (_, e) =>
         {
-            Log.Info($"Wi-Fi Direct: starting {network.Ssid}");
-            var publisher = new WiFiDirectAdvertisementPublisher();
-            var advertisement = publisher.Advertisement;
-            advertisement.IsAutonomousGroupOwnerEnabled = true;
-            advertisement.ListenStateDiscoverability = WiFiDirectAdvertisementListenStateDiscoverability.Normal;
-            advertisement.LegacySettings.IsEnabled = true;
-            advertisement.LegacySettings.Ssid = network.Ssid;
-            advertisement.LegacySettings.Passphrase = new PasswordCredential { Password = network.Passphrase };
+            Log.Info($"Wi-Fi Direct: {e.Status} ({e.Error})");
+            if (e.Status is WiFiDirectAdvertisementPublisherStatus.Started or WiFiDirectAdvertisementPublisherStatus.Aborted
+                or WiFiDirectAdvertisementPublisherStatus.Stopped)
+                started.TrySetResult(e);
+        };
 
-            var started = new TaskCompletionSource<WiFiDirectAdvertisementPublisherStatusChangedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
-            publisher.StatusChanged += (_, e) =>
-            {
-                Log.Info($"Wi-Fi Direct: {e.Status} ({e.Error})");
-                if (e.Status is WiFiDirectAdvertisementPublisherStatus.Started or WiFiDirectAdvertisementPublisherStatus.Aborted
-                    or WiFiDirectAdvertisementPublisherStatus.Stopped)
-                    started.TrySetResult(e);
-            };
-
-            try
-            {
-                publisher.Start();
-            }
-            catch (Exception ex)
-            {
-                throw new DirectLinkException(L.T("This computer can't start a direct connection: its Wi-Fi doesn't support Wi-Fi Direct, or Wi-Fi is turned off."), ex);
-            }
-
-            WiFiDirectAdvertisementPublisherStatusChangedEventArgs result;
-            try
-            {
-                result = await started.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
-            {
-                // Not kept anywhere yet: stop it here, or it could start later with nobody to stop it.
-                StopUntracked(publisher);
-                if (ex is OperationCanceledException) throw;
-                throw new DirectLinkException(L.T("This computer's Wi-Fi didn't start the direct connection in time. Make sure Wi-Fi is turned on."));
-            }
-
-            if (result.Status != WiFiDirectAdvertisementPublisherStatus.Started)
-            {
-                StopUntracked(publisher);
-                throw new DirectLinkException(result.Error == WiFiDirectError.ResourceInUse
-                    ? L.T("This computer's Wi-Fi is busy with another direct connection or a mobile hotspot. Turn off the hotspot and try again.")
-                    : L.T("This computer can't start a direct connection: its Wi-Fi doesn't support Wi-Fi Direct, or Wi-Fi is turned off."));
-            }
-
-            _publisher = publisher;
-            _network = network;
-            OwnedByRunningAttempt();
-            Log.Info($"Wi-Fi Direct network {network.Ssid} started");
-            _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => LogWirelessAdapters(), TaskScheduler.Default);
-            return network;
+        try
+        {
+            publisher.Start();
         }
+        catch (Exception ex)
+        {
+            throw new DirectLinkException(L.T("This computer can't start a direct connection: its Wi-Fi doesn't support Wi-Fi Direct, or Wi-Fi is turned off."), ex);
+        }
+
+        WiFiDirectAdvertisementPublisherStatusChangedEventArgs result;
+        try
+        {
+            result = await started.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        {
+            // Not kept anywhere yet: stop it here, or it could start later with nobody to stop it.
+            StopUntracked(publisher);
+            if (ex is OperationCanceledException) throw;
+            throw new DirectLinkException(L.T("This computer's Wi-Fi didn't start the direct connection in time. Make sure Wi-Fi is turned on."));
+        }
+
+        if (result.Status != WiFiDirectAdvertisementPublisherStatus.Started)
+        {
+            StopUntracked(publisher);
+            throw new DirectLinkException(result.Error == WiFiDirectError.ResourceInUse
+                ? L.T("This computer's Wi-Fi is busy with another direct connection or a mobile hotspot. Turn off the hotspot and try again.")
+                : L.T("This computer can't start a direct connection: its Wi-Fi doesn't support Wi-Fi Direct, or Wi-Fi is turned off."));
+        }
+
+        _publisher = publisher;
+        _network = network;
+        OwnedByRunningAttempt();
+        Log.Info($"Wi-Fi Direct network {network.Ssid} started");
+        _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => LogWirelessAdapters(), TaskScheduler.Default);
+        return network;
     }
 #endif
 
@@ -361,53 +357,51 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     private async Task<IPAddress?> JoinCoreAsync(DirectNetwork network, CancellationToken cancellationToken)
     {
 #if WINDOWS_WINRT
+        await WaitForRestoreAsync(cancellationToken).ConfigureAwait(false);
+        await EnsureWifiOnAsync().ConfigureAwait(false);
+        // This PC's own network must go first: every Windows hotspot is 192.168.137.1, so with its own still on, this
+        // PC would reach itself at the other's address.
+        if (_publisher != null || _hotspot != null)
         {
-            await WaitForRestoreAsync(cancellationToken).ConfigureAwait(false);
-            await EnsureWifiOnAsync().ConfigureAwait(false);
-            // This PC's own network must go first: every Windows hotspot is 192.168.137.1, so with its own still on, this
-            // PC would reach itself at the other's address.
-            if (_publisher != null || _hotspot != null)
-            {
-                Log.Info($"Wi-Fi: stopping this PC's own network {_network?.Ssid} before joining {network.Ssid}");
-                StopPublisher();
-                await StopHotspotAsync().ConfigureAwait(false);
-                _network = null;
-            }
+            Log.Info($"Wi-Fi: stopping this PC's own network {_network?.Ssid} before joining {network.Ssid}");
+            StopPublisher();
+            await StopHotspotAsync().ConfigureAwait(false);
+            _network = null;
+        }
 
-            if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
-                throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
-            var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);
-            var adapter = adapters.FirstOrDefault()
-                          ?? throw new DirectLinkException(L.T("This computer has no Wi-Fi, so it can't join the sender's direct network."));
+        if (await WiFiAdapter.RequestAccessAsync().AsTask(cancellationToken).ConfigureAwait(false) != WiFiAccessStatus.Allowed)
+            throw new DirectLinkException(L.T("Windows didn't let Beam use Wi-Fi. In Windows Settings → Privacy & security → Location, turn on location access and let desktop apps use it, then try again."));
+        var adapters = await WiFiAdapter.FindAllAdaptersAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        var adapter = adapters.FirstOrDefault()
+                      ?? throw new DirectLinkException(L.T("This computer has no Wi-Fi, so it can't join the sender's direct network."));
 
-            var current = await ConnectedSsidAsync(adapter).ConfigureAwait(false);
-            if (current == network.Ssid && _joinedAdapter != null) return await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
+        var current = await ConnectedSsidAsync(adapter).ConfigureAwait(false);
+        if (current == network.Ssid && _joinedAdapter != null) return await WaitForHostAsync(adapter, cancellationToken).ConfigureAwait(false);
 
-            WiFiAvailableNetwork? target = null;
-            var seen = 0;
-            for (var attempt = 0; attempt < 3 && target == null; attempt++)
-            {
-                if (attempt > 0) await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
-                await adapter.ScanAsync().AsTask(cancellationToken).ConfigureAwait(false);
-                seen = adapter.NetworkReport.AvailableNetworks.Count;
-                target = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == network.Ssid);
-            }
+        WiFiAvailableNetwork? target = null;
+        var seen = 0;
+        for (var attempt = 0; attempt < 3 && target == null; attempt++)
+        {
+            if (attempt > 0) await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+            await adapter.ScanAsync().AsTask(cancellationToken).ConfigureAwait(false);
+            seen = adapter.NetworkReport.AvailableNetworks.Count;
+            target = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == network.Ssid);
+        }
 
-            _previousSsid ??= current;
-            Log.Info($"Wi-Fi: joining {network.Ssid}{(current != null ? $" (leaving {current} meanwhile)" : "")}");
-            try
-            {
-                return await ConnectAndWaitAsync(adapter, network, target, seen, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Given up while Windows was connecting: it may still get there, and this PC would stay on that network
-                // with nothing to bring it back.
-                Log.Info($"Wi-Fi: joining {network.Ssid} was given up; going back");
-                if (_joinedAdapter != null) await LeaveJoinedNetworkAsync().ConfigureAwait(false);
-                else await AbandonJoinAsync(adapter, network.Ssid).ConfigureAwait(false);
-                throw;
-            }
+        _previousSsid ??= current;
+        Log.Info($"Wi-Fi: joining {network.Ssid}{(current != null ? $" (leaving {current} meanwhile)" : "")}");
+        try
+        {
+            return await ConnectAndWaitAsync(adapter, network, target, seen, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Given up while Windows was connecting: it may still get there, and this PC would stay on that network
+            // with nothing to bring it back.
+            Log.Info($"Wi-Fi: joining {network.Ssid} was given up; going back");
+            if (_joinedAdapter != null) await LeaveJoinedNetworkAsync().ConfigureAwait(false);
+            else await AbandonJoinAsync(adapter, network.Ssid).ConfigureAwait(false);
+            throw;
         }
 #else
         await Task.CompletedTask.ConfigureAwait(false);
@@ -719,10 +713,6 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
     }
 
     /// <summary>
-    /// WPA2 for Beam's hotspot, also when the user's own hotspot is set to WPA3: phones join it with a WPA2 passphrase
-    /// (Android's join request has to match the network's security exactly).
-    /// </summary>
-    /// <summary>
     /// The hotspot on the band this PC's own Wi-Fi is on, so one radio isn't split between two channels far apart; and
     /// (Windows 11 24H2) the hotspot's speed put before the PC's own connection while Beam uses it.
     /// </summary>
@@ -758,6 +748,10 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         }
     }
 
+    /// <summary>
+    /// WPA2 for Beam's hotspot, also when the user's own hotspot is set to WPA3: phones join it with a WPA2 passphrase
+    /// (Android's join request has to match the network's security exactly).
+    /// </summary>
     private static void UseWpa2(NetworkOperatorTetheringSessionAccessPointConfiguration session)
     {
         try

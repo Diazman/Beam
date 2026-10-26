@@ -74,8 +74,6 @@ public sealed class ReceiveViewModel : ObservableObject
 
     // ---- Bluetooth ----
 
-    public bool BluetoothReady => _node.Nearby.State == NearbyRadioState.Ready;
-
     public bool BluetoothNeedsPermission => _node.Nearby.State == NearbyRadioState.NeedsPermission;
 
     public string BluetoothText => _node.Nearby.State switch
@@ -156,7 +154,7 @@ public sealed class ReceiveViewModel : ObservableObject
         if (_shown && _showsCode) Code = QrCode.Create(_node.CreatePairingCode(connectDirectly: NetworkOn).AppendTo(null)).Geometry;
         foreach (var name in new[]
                  {
-                     nameof(DeviceName), nameof(VerificationCode), nameof(AllowDirect), nameof(CanConnectDirectly), nameof(BluetoothReady),
+                     nameof(DeviceName), nameof(VerificationCode), nameof(AllowDirect), nameof(CanConnectDirectly),
                      nameof(BluetoothNeedsPermission), nameof(BluetoothText), nameof(NetworkOn), nameof(NetworkText), nameof(ShowsPhoneWarning),
                      nameof(ShowsCode), nameof(CodeButtonText),
                  })

@@ -133,16 +133,12 @@ public sealed class TestNode : IAsyncDisposable
             s.ReceiveFolder = ReceiveFolder;
             s.FirstRunCompleted = true;
         });
-        Node.Direct.HasWiredInternet = () => Wired; // not the test machine's own cable
         Node.Nearby.ReceiveGrace = TimeSpan.Zero; // leaving Receive stops at once (tested separately)
         Node.Transfers.Start(0);
         if (startDiscovery) Node.Discovery.Start();
     }
 
     public BeamNode Node { get; }
-
-    /// <summary>Acts as if this computer had internet over a cable.</summary>
-    public bool Wired { get; set; }
 
     public TestHandler Handler { get; }
 

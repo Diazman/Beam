@@ -33,7 +33,6 @@ namespace Beam.Core.Direct;
 /// </summary>
 public sealed partial class DirectManager
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(150);
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(180);
 
     private readonly TransferService _transfers;
@@ -45,9 +44,9 @@ public sealed partial class DirectManager
     private readonly ConcurrentDictionary<string, ConnectionMethod> _peerMethod = new();
 
     /// <summary>
-    /// Who uses the direct link (this device's network, or one it joined) right now: legacy peers by device id, the Phone
-    /// page, and direct sessions ("session:…" for networks this device hosts, "rx:…" for one it joined). The link is
-    /// stopped only when nobody is left.
+    /// Who uses the direct link (this device's network, or one it joined) right now: legacy peers by device id and
+    /// direct sessions ("session:…" for networks this device hosts, "rx:…" for one it joined). The link is stopped only
+    /// when nobody is left.
     /// </summary>
     private readonly ConcurrentDictionary<string, byte> _linkedPeers = new();
 
@@ -83,9 +82,6 @@ public sealed partial class DirectManager
         _transfers.DirectHandler = HandleRequestAsync;
     }
 
-    /// <summary>Stands for a phone's web browser (Phone page) using this device's direct network.</summary>
-    private const string BrowserUser = "phone-browser";
-
     /// <summary>The direct link changed (raised on a background thread).</summary>
     public event Action? Changed;
 
@@ -113,14 +109,10 @@ public sealed partial class DirectManager
     /// <summary>This device's address on the network of <c>host</c> (replaceable in tests).</summary>
     internal Func<IPAddress, IPAddress?> OwnAddressNear { get; set; } = DirectAddresses.OwnAddressNear;
 
-    /// <summary>Whether this computer has internet over a cable (replaceable in tests).</summary>
-    internal Func<bool> HasWiredInternet { get; set; } = NetworkFacts.HasWiredInternet;
-
     private DirectRoles Traits()
     {
         var traits = _receiving ? DirectRoles.Receiving : DirectRoles.None;
         if (!_selfIsComputer) return traits;
-        if (Roles.HasFlag(DirectRoles.JoinComputers) && HasWiredInternet()) traits |= DirectRoles.Wired;
         if (HostedNetwork?.SharesInternet == true) traits |= DirectRoles.SharesInternet;
         if (CanHostForSenders) traits |= DirectRoles.HostsForSenders;
         return traits;
@@ -256,9 +248,7 @@ public sealed partial class DirectManager
         return device with { Endpoints = ordered };
     }
 
-    public bool HasDirectPath(DeviceInfo device) => device.Endpoints.Any(e => _transfers.IsDirectAddress(e.Address));
-
-    /// <summary>This device's own direct network (Phone page, pairing code): created once and kept.</summary>
+    /// <summary>This device's own direct network (its name is reused by sessions; the pairing code carries it): created once and kept.</summary>
     public DirectNetwork OwnNetwork()
     {
         lock (_ownNetworkGate) return OwnNetworkLocked();
@@ -280,16 +270,17 @@ public sealed partial class DirectManager
         return created;
     }
 
-    /// <summary>The direct network of a paired device, if this device knows it (from its code, or an older version).</summary>
+    /// <summary>A paired device, if this device knows it (from its code, or an older version).</summary>
     public KnownDirectNetwork? KnownNetworkFor(string deviceId) =>
         _settings.Current.KnownDirectNetworks.FirstOrDefault(k => k.DeviceId == deviceId);
 
-    /// <summary>Keeps a paired device's direct network (its code was scanned, or an older version shared it).</summary>
-    public void Remember(string deviceId, string name, string fingerprint, string kind, DirectNetwork network, int port = 0)
+    /// <summary>Keeps a paired device that has a direct network (its code was scanned, or an older version shared it).</summary>
+    public void Remember(string deviceId, string name, string fingerprint, string kind)
     {
         if (!CanJoinAny || string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(fingerprint)) return;
         var known = KnownNetworkFor(deviceId);
-        if (known != null && known.Ssid == network.Ssid && known.Passphrase == network.Passphrase && known.Name == name && known.Port == port) return;
+        if (known != null && known.Name == name && known.Kind == kind
+            && string.Equals(known.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase)) return;
         _settings.Update(s =>
         {
             s.KnownDirectNetworks.RemoveAll(k => k.DeviceId == deviceId);
@@ -299,17 +290,9 @@ public sealed partial class DirectManager
                 Name = name,
                 Fingerprint = fingerprint.ToLowerInvariant(),
                 Kind = kind,
-                Ssid = network.Ssid,
-                Passphrase = network.Passphrase,
-                Port = port,
             });
         });
-        Log.Info($"Direct: remembered {name}'s direct network {network.Ssid}");
-    }
-
-    /// <summary>Background work at startup: none (nothing is joined or started until the user sends).</summary>
-    internal void Start()
-    {
+        Log.Info($"Direct: remembered {name}");
     }
 
     /// <summary>
@@ -340,28 +323,6 @@ public sealed partial class DirectManager
 
     /// <summary>This device can start a direct network.</summary>
     public bool CanHost => Roles.HasFlag(DirectRoles.Host);
-
-    /// <summary>
-    /// Starts this device's direct network for the Phone page: the phone joins it with the returned name and
-    /// passphrase (shown as a Wi-Fi QR code) and then opens the page on this device's direct address.
-    /// </summary>
-    public async Task<DirectNetwork> HostForBrowserAsync(CancellationToken cancellationToken)
-    {
-        if (_link == null || !CanHost) throw new DirectLinkException(L.T("This device can't connect directly."));
-        if (LinkInUseBySessions()) throw new DirectLinkException(L.T("This device's direct connection is in use right now. Try again when it's done."));
-        var network = await HostOwnNetworkAsync(cancellationToken).ConfigureAwait(false);
-        _linkedPeers[BrowserUser] = 0;
-        _ = Task.Delay(3000).ContinueWith(_ => Log.Info($"Direct network {network.Ssid} for a phone's browser. Adapters: {DirectAddresses.Describe()}"), TaskScheduler.Default);
-        DirectAddresses.Invalidate();
-        Changed?.Invoke();
-        return network;
-    }
-
-    /// <summary>The Phone page no longer needs the direct network (stopped unless something else still uses it).</summary>
-    public void StopForBrowser()
-    {
-        if (_linkedPeers.TryRemove(BrowserUser, out _)) StopLinkIfUnused(keepForRunningTransfers: true);
-    }
 
     /// <summary>Legacy: once the last transfer with a device is done, what it asked for no longer counts.</summary>
     private void OnSessionFinished(TransferSession session)
@@ -405,22 +366,6 @@ public sealed partial class DirectManager
         foreach (var peer in _peerMethod.Keys.ToList()) _peerMethod.TryRemove(peer, out _);
         Log.Info($"Direct: sending mode is now {method}; running transfers keep theirs");
         Changed?.Invoke();
-    }
-
-    private static async Task<bool> CanReachAsync(IPEndPoint endpoint, CancellationToken token)
-    {
-        using var socket = new System.Net.Sockets.Socket(endpoint.AddressFamily, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(1.5));
-        try
-        {
-            await socket.ConnectAsync(endpoint, timeout.Token).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception) when (!token.IsCancellationRequested)
-        {
-            return false;
-        }
     }
 
     /// <summary>The joined network went away: forget its addresses; a direct session on it is interrupted.</summary>
@@ -550,7 +495,7 @@ public sealed partial class DirectManager
                 if (_selfIsComputer) await PrepareAsync().ConfigureAwait(false);
                 Log.Info($"Direct: {peerName} started {request.Ssid}; joining it to receive (older Beam asked; this device's own network, if on, stops)");
                 var joining = new DirectNetwork(request.Ssid, request.Passphrase) { HostIsComputer = IsComputer(peerKind, _discovery.Find(peerId)?.Platform) };
-                Remember(peerId, peerName, peerFingerprint, peerKind, joining);
+                Remember(peerId, peerName, peerFingerprint, peerKind);
                 var host = await _link.JoinAsync(joining, token).ConfigureAwait(false);
                 HostedNetwork = null; // joining stops this device's own network
                 _linkOwners[peerId] = peerFingerprint;
@@ -731,11 +676,11 @@ public sealed partial class DirectManager
         Changed?.Invoke();
     }
 
-    /// <summary>Stops the link when nobody uses it any more (never one a session, the Phone page or a legacy peer still uses).</summary>
+    /// <summary>Stops the link when nobody uses it any more (never one a session or a legacy peer still uses).</summary>
     private void StopLinkIfUnused(bool keepForRunningTransfers = false)
     {
         if (!_linkedPeers.IsEmpty || _link == null) return;
-        // Leaving the Phone page mustn't pull the network from under a transfer that runs over it.
+        // Letting go of a legacy peer mustn't pull the network from under a transfer that runs over it.
         if (keepForRunningTransfers && _transfers.Sessions.Any(s => !s.IsFinished && s.Path == TransferPath.Direct))
         {
             Log.Info("Direct: link kept, a transfer still uses it");

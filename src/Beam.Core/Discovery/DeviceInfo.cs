@@ -2,7 +2,7 @@ using System.Net;
 
 namespace Beam.Core.Discovery;
 
-/// <summary>Kinds of devices. Only desktops exist today; phones will announce themselves as "phone".</summary>
+/// <summary>Kinds of devices, as they announce themselves.</summary>
 public static class DeviceKinds
 {
     public const string Desktop = "desktop";

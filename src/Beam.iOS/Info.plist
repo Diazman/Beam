@@ -28,29 +28,15 @@
     <string>UIInterfaceOrientationLandscapeLeft</string>
     <string>UIInterfaceOrientationLandscapeRight</string>
   </array>
-  <key>UILaunchStoryboardName</key>
-  <string></string>
   <key>UILaunchScreen</key>
   <dict/>
   <!-- Finding computers and sending to them on the Wi-Fi network (iOS asks once). -->
   <key>NSLocalNetworkUsageDescription</key>
   <string>Beam finds your computers and phones on this Wi-Fi network and sends files to them directly.</string>
-  <key>NSBonjourServices</key>
-  <array>
-    <string>_beam._tcp</string>
-    <string>_beam._udp</string>
-  </array>
   <!-- Received files go to Beam's folder, which the Files app shows ("On My iPhone" → Beam). -->
   <key>UIFileSharingEnabled</key>
   <true/>
   <key>LSSupportsOpeningDocumentsInPlace</key>
   <true/>
-  <key>NSPhotoLibraryUsageDescription</key>
-  <string>Beam sends the photos and videos you choose.</string>
-  <!-- Transfers keep going for a short while when Beam is put in the background. -->
-  <key>UIBackgroundModes</key>
-  <array>
-    <string>fetch</string>
-  </array>
 </dict>
 </plist>

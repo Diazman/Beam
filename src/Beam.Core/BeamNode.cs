@@ -128,7 +128,6 @@ public sealed class BeamNode : IAsyncDisposable
         Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} (build {AppInfo.Build}) as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
         Transfers.Start(_options.TransferPort);
         Discovery.Start();
-        Direct.Start();
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
@@ -190,7 +189,7 @@ public sealed class BeamNode : IAsyncDisposable
             s.TrustedDevices.RemoveAll(t => string.Equals(t.Fingerprint, code.Fingerprint, StringComparison.OrdinalIgnoreCase));
             s.TrustedDevices.Add(new TrustedDevice { Fingerprint = code.Fingerprint, DeviceId = code.DeviceId, Name = code.Name });
         });
-        if (code.Network is { } network) Direct.Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind, network);
+        if (code.Network != null) Direct.Remember(code.DeviceId, code.Name, code.Fingerprint, device.Kind);
         foreach (var endpoint in device.Endpoints) Discovery.AddUnicastTarget(endpoint.Address);
         Discovery.Refresh();
         Log.Info($"Paired with {code.Name} ({code.DeviceId}) from its code");

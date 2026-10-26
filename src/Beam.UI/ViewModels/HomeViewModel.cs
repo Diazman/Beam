@@ -292,16 +292,11 @@ public sealed class HomeViewModel : ObservableObject
     /// <summary>The first chosen device.</summary>
     public DeviceViewModel? SelectedDevice => _selected.FirstOrDefault();
 
-    /// <summary>The chosen computers, in the order they were picked.</summary>
-    public IReadOnlyList<DeviceViewModel> SelectedDevices => _selected;
-
     public string DeviceHint => Devices.Count > 1 ? L.T("Choose one or more devices.") : "";
 
     public bool HasDeviceHint => DeviceHint.Length > 0;
 
     public bool HasItems => Items.Count > 0;
-
-    public bool HasNoItems => Items.Count == 0;
 
     /// <summary>Text or a link shared to Beam from another app; Send sends it (after any files).</summary>
     public string? SharedText
@@ -508,7 +503,6 @@ public sealed class HomeViewModel : ObservableObject
     {
         SendTextCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(SelectedDevice));
-        OnPropertyChanged(nameof(SelectedDevices));
         UpdateSendState();
     }
 
@@ -577,7 +571,6 @@ public sealed class HomeViewModel : ObservableObject
     private void OnItemsChanged()
     {
         OnPropertyChanged(nameof(HasItems));
-        OnPropertyChanged(nameof(HasNoItems));
         OnPropertyChanged(nameof(ShowDropZone));
         OnPropertyChanged(nameof(TotalBytes));
         OnPropertyChanged(nameof(TotalFiles));

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
 using Beam.Core.Protocol;
+using Beam.Core.Storage;
 using Beam.Core.Localization;
 
 namespace Beam.Core.Transfer;
@@ -14,7 +15,7 @@ namespace Beam.Core.Transfer;
 /// </summary>
 internal sealed class IncomingTransfer
 {
-    public const string PartExtension = ".beampart";
+    private const string PartExtension = ".beampart";
     private const long FreeSpaceMargin = 16 * 1024 * 1024;
     private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(1);
@@ -388,7 +389,7 @@ internal sealed class IncomingTransfer
                         {
                             session.AddTransferred(-current.Written);
                             await current.DisposeAsync().ConfigureAwait(false);
-                            TryDelete(file.PartPath);
+                            FileCleanup.TryDelete(file.PartPath);
                             current = null;
                         }
 
@@ -507,15 +508,10 @@ internal sealed class IncomingTransfer
         var intact = footer.Length == file.Size && written == file.Size && string.Equals(hash, footer.Sha256, StringComparison.OrdinalIgnoreCase);
         if (!intact)
         {
-            TryDelete(file.PartPath);
+            FileCleanup.TryDelete(file.PartPath);
             session.AddTransferred(-written);
             Log.Warn($"Verification failed for {file.RelativePath} from {PeerName} (got {written} bytes, hash {hash}, expected {footer.Sha256})");
-            if (retried.Add(file.Index)) return new FileResultMessage { Index = file.Index, Ok = false, Retry = true };
-
-            file.Failed = true;
-            var reason = L.T("The file was damaged in transit and couldn't be verified.");
-            session.FileFailed(file.RelativePath, reason);
-            return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
+            return Damaged(session, file, retried);
         }
 
         return CompleteVerifiedFile(session, file);
@@ -532,6 +528,12 @@ internal sealed class IncomingTransfer
         session.AddTransferred(-active.Written);
         active.Hash.Dispose();
         Log.Warn($"Verification failed for {file.RelativePath} from {PeerName} (got {active.Written} bytes, hash {hash}, expected {footer.Sha256})");
+        return Damaged(session, file, retried);
+    }
+
+    /// <summary>A file that failed verification: sent again once, then failed.</summary>
+    private static FileResultMessage Damaged(TransferSession session, ResumeFile file, HashSet<int> retried)
+    {
         if (retried.Add(file.Index)) return new FileResultMessage { Index = file.Index, Ok = false, Retry = true };
 
         file.Failed = true;
@@ -555,7 +557,7 @@ internal sealed class IncomingTransfer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            TryDelete(file.PartPath);
+            FileCleanup.TryDelete(file.PartPath);
             throw new LocalFileException($"Writing {file.PartPath}", ex);
         }
 
@@ -582,7 +584,7 @@ internal sealed class IncomingTransfer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !ErrorTranslator.IsDiskFull(ex))
         {
-            TryDelete(file.PartPath);
+            FileCleanup.TryDelete(file.PartPath);
             file.Failed = true;
             var reason = ex is UnauthorizedAccessException
                 ? L.T("Couldn't be saved: the existing file is read-only or protected.")
@@ -978,18 +980,6 @@ internal sealed class IncomingTransfer
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Could not delete {path}: {ex.Message}");
-        }
-    }
 
     private sealed class ActiveFile : IAsyncDisposable
     {

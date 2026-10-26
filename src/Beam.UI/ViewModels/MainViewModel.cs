@@ -58,9 +58,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
 
-        ShowHomeCommand = new RelayCommand(() => Navigate(Page.Home));
-        ShowHistoryCommand = new RelayCommand(() => Navigate(Page.History));
-        ShowSettingsCommand = new RelayCommand(() => Navigate(Page.Settings));
         ClearFinishedCommand = new RelayCommand(ClearFinished);
         DismissDialogCommand = new RelayCommand(() => Dialog?.Dismiss());
 
@@ -202,12 +199,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         set => SetProperty(ref _isDragOver, value);
     }
 
-    public RelayCommand ShowHomeCommand { get; }
-
-    public RelayCommand ShowHistoryCommand { get; }
-
-    public RelayCommand ShowSettingsCommand { get; }
-
     public RelayCommand ClearFinishedCommand { get; }
 
     public RelayCommand DismissDialogCommand { get; }
@@ -282,10 +273,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     private bool _firewallAskedThisRun;
 
     /// <summary>
-    /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
-    /// couldn't reach it. Asked right before this PC first starts its network in a run, never at startup.
-    /// </summary>
-    /// <summary>
     /// At start: Windows sees this PC's network as public and its firewall stops nearby devices from sending here (the
     /// usual first-run prompt only allows private networks). Ask once per run to allow Beam for nearby devices.
     /// </summary>
@@ -310,6 +297,10 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
     }
 
+    /// <summary>
+    /// Windows Firewall blocks Beam on a PC's own direct network (it counts as public), so phones connected directly
+    /// couldn't reach it. Asked right before this PC first starts its network in a run, never at startup.
+    /// </summary>
     internal async Task EnsureFirewallForDirectAsync()
     {
         await _firewallGate.WaitAsync();
@@ -361,7 +352,6 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     {
         if (_page == Page.Settings && page != Page.Settings) Settings.SaveName();
         if (_page == page) return;
-        if (_page == Page.Phone) Phone.OnHidden();
         if (_page == Page.Receive && page != Page.Receive) Receive.OnHidden();
         if (page != Page.Home) Node.Nearby.SetLooking(false);
         _page = page;

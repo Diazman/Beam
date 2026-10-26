@@ -183,8 +183,8 @@ public class DirectUiTests
         await app.InitializeAsync();
         Assert.Null(app.ViewModel.Dialog); // nothing at startup
 
-        // Starting this computer's own network asks first, with the reason, then goes ahead.
-        var hosting = app.Node.Direct.HostForBrowserAsync(CancellationToken.None);
+        // Before this computer starts its own network (or joins one), Beam asks first, with the reason, then goes ahead.
+        var hosting = app.Node.Direct.BeforeHosting!();
         await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is ViewModels.Dialogs.ConfirmViewModel, "firewall question");
         var dialog = (ViewModels.Dialogs.ConfirmViewModel)app.ViewModel.Dialog!;
         Assert.Equal("Allow direct connections?", dialog.Title);
@@ -192,12 +192,10 @@ public class DirectUiTests
         dialog.PrimaryCommand.Execute(null);
         await hosting;
         Assert.Contains("allow-firewall", app.Platform.Calls);
-        Assert.Equal(1, air.Hosted);
 
         // Only once per run.
         app.Platform.FirewallBlocks = true;
-        app.Node.Direct.StopForBrowser();
-        await app.Node.Direct.HostForBrowserAsync(CancellationToken.None);
+        await app.Node.Direct.BeforeHosting!();
         Assert.Null(app.ViewModel.Dialog);
     }
 

@@ -99,7 +99,7 @@ public class UiFlowTests
         Assert.Contains(app.Platform.Calls, c => c.StartsWith("reveal:") && c.Contains("Holiday"));
 
         await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 1, "history");
-        app.ViewModel.ShowHistoryCommand.Execute(null);
+        app.ViewModel.Navigate(Page.History);
         await UiHarness.PumpAsync();
         Assert.True(app.ViewModel.History.Items[0].CanShow);
         app.Screenshot("07-history");
@@ -250,13 +250,13 @@ public class UiFlowTests
     {
         await using var app = new UiHarness();
         await app.InitializeAsync();
-        app.ViewModel.ShowSettingsCommand.Execute(null);
+        app.ViewModel.Navigate(Page.Settings);
         await UiHarness.PumpAsync();
         app.Screenshot("12-settings");
 
         var settings = app.ViewModel.Settings;
         settings.DeviceName = "Studio PC";
-        app.ViewModel.ShowHomeCommand.Execute(null); // leaving the page saves the name
+        app.ViewModel.Navigate(Page.Home); // leaving the page saves the name
         Assert.Equal("Studio PC", app.Node.Settings.Current.DeviceName);
         Assert.Equal("Studio PC", app.ViewModel.Home.LocalDeviceName);
 

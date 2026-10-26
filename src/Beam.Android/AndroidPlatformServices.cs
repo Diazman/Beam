@@ -125,16 +125,14 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         {
             var manager = (NotificationManager?)Context.GetSystemService(Context.NotificationService);
             if (manager == null) return;
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.O && manager.GetNotificationChannel(ChannelId) == null)
+            if (manager.GetNotificationChannel(ChannelId) == null)
                 manager.CreateNotificationChannel(new NotificationChannel(ChannelId, L.T("Transfers"), NotificationImportance.High));
 
             var open = Context.PackageManager!.GetLaunchIntentForPackage(Context.PackageName!)!;
             open.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
             if (onActivated != null) open.PutExtra(NotificationActions.Extra, NotificationActions.Register(onActivated));
             var pending = PendingIntent.GetActivity(Context, NotificationActions.NextRequestCode(), open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
-#pragma warning disable CA1422 // Notification.Builder(Context) is only for Android 7 and older
-            var builder = Build.VERSION.SdkInt >= BuildVersionCodes.O ? new Notification.Builder(Context, ChannelId) : new Notification.Builder(Context);
-#pragma warning restore CA1422
+            var builder = new Notification.Builder(Context, ChannelId);
             builder.SetContentTitle(title)
                 .SetContentText(message)
                 .SetStyle(new Notification.BigTextStyle().BigText(message))

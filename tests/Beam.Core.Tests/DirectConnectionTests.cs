@@ -715,25 +715,6 @@ public class DirectConnectionTests
     }
 
     [Fact]
-    public async Task ADirectOfferNeverTakesTheRadioFromThePhonePageOrTouchesItsNetwork()
-    {
-        var air = new FakeDirectAir();
-        var (sender, receiver, _, receiverLink) = await PairAsync(air, Phone, DeviceKinds.Phone, Pc, DeviceKinds.Laptop);
-        await using var _s = sender;
-        await using var _r = receiver;
-        var browserNetwork = await receiver.Node.Direct.HostForBrowserAsync(CancellationToken.None); // the PC's Phone page is on
-
-        var session = sender.Node.Send(receiver.AsDevice(), new[] { sender.CreateFile("a.bin", 1000) }, ConnectionMethod.Direct);
-        await Wait.ForFinishAsync(session);
-
-        Assert.Equal(TransferState.Failed, session.State);
-        Assert.Contains("in use", session.Error!.Message);
-        Assert.Equal(browserNetwork, receiverLink.Hosting); // still on
-        Assert.Equal(0, receiverLink.JoinCalls);
-        Assert.Equal(0, receiverLink.StopCalls);
-    }
-
-    [Fact]
     public async Task ASenderThatIsOnAnotherDevicesNetworkDoesntStartItsOwnOverIt()
     {
         var air = new FakeDirectAir();
@@ -894,7 +875,7 @@ public class DirectConnectionTests
     [Fact]
     public void SessionStatesOnlyMoveForwardAndFinalStatesStayFinal()
     {
-        var session = new DirectSession("peer", "Peer", TimeSpan.FromMinutes(1));
+        var session = new DirectSession("peer", "Peer");
         Assert.Equal(DirectSessionState.Negotiating, session.State);
         Assert.False(session.TryMove(DirectSessionState.Joining)); // can't skip hosting and the offer
         Assert.False(session.TryMove(DirectSessionState.Verified)); // nor verification
@@ -907,14 +888,9 @@ public class DirectConnectionTests
         Assert.True(session.MarkVerified(new IPEndPoint(DirectAddress, 1)));
         Assert.True(session.TryMove(DirectSessionState.Transferring));
         Assert.True(session.TryMove(DirectSessionState.Interrupted));
-        var id = session.Id;
-        var nonce = session.Nonce;
-        Assert.True(session.Restart());
-        Assert.NotEqual(id, session.Id);
-        Assert.NotEqual(nonce, session.Nonce);
-        Assert.Null(session.VerifiedEndpoint);
+        Assert.False(session.TryMove(DirectSessionState.Negotiating)); // a dropped link is set up in a new session
         Assert.True(session.Fail("gone"));
-        Assert.Equal(DirectSessionState.Negotiating, session.FailedAt);
+        Assert.Equal(DirectSessionState.Interrupted, session.FailedAt);
         Assert.False(session.Fail("again")); // first failure wins
         Assert.False(session.Cancel());
         Assert.False(session.TryMove(DirectSessionState.Hosting)); // a late callback can't bring it back
@@ -965,7 +941,6 @@ public class DirectConnectionTests
         Assert.True(DirectAddresses.IsDirectAdapter("p2p-wlan0-3", ""));
         Assert.True(DirectAddresses.IsDirectAdapter("Local Area Connection* 12", "Microsoft Wi-Fi Direct Virtual Adapter #2"));
         Assert.False(DirectAddresses.IsDirectAdapter("Wi-Fi", "Intel(R) Wi-Fi 6 AX201 160MHz"));
-        Assert.Equal("WIFI:T:WPA;S:DIRECT-ab-Beam-Diaz\\;s PC;P:pa\\:ss\\\\word;;", new DirectNetwork("DIRECT-ab-Beam-Diaz;s PC", "pa:ss\\word").ToWifiQrText());
     }
 
 }

@@ -21,9 +21,6 @@ public sealed class DiscoveryOptions
 
     /// <summary>A device that has not been heard from for this long is considered gone.</summary>
     public TimeSpan DeviceTimeout { get; init; } = TimeSpan.FromSeconds(16);
-
-    /// <summary>Extra discovery endpoints that always receive unicast queries (tests, fixed peers).</summary>
-    public IReadOnlyList<IPEndPoint> StaticTargets { get; init; } = Array.Empty<IPEndPoint>();
 }
 
 /// <summary>What this device tells others about itself.</summary>
@@ -101,7 +98,6 @@ public sealed class DiscoveryService : IDisposable
     {
         _options = options;
         _self = self;
-        foreach (var target in options.StaticTargets) _unicastTargets[target] = 0;
     }
 
     public event EventHandler<DeviceEventArgs>? DeviceFound;
@@ -264,21 +260,6 @@ public sealed class DiscoveryService : IDisposable
     public void ReportReachable(DeviceInfo device)
     {
         Upsert(device with { IsManual = true }, device.Endpoints.FirstOrDefault());
-    }
-
-    /// <summary>Forgets addresses of a device that stopped working (e.g. on a direct network that is gone).</summary>
-    public void DropEndpoints(string deviceId, Func<IPEndPoint, bool> drop)
-    {
-        while (_devices.TryGetValue(deviceId, out var existing))
-        {
-            var kept = existing.Device.Endpoints.Where(e => !drop(e)).ToList();
-            if (kept.Count == existing.Device.Endpoints.Count) return;
-            foreach (var gone in existing.Device.Endpoints.Except(kept)) _endpointSeen.TryRemove((deviceId, gone), out _);
-            var changed = existing.Device with { Endpoints = kept };
-            if (!_devices.TryUpdate(deviceId, new Entry(changed, existing.LastSeen), existing)) continue;
-            DeviceChanged?.Invoke(this, new DeviceEventArgs(changed));
-            return;
-        }
     }
 
     /// <summary>Drops a device from the list (e.g. a Bluetooth placeholder now known by its real id).</summary>

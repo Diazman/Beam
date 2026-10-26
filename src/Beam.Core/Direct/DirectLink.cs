@@ -24,8 +24,7 @@ public enum DirectRoles
 
     // What the device tells others about its situation (announced with the roles):
 
-    /// <summary>Has internet over a cable: its Wi-Fi can join another network without losing internet.</summary>
-    Wired = 8,
+    // 8 was "wired" (internet over a cable): announced up to 1.6.0 but never used; others ignore it.
 
     /// <summary>Its network shares its internet (Windows' Mobile hotspot): whoever joins it keeps internet.</summary>
     SharesInternet = 16,
@@ -84,7 +83,6 @@ public static class DirectRolesText
         if (roles.HasFlag(DirectRoles.Host)) parts.Add("host");
         if (roles.HasFlag(DirectRoles.Join)) parts.Add("join");
         if (roles.HasFlag(DirectRoles.JoinComputers)) parts.Add("joinpc");
-        if (roles.HasFlag(DirectRoles.Wired)) parts.Add("wired");
         if (roles.HasFlag(DirectRoles.SharesInternet)) parts.Add("share");
         if (roles.HasFlag(DirectRoles.Receiving)) parts.Add("rx");
         if (roles.HasFlag(DirectRoles.SenderHosted)) parts.Add("shost");
@@ -100,7 +98,6 @@ public static class DirectRolesText
             if (part == "host") roles |= DirectRoles.Host;
             else if (part == "join") roles |= DirectRoles.Join;
             else if (part == "joinpc") roles |= DirectRoles.JoinComputers;
-            else if (part == "wired") roles |= DirectRoles.Wired;
             else if (part == "share") roles |= DirectRoles.SharesInternet;
             else if (part == "rx") roles |= DirectRoles.Receiving;
             else if (part == "shost") roles |= DirectRoles.SenderHosted;
@@ -169,21 +166,6 @@ public sealed record DirectNetwork(string Ssid, string Passphrase)
         var chars = new char[length];
         for (var i = 0; i < length; i++) chars[i] = Alphabet[System.Security.Cryptography.RandomNumberGenerator.GetInt32(Alphabet.Length)];
         return new string(chars);
-    }
-
-    /// <summary>The text of a "join this Wi-Fi" QR code, which iPhone and Android cameras understand.</summary>
-    public string ToWifiQrText() => $"WIFI:T:WPA;S:{Escape(Ssid)};P:{Escape(Passphrase)};;";
-
-    private static string Escape(string value)
-    {
-        var builder = new System.Text.StringBuilder(value.Length);
-        foreach (var c in value)
-        {
-            if (c is '\\' or ';' or ',' or ':' or '"') builder.Append('\\');
-            builder.Append(c);
-        }
-
-        return builder.ToString();
     }
 }
 
@@ -265,7 +247,4 @@ public sealed class DirectLinkException : Exception
     /// a dropped control channel.
     /// </summary>
     public bool JoinFailed { get; init; }
-
-    /// <summary>The receiver couldn't start its network for this sender, or this device couldn't join or reach it.</summary>
-    public bool ReceiverHostFailed { get; init; }
 }

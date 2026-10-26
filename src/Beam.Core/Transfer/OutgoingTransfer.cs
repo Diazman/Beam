@@ -145,7 +145,6 @@ internal sealed class OutgoingTransfer
         _session.SetState(state, error);
     }
 
-
     private static TimeSpan Backoff(int failures) => TimeSpan.FromSeconds(failures switch
     {
         1 => 1,
@@ -577,14 +576,7 @@ internal sealed class OutgoingTransfer
                 throw state.ReaderError ?? new EndOfStreamException("Connection closed while waiting for confirmation.");
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             cts.CancelAfter(ResultWait);
-            try
-            {
-                await Task.WhenAny(state.Signal.WaitAsync(cts.Token), reader).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            {
-                throw new TimeoutException($"{PeerName} didn't confirm the files it received.");
-            }
+            await Task.WhenAny(state.Signal.WaitAsync(cts.Token), reader).ConfigureAwait(false); // never throws
 
             token.ThrowIfCancellationRequested();
             if (cts.IsCancellationRequested) throw new TimeoutException($"{PeerName} didn't confirm the files it received.");

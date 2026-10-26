@@ -84,7 +84,7 @@ internal sealed class ToastNotifier
             var directory = Core.Storage.AppDataPaths.Default().Root;
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "notification-icon.png");
-            using var source = Avalonia.Platform.AssetLoader.Open(new Uri("avares://Beam/Assets/beam.png"));
+            using var source = Avalonia.Platform.AssetLoader.Open(new Uri("avares://Beam.UI/Assets/beam.png"));
             using var target = File.Create(path);
             source.CopyTo(target);
             return path;

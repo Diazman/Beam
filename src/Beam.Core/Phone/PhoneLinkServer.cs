@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
+using Beam.Core.Storage;
 using Beam.Core.Transfer;
 using Beam.Core.Localization;
 
@@ -801,13 +802,13 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             catch (OperationCanceledException) when (Session.CancellationToken.IsCancellationRequested)
             {
                 Session.AddTransferred(-received);
-                TryDelete(part);
+                FileCleanup.TryDelete(part);
                 Finish(L.T("You cancelled the transfer."), cancelled: true);
             }
             catch
             {
                 Session.AddTransferred(-received);
-                TryDelete(part);
+                FileCleanup.TryDelete(part);
                 throw;
             }
         }
@@ -853,11 +854,6 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 Session.SetState(TransferState.Failed, new TransferError(TransferErrorKind.ConnectionLost, L.T("No files arrived from the phone.")));
             else
                 Session.SetState(snapshot.FailedFiles > 0 ? TransferState.CompletedWithErrors : TransferState.Completed);
-        }
-
-        private static void TryDelete(string path)
-        {
-            try { File.Delete(path); } catch { /* best effort */ }
         }
     }
 }

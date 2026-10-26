@@ -11,7 +11,7 @@ public sealed class FakeNearbyAir
 
     public int Connections;
 
-    public int ScanStarts, ScanStops;
+    public int ScanStarts;
 
     /// <summary>The longest value written or read (a GATT attribute holds at most 512 bytes; longer ones fail on real radios).</summary>
     public int Longest;
@@ -22,9 +22,6 @@ public sealed class FakeNearbyAir
     /// </summary>
     public int? DropAfterWrites { get; set; }
 
-    /// <summary>Scanners hear nothing from now on (out of range, or the radio stopped advertising).</summary>
-    public volatile bool Silent;
-
     private void Measure(int length)
     {
         int seen;
@@ -33,9 +30,6 @@ public sealed class FakeNearbyAir
     }
 
     public INearbyRadio Radio() => new FakeRadio(this, "radio-" + Interlocked.Increment(ref _next));
-
-    /// <summary>What a receiver answers is replaced (to test tampering or impostors).</summary>
-    public Func<byte[], byte[]>? Tamper { get; set; }
 
     private sealed class FakeRadio : INearbyRadio
     {
@@ -72,9 +66,8 @@ public sealed class FakeNearbyAir
             {
                 while (!cts.IsCancellationRequested)
                 {
-                    if (!_air.Silent)
-                        foreach (var (address, ad) in _air._advertisers)
-                            if (address != _address && NearbyBeacon.TryParse(ad.Beacon) is { } beacon) seen(new NearbySighting(address, beacon, -50));
+                    foreach (var (address, ad) in _air._advertisers)
+                        if (address != _address && NearbyBeacon.TryParse(ad.Beacon) is { } beacon) seen(new NearbySighting(address, beacon, -50));
                     try { await Task.Delay(100, cts.Token); } catch (OperationCanceledException) { }
                 }
             });
@@ -82,7 +75,6 @@ public sealed class FakeNearbyAir
 
         public void StopScanning()
         {
-            if (_scan is { IsCancellationRequested: false }) Interlocked.Increment(ref _air.ScanStops);
             _scan?.Cancel();
         }
 
@@ -125,7 +117,7 @@ public sealed class FakeNearbyAir
             if (Dropped) throw new ObjectDisposedException("GattSession");
             var answer = _responder.Response(_sender);
             _air.Measure(answer.Length);
-            return Task.FromResult(_air.Tamper is { } tamper && answer.Length > 2 && answer[1] == 1 ? tamper(answer) : answer);
+            return Task.FromResult(answer);
         }
 
         public ValueTask DisposeAsync()

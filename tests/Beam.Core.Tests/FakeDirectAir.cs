@@ -37,11 +37,11 @@ public sealed class FakeDirectAir
 
     public int Stopped => Volatile.Read(ref _stopped);
 
-    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, string? joinError = null, bool canRunHotspot = false, bool reportsNoHost = false)
+    public IDirectLink Link(DirectRoles roles, bool sharesInternet = false, bool canRunHotspot = false, bool reportsNoHost = false)
     {
         var link = new FakeLink(this, roles)
         {
-            CanShareInternet = sharesInternet, JoinError = joinError, CanRunHotspot = canRunHotspot, ReportsNoHost = reportsNoHost,
+            CanShareInternet = sharesInternet, CanRunHotspot = canRunHotspot, ReportsNoHost = reportsNoHost,
         };
         lock (_gate) _links.Add(link);
         return link;
@@ -110,11 +110,6 @@ public sealed class FakeDirectAir
     /// <summary>The two devices share no network at all (found over Bluetooth only).</summary>
     public void ConnectDirectOnly(BeamNode a, BeamNode b) => Wire(a, b);
 
-    public FakeLink? HostOf(string ssid)
-    {
-        lock (_gate) return _links.FirstOrDefault(l => l.Hosting?.Ssid == ssid);
-    }
-
     public sealed class FakeLink : IDirectLink, IDirectNetworkScanner, IDirectLinkEvents, IInternetSharing, IDirectRadio, IAccessPointHosting
     {
         /// <summary>A phone that can run its own hotspot beside its Wi-Fi (Android 11+ with that support).</summary>
@@ -151,14 +146,8 @@ public sealed class FakeDirectAir
 
         public bool PreferInternetSharing { get; set; }
 
-        /// <summary>Its hotspot doesn't start: the network it starts doesn't share its internet (Windows' Wi-Fi Direct instead).</summary>
-        public bool WontShare { get; set; }
-
         /// <summary>This phone's join requests to an internet-sharing network (Windows' hotspot) go unanswered.</summary>
         public bool CantJoinSharedNetworks { get; set; }
-
-        /// <summary>This device can't join (e.g. a desktop without Wi-Fi).</summary>
-        public string? JoinError { get; init; }
 
         /// <summary>What joining does on this device (the system's prompt, a radio that never answers…).</summary>
         public JoinOutcome NextJoins { get; set; } = JoinOutcome.Joins;
@@ -209,7 +198,7 @@ public sealed class FakeDirectAir
                 if (Hosting != null && (preferred == null || preferred == Hosting) && !StartsWithOtherPassphrase) return Hosting;
                 LeaveLocked(); // one adapter: hosting ends a join
                 var reported = (preferred ?? new DirectNetwork("DIRECT-Bm-Laptop", Guid.NewGuid().ToString("N")[..12]))
-                    with { SharesInternet = PreferInternetSharing && CanShareInternet && !WontShare, IsAccessPoint = PreferAccessPoint && CanRunHotspot };
+                    with { SharesInternet = PreferInternetSharing && CanShareInternet, IsAccessPoint = PreferAccessPoint && CanRunHotspot };
                 Hosting = StartsWithOtherPassphrase ? reported with { Passphrase = "not-" + reported.Passphrase } : reported;
                 HostedNetworks.Add(reported);
                 Interlocked.Increment(ref _air._hosted);
@@ -223,7 +212,6 @@ public sealed class FakeDirectAir
         {
             Interlocked.Increment(ref _joinCalls);
             await Task.Delay(JoinDelay, cancellationToken);
-            if (JoinError != null) throw new DirectLinkException(JoinError);
             if (!WifiOn) throw new DirectLinkException("Wi-Fi is off.");
             switch (NextJoins)
             {

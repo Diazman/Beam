@@ -217,8 +217,6 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version} ({AppInfo.Build})";
 
-    public string DataFolder => _node.Paths.Root;
-
     public RelayCommand OpenPrivacyCommand { get; }
 
     public RelayCommand SaveNameCommand { get; }

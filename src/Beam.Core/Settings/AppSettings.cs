@@ -20,7 +20,7 @@ public enum ConnectionMethod
     Direct,
 }
 
-/// <summary>The direct network of a paired device (a PC's own Wi-Fi), so this device can join it without any other network.</summary>
+/// <summary>A paired device this device knows (from its code, or an older version's direct connection): heard over Bluetooth, it is listed by name and checked by its certificate.</summary>
 public sealed class KnownDirectNetwork
 {
     public string DeviceId { get; set; } = "";
@@ -30,13 +30,6 @@ public sealed class KnownDirectNetwork
     public string Fingerprint { get; set; } = "";
 
     public string Kind { get; set; } = "";
-
-    public string Ssid { get; set; } = "";
-
-    public string Passphrase { get; set; } = "";
-
-    /// <summary>Beam's port on the device (0: the usual one).</summary>
-    public int Port { get; set; }
 }
 
 /// <summary>A device the user chose to always accept files from.</summary>
@@ -88,11 +81,8 @@ public sealed class AppSettings
 
     public string? DirectNetworkPassphrase { get; set; }
 
-    /// <summary>Direct networks of paired devices (from scanning their code, or an earlier direct connection).</summary>
+    /// <summary>Paired devices known from scanning their code, or an earlier direct connection.</summary>
     public List<KnownDirectNetwork> KnownDirectNetworks { get; set; } = new();
-
-    /// <summary>The user said "not now" to allowing direct connections through the firewall (asked once at start).</summary>
-    public bool FirewallPromptDeclined { get; set; }
 
     public bool NotifyOnIncomingRequest { get; set; } = true;
 
@@ -142,7 +132,7 @@ public sealed class AppSettings
         TrustedDevices ??= new();
         ManualAddresses ??= new();
         KnownDirectNetworks = (KnownDirectNetworks ?? new())
-            .Where(k => !string.IsNullOrWhiteSpace(k.DeviceId) && !string.IsNullOrWhiteSpace(k.Ssid))
+            .Where(k => !string.IsNullOrWhiteSpace(k.DeviceId) && !string.IsNullOrWhiteSpace(k.Fingerprint))
             .GroupBy(k => k.DeviceId)
             .Select(g => g.Last())
             .ToList();

@@ -125,7 +125,6 @@ public sealed partial class DirectManager
     private readonly object _hostGate = new();
     private readonly HashSet<string> _hostLeases = new(); // one per Direct transfer (shared by its setups)
     private Task<DirectNetwork>? _sessionHostStart;
-    private DirectNetwork? _sessionNetwork;
 
     /// <summary>One send: the transfer, its mode, and (Direct) the session it may send over.</summary>
     private sealed class DirectSend
@@ -273,7 +272,7 @@ public sealed partial class DirectManager
     /// <summary>Transfers the user moved from Direct to the shared network (they don't go back to the direct link by themselves).</summary>
     private readonly ConcurrentDictionary<string, byte> _switchedToNetwork = new();
 
-    private DirectSession NewSession(DeviceInfo receiver) => new(receiver.Id, receiver.Name, SessionLifetime);
+    private DirectSession NewSession(DeviceInfo receiver) => new(receiver.Id, receiver.Name);
 
     /// <summary>This device's address on the direct network that <paramref name="endpoint"/> is on (null when it isn't on one).</summary>
     private IPAddress? LocalAddressFor(IPEndPoint endpoint) =>
@@ -373,15 +372,13 @@ public sealed partial class DirectManager
     /// <summary>
     /// Sets <paramref name="session"/> up, from proposing to verified: on the receiver's network when this device can't
     /// start one and the receiver offers to host (<see cref="DirectRoles.HostsForSenders"/>), else on this device's own.
-    /// Returns the session that was set up. Throws like <see cref="EstablishOnceAsync"/>.
+    /// Throws like <see cref="EstablishOnceAsync"/>.
     /// </summary>
-    private async Task<DirectSession> EstablishAsync(DirectSession session, DirectSend send, CancellationToken token, bool adopt = true,
-        bool receiversNetworkOk = true)
+    private Task EstablishAsync(DirectSession session, DirectSend send, CancellationToken token, bool receiversNetworkOk = true)
     {
         var current = _discovery.Find(send.Receiver.Id) ?? send.Receiver;
         var onReceivers = receiversNetworkOk && WantsReceiversNetwork(send, current);
-        await EstablishOnceAsync(session, send, onReceivers, token).ConfigureAwait(false);
-        return session;
+        return EstablishOnceAsync(session, send, onReceivers, token);
     }
 
     /// <summary>
@@ -500,16 +497,8 @@ public sealed partial class DirectManager
 
             // 5. Both ends of the route, the session and the receiver's certificate, before any file data.
             Move(session, DirectSessionState.Verifying);
-            try
-            {
-                send.ReconnectKey = await VerifyAsync(session, reported, limit.Token, retryFor: session.OnReceiversNetwork ? ReportInTimeout : TimeSpan.Zero)
-                    .ConfigureAwait(false);
-            }
-            catch (DirectLinkException ex) when (session.OnReceiversNetwork && !limit.IsCancellationRequested)
-            {
-                // On the receiver's network but it can't be reached there (its firewall?): this device's own network instead.
-                throw new DirectLinkException(ex.Message, ex, transient: ex.Transient) { ReceiverHostFailed = true };
-            }
+            send.ReconnectKey = await VerifyAsync(session, reported, limit.Token, retryFor: session.OnReceiversNetwork ? ReportInTimeout : TimeSpan.Zero)
+                .ConfigureAwait(false);
 
             if (session.OnReceiversNetwork) send.ReceiversNetworkEndpoint = reported;
             if (hosted is { SharesInternet: true } or { IsAccessPoint: true } && _hotspotJoinFailed.TryRemove(peer.Id, out _))
@@ -550,7 +539,6 @@ public sealed partial class DirectManager
                 Log.Info($"Direct: {peer.Name} couldn't join this device's hotspot; it gets the usual direct network for a while");
             }
             session.FailedTransiently = ex is DirectLinkException { Transient: true };
-            session.ReceiverHostFailed = ex is DirectLinkException { ReceiverHostFailed: true };
             session.Fail(message);
             await EndOutgoingAsync(session, notify: true).ConfigureAwait(false);
             throw Failure(session);
@@ -565,8 +553,7 @@ public sealed partial class DirectManager
     /// <summary>
     /// Steps 2-4 on the receiver's network: it starts its network that shares its internet (asked over Beam's TLS
     /// connection, which proved its certificate), and this device joins it. Returns the receiver's Beam there (verified
-    /// next, as always). A failure that says to start this device's own network instead carries
-    /// <see cref="DirectLinkException.ReceiverHostFailed"/>.
+    /// next, as always).
     /// </summary>
     private async Task<IPEndPoint> JoinReceiversNetworkAsync(DirectSession session, DirectSend send, LanControl control, CancellationToken token)
     {
@@ -593,13 +580,13 @@ public sealed partial class DirectManager
         catch (Exception ex) when (ex is TransferException or IOException or System.Net.Sockets.SocketException or TimeoutException
                                        or System.Security.Authentication.AuthenticationException && !token.IsCancellationRequested)
         {
-            throw new DirectLinkException(L.T("{0} didn't start its network.", peer.Name), ex) { ReceiverHostFailed = true };
+            throw new DirectLinkException(L.T("{0} didn't start its network.", peer.Name), ex);
         }
 
         if (!reply.Ok)
-            throw new DirectLinkException(reply.Message ?? L.T("{0} didn't start its network.", peer.Name), declined: reply.Declined) { ReceiverHostFailed = !reply.Declined };
+            throw new DirectLinkException(reply.Message ?? L.T("{0} didn't start its network.", peer.Name), declined: reply.Declined);
         if (string.IsNullOrEmpty(reply.Ssid) || reply.Ssid.Length > 32 || reply.Passphrase is not { Length: >= 8 and <= 63 } || reply.Port is <= 0 or > 65535)
-            throw new DirectLinkException(L.T("{0} didn't start its network.", peer.Name)) { ReceiverHostFailed = true };
+            throw new DirectLinkException(L.T("{0} didn't start its network.", peer.Name));
         var network = new DirectNetwork(reply.Ssid, reply.Passphrase)
         {
             HostIsComputer = true,
@@ -623,12 +610,7 @@ public sealed partial class DirectManager
             }
             catch (OperationCanceledException) when (!token.IsCancellationRequested)
             {
-                throw new DirectLinkException(L.T("This device didn't manage to join {0}'s network in time.", peer.Name)) { ReceiverHostFailed = true };
-            }
-            catch (DirectLinkException ex) when (!token.IsCancellationRequested)
-            {
-                // Wi-Fi switched off: starting this device's own network wouldn't work either.
-                throw new DirectLinkException(ex.Message, ex) { ReceiverHostFailed = !ex.WifiOff, WifiOff = ex.WifiOff };
+                throw new DirectLinkException(L.T("This device didn't manage to join {0}'s network in time.", peer.Name));
             }
         }
         finally
@@ -640,7 +622,7 @@ public sealed partial class DirectManager
         DirectAddresses.Invalidate();
         host ??= network.HostAddress; // iOS can't read the gateway: the address the receiver gave
         if (host == null)
-            throw new DirectLinkException(L.T("This device joined {0}'s network but couldn't find it there.", peer.Name)) { ReceiverHostFailed = true };
+            throw new DirectLinkException(L.T("This device joined {0}'s network but couldn't find it there.", peer.Name));
         if (!_transfers.IsDirectAddress(host) && OwnAddressNear(host) is { } ownThere) DirectAddresses.MarkDirectNetwork(ownThere, host);
         session.OnReceiversNetwork = true;
         Log.Info($"Direct: {session}: on {network.Ssid} at {OwnAddressNear(host)?.ToString() ?? "?"}; {peer.Name} at {host} (Beam on port {reply.Port})");
@@ -798,7 +780,7 @@ public sealed partial class DirectManager
     /// <summary>
     /// A share of this device's direct network for <paramref name="session"/>: started on the first one (after Send,
     /// with a fresh passphrase), shared by the sessions that follow while it's on. Refused while the link is someone
-    /// else's (the Phone page, this device being on another device's network).
+    /// else's (a legacy peer, this device being on another device's network).
     /// </summary>
     private async Task<DirectNetwork> AcquireHostAsync(string owner, string session, bool forPhone, bool forComputer, CancellationToken token)
     {
@@ -810,7 +792,6 @@ public sealed partial class DirectManager
             {
                 Log.Warn($"Direct: this device's network for direct sessions is gone; starting it again. Adapters: {DirectAddresses.Describe()}");
                 _sessionHostStart = null;
-                _sessionNetwork = null;
                 HostedNetwork = null;
             }
 
@@ -895,7 +876,6 @@ public sealed partial class DirectManager
             {
                 unused = _hostLeases.Count == 0;
                 if (unused) _sessionHostStart = null;
-                else _sessionNetwork = started;
             }
 
             HostedNetwork = started;
@@ -950,11 +930,7 @@ public sealed partial class DirectManager
             if (!_hostLeases.Remove(owner)) return;
             _linkedPeers.TryRemove(LeaseKey(owner), out _);
             stop = _hostLeases.Count == 0 && _sessionHostStart is { IsCompleted: true };
-            if (_hostLeases.Count == 0 && stop)
-            {
-                _sessionHostStart = null;
-                _sessionNetwork = null;
-            }
+            if (stop) _sessionHostStart = null;
         }
 
         if (stop)
@@ -1172,7 +1148,7 @@ public sealed partial class DirectManager
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, transfer.CancellationToken);
                 // Not on the receiver's network: joining it would take this device off the network the transfer runs over meanwhile.
-                session = await EstablishAsync(session, send, linked.Token, adopt: false, receiversNetworkOk: false).ConfigureAwait(false);
+                await EstablishAsync(session, send, linked.Token, receiversNetworkOk: false).ConfigureAwait(false);
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {

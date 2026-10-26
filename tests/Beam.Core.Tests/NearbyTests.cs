@@ -157,7 +157,7 @@ public class NearbyTests
         await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone, nearbyRadio: bluetooth.Radio());
         wifi.ConnectDirectOnly(phone.Node, pc.Node);
         // The phone knew this PC before, with another certificate.
-        phone.Node.Direct.Remember(pc.Node.Identity.DeviceId, "Laptop", new string('a', 64), DeviceKinds.Laptop, new DirectNetwork("DIRECT-xy-Old", "oldpassphrase"));
+        phone.Node.Direct.Remember(pc.Node.Identity.DeviceId, "Laptop", new string('a', 64), DeviceKinds.Laptop);
 
         pc.Node.Nearby.SetReceiving(true);
         phone.Node.Nearby.SetLooking(true);
@@ -175,7 +175,7 @@ public class NearbyTests
         Assert.Equal(0, phoneLink.HostCalls);
         Assert.Equal(0, wifi.Joined);
         Assert.Empty(pc.Handler.DirectRequests);
-        Assert.Equal("oldpassphrase", phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Passphrase);
+        Assert.Equal(new string('a', 64), phone.Node.Direct.KnownNetworkFor(pc.Node.Identity.DeviceId)!.Fingerprint);
     }
 
     [Fact]

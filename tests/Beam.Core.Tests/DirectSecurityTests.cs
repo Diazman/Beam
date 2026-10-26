@@ -96,7 +96,7 @@ public class DirectSecurityTests
 
         Assert.True(reply.Ok);
         Assert.Equal(1, Fake(pcLink).JoinCalls);
-        Assert.Equal(network.Ssid, pc.Node.Direct.KnownNetworkFor(phone.Node.Identity.DeviceId)!.Ssid);
+        Assert.Equal(phone.Node.Identity.Fingerprint, pc.Node.Direct.KnownNetworkFor(phone.Node.Identity.DeviceId)!.Fingerprint, ignoreCase: true);
     }
 
     [Fact]

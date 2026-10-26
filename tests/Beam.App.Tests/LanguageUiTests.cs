@@ -44,13 +44,13 @@ public class LanguageUiTests
             await UiHarness.PumpAsync(100);
             app.Screenshot($"language-{language}-home-small");
 
-            app.ViewModel.ShowSettingsCommand.Execute(null);
+            app.ViewModel.Navigate(Page.Settings);
             await UiHarness.PumpAsync(100);
             Assert.Contains(L.T("Language"), app.VisibleTexts());
             Assert.NotEqual("Language", L.T("Language"));
             app.Screenshot($"language-{language}-settings");
 
-            app.ViewModel.ShowHistoryCommand.Execute(null);
+            app.ViewModel.Navigate(Page.History);
             await UiHarness.PumpAsync(100);
             app.Screenshot($"language-{language}-history");
         }

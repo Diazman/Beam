@@ -112,11 +112,11 @@ public sealed class ResumeStore
         {
             foreach (var file in record.Files.Where(f => !f.Done))
             {
-                TryDelete(file.PartPath);
+                FileCleanup.TryDelete(file.PartPath);
             }
         }
 
-        lock (_gate) TryDelete(PathFor(record.TransferId));
+        lock (_gate) FileCleanup.TryDelete(PathFor(record.TransferId));
     }
 
     /// <summary>Removes expired records and their partial files. Run at startup.</summary>
@@ -138,7 +138,7 @@ public sealed class ResumeStore
 
                 if (record == null)
                 {
-                    TryDelete(file);
+                    FileCleanup.TryDelete(file);
                 }
                 else if (record.CreatedAt < DateTimeOffset.UtcNow - Lifetime)
                 {
@@ -168,16 +168,4 @@ public sealed class ResumeStore
     private string PathFor(string transferId) => Path.Combine(_directory, transferId + ".json");
 
     private static bool IsValidId(string id) => id.Length is > 0 and <= 64 && id.All(char.IsAsciiLetterOrDigit);
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Could not delete {path}: {ex.Message}");
-        }
-    }
 }

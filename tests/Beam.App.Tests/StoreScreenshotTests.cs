@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
+using Beam.App.ViewModels;
 using Beam.App.ViewModels.Dialogs;
 using Beam.Core.Discovery;
 using Beam.Core.Tests;
@@ -88,10 +89,10 @@ public class StoreScreenshotTests
         app.Screenshot("3-transfer-progress", Folder);
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.All(t => t.IsFinished), "finish", 120000);
 
-        app.ViewModel.ShowHistoryCommand.Execute(null);
+        app.ViewModel.Navigate(Page.History);
         await UiHarness.PumpAsync(100);
         app.Screenshot("4-history", Folder);
-        app.ViewModel.ShowSettingsCommand.Execute(null);
+        app.ViewModel.Navigate(Page.Settings);
         await UiHarness.PumpAsync(100);
         app.Screenshot("6-settings", Folder);
     }

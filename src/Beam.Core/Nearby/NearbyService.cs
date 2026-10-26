@@ -42,7 +42,6 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     private static readonly TimeSpan HostTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan SightingLifetime = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan JoinTimeout = TimeSpan.FromSeconds(100);
 
     private readonly INearbyRadio? _radio;
     private readonly DirectManager _direct;

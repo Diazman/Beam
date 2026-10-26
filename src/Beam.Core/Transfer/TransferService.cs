@@ -96,15 +96,6 @@ public sealed class TransferService : IAsyncDisposable
 
     internal TransferPath PathOf(IPEndPoint remote) => IsDirectAddress(remote.Address) ? TransferPath.Direct : TransferPath.Network;
 
-    /// <summary>
-    /// Drops the live connections of unfinished transfers with a device, so they reconnect over the connection
-    /// method now preferred and continue where they stopped. Returns how many were interrupted.
-    /// </summary>
-    public int InterruptConnections(string peerId) =>
-        _sessions.Values.Where(s => s.PeerId == peerId && !s.IsFinished).Count(s => s.InterruptConnection(switchingPath: true));
-
-    /// <summary>Shared pacing of everything this device sends (the free edition's speed limit).</summary>
-
     public int Port { get; private set; }
 
     public bool IsListening => _listener != null;

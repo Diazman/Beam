@@ -41,8 +41,7 @@ public sealed class TransferForegroundService : Service
             _wanted = wanted;
             if (wanted)
             {
-                if (OperatingSystem.IsAndroidVersionAtLeast(26)) context.StartForegroundService(intent);
-                else context.StartService(intent);
+                context.StartForegroundService(intent);
             }
             else if (_inForeground)
             {
@@ -82,10 +81,7 @@ public sealed class TransferForegroundService : Service
 
         // Let go while it was starting (the transfer already ended).
         Log.Info("Beam no longer needs to keep running; stopping the transfer service");
-        if (OperatingSystem.IsAndroidVersionAtLeast(24)) StopForeground(StopForegroundFlags.Remove);
-#pragma warning disable CA1422
-        else StopForeground(true);
-#pragma warning restore CA1422
+        StopForeground(StopForegroundFlags.Remove);
         StopSelf();
         return StartCommandResult.NotSticky;
     }
@@ -105,15 +101,12 @@ public sealed class TransferForegroundService : Service
     private static Notification BuildNotification(Context context, bool transferring)
     {
         var manager = (NotificationManager?)context.GetSystemService(NotificationService);
-        if (OperatingSystem.IsAndroidVersionAtLeast(26) && manager?.GetNotificationChannel(ChannelId) == null)
+        if (manager?.GetNotificationChannel(ChannelId) == null)
             manager?.CreateNotificationChannel(new NotificationChannel(ChannelId, L.T("Transfers in progress"), NotificationImportance.Low));
         var open = context.PackageManager!.GetLaunchIntentForPackage(context.PackageName!)!;
         open.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
         var pending = PendingIntent.GetActivity(context, 0, open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
-#pragma warning disable CA1422 // Notification.Builder(Context) is only for Android 7 and older
-        var builder = OperatingSystem.IsAndroidVersionAtLeast(26) ? new Notification.Builder(context, ChannelId) : new Notification.Builder(context);
-#pragma warning restore CA1422
-        return builder
+        return new Notification.Builder(context, ChannelId)
             .SetContentTitle(transferring ? L.T("Beam is transferring files") : L.T("Beam is connected to a computer"))
             .SetContentText(transferring
                 ? L.T("Keep Wi-Fi on until it's done. You can use other apps meanwhile.")

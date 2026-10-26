@@ -65,27 +65,20 @@ public sealed class DirectSession
     private DirectSessionState? _failedAt;
     private string? _error;
 
-    internal DirectSession(string peerId, string peerName, TimeSpan lifetime)
+    internal DirectSession(string peerId, string peerName)
     {
-        Id = NewToken();
-        Nonce = NewToken();
         PeerId = peerId;
         PeerName = peerName;
-        Lifetime = lifetime;
-        ExpiresAt = Environment.TickCount64 + (long)lifetime.TotalMilliseconds;
     }
 
     /// <summary>128 random bits, hex: session ids and nonces.</summary>
     internal static string NewToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 
-    /// <summary>This session's id on the wire (changes when it sets up again after the link dropped).</summary>
-    public string Id { get; private set; }
+    /// <summary>This session's id on the wire (a link set up again after it dropped is a new session).</summary>
+    public string Id { get; } = NewToken();
 
-    /// <summary>Stays the same for the session's whole life (what owns its share of the sender's network).</summary>
-    internal string Key { get; } = NewToken();
-
-    /// <summary>Proves later messages (ready, verify, end) belong to this session; changes when the session sets up again.</summary>
-    public string Nonce { get; private set; }
+    /// <summary>Proves later messages (ready, verify, end) belong to this session.</summary>
+    public string Nonce { get; } = NewToken();
 
     public string PeerId { get; }
 
@@ -96,13 +89,6 @@ public sealed class DirectSession
 
     public DirectControlChannel Channel { get; internal set; }
 
-    internal TimeSpan Lifetime { get; }
-
-    /// <summary>Setup must be verified by then (<see cref="Environment.TickCount64"/>).</summary>
-    internal long ExpiresAt { get; private set; }
-
-    public bool IsExpired => Environment.TickCount64 > ExpiresAt;
-
     /// <summary>The receiver's Beam on the direct network, once verified (the only place this session's files go).</summary>
     public IPEndPoint? VerifiedEndpoint { get; private set; }
 
@@ -111,9 +97,6 @@ public sealed class DirectSession
 
     /// <summary>It failed only because the receiver couldn't be reached just then (a recovering transfer tries again).</summary>
     internal bool FailedTransiently { get; set; }
-
-    /// <summary>It failed because the receiver's own network didn't work out for it (the sender then starts its own).</summary>
-    internal bool ReceiverHostFailed { get; set; }
 
     /// <summary>Set up on the receiver's network (it hosts, this device joined it), rather than on this device's.</summary>
     public bool OnReceiversNetwork { get; internal set; }
@@ -178,7 +161,6 @@ public sealed class DirectSession
             DirectSessionState.Completed => from is DirectSessionState.Verified or DirectSessionState.Transferring or DirectSessionState.Interrupted,
             DirectSessionState.Interrupted => from is DirectSessionState.Verified or DirectSessionState.Transferring,
             DirectSessionState.Transferring => from is DirectSessionState.Verified or DirectSessionState.Interrupted,
-            DirectSessionState.Negotiating => from == DirectSessionState.Interrupted,
             // Setup only goes forward, one stage at a time (Verified only from Verifying).
             _ => from < DirectSessionState.Verified && to == from + 1,
         };
@@ -192,24 +174,6 @@ public sealed class DirectSession
             if (_state != DirectSessionState.Verifying) return false;
             VerifiedEndpoint = endpoint;
             _state = DirectSessionState.Verified;
-        }
-
-        Raise();
-        return true;
-    }
-
-    /// <summary>Setting up again after the link dropped: a new id, nonce and deadline; the old endpoint no longer counts.</summary>
-    internal bool Restart()
-    {
-        lock (_gate)
-        {
-            if (_state != DirectSessionState.Interrupted) return false;
-            _state = DirectSessionState.Negotiating;
-            VerifiedEndpoint = null;
-            Id = NewToken();
-            Nonce = NewToken();
-            ExpiresAt = Environment.TickCount64 + (long)Lifetime.TotalMilliseconds;
-            Reconnects++;
         }
 
         Raise();
