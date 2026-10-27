@@ -46,6 +46,15 @@ public sealed class ResumeRecord
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>When it was last saved (progress). Missing in records from before 1.6.</summary>
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Nothing happened for <see cref="ResumeStore.Lifetime"/>: counted from the last progress, so a transfer that was
+    /// still going a day after it started (a big folder) can still resume.
+    /// </summary>
+    internal bool IsExpired => (UpdatedAt ?? CreatedAt) < DateTimeOffset.UtcNow - ResumeStore.Lifetime;
+
     public int SkippedCount { get; set; }
 
     public List<string> RootNames { get; set; } = new();
@@ -75,6 +84,7 @@ public sealed class ResumeStore
         {
             try
             {
+                record.UpdatedAt = DateTimeOffset.UtcNow;
                 AtomicFile.WriteAllText(PathFor(record.TransferId), JsonSerializer.Serialize(record, StorageJson.Default.ResumeRecord));
             }
             catch (Exception ex)
@@ -94,7 +104,7 @@ public sealed class ResumeStore
                 var path = PathFor(transferId);
                 if (!File.Exists(path)) return null;
                 var record = JsonSerializer.Deserialize(File.ReadAllText(path), StorageJson.Default.ResumeRecord);
-                if (record == null || record.CreatedAt < DateTimeOffset.UtcNow - Lifetime) return null;
+                if (record == null || record.IsExpired) return null;
                 return record;
             }
             catch (Exception ex)
@@ -140,7 +150,7 @@ public sealed class ResumeStore
                 {
                     FileCleanup.TryDelete(file);
                 }
-                else if (record.CreatedAt < DateTimeOffset.UtcNow - Lifetime)
+                else if (record.IsExpired)
                 {
                     Log.Info($"Discarding expired partial transfer {record.TransferId} from {record.SenderName}");
                     Delete(record, deleteParts: true);

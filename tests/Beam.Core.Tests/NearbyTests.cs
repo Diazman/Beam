@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Beam.Core.Direct;
 using Beam.Core.Discovery;
 using Beam.Core.Nearby;
+using Beam.Core.Protocol;
 using Beam.Core.Settings;
 using Beam.Core.Transfer;
 
@@ -71,6 +72,30 @@ public class NearbyTests
         join[^1] ^= 1;
         Assert.Throws<CryptographicException>(() => NearbyHandshake.OpenJoinRequest(join, keys!));
         Assert.Equal((NearbyHandshake.Status.Joined, "192.168.49.37"), sender.Open(NearbyHandshake.Joined("192.168.49.37")));
+    }
+
+    [Fact]
+    public void ABluetoothOfferKeepsTheSendersAddressAndStillFits()
+    {
+        // An iPhone can't read the network's gateway: it reports in at the address the sender gives.
+        var offer = new DirectRequestMessage
+        {
+            Action = DirectActions.Offer,
+            SessionId = new string('a', 32),
+            Nonce = new string('b', 32),
+            Ssid = "DIRECT-ab-Beam-" + new string('X', 17),
+            Passphrase = new string('p', 20),
+            TtlSeconds = 120,
+            HostIsComputer = true,
+            Port = 47822,
+            HostAddress = "192.168.137.1",
+            Proof = Convert.ToBase64String(new byte[32]),
+            SenderName = "Someone's laptop",
+        };
+        var compact = Beam.Core.Nearby.NearbyService.Compact(offer);
+        Assert.Equal("192.168.137.1", compact.HostAddress);
+        Assert.Null(compact.SenderName); // known from the proposal
+        Assert.True(NearbyHandshake.Fits(Beam.Core.Nearby.NearbyService.Json(compact)));
     }
 
     [Fact]

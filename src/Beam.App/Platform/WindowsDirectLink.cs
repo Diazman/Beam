@@ -462,7 +462,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             Log.Warn($"Wi-Fi: leaving {ssid} failed: {ex.Message}");
         }
 
-        TrackRestore(ReturnToPreviousWiFiAsync(adapter));
+        TrackRestore(ReturnToPreviousWiFiAsync(adapter, ssid));
         if (Interlocked.Exchange(ref _addedProfile, null) is { } added) TrackRestore(WlanProfiles.RemoveAsync(added));
     }
 #endif
@@ -568,11 +568,12 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         {
             await Task.Delay(1000).ConfigureAwait(false); // let the change settle
             if (_joinedAdapter == null || await ConnectedSsidAsync(adapter).ConfigureAwait(false) == _joinedSsid) return;
-            Log.Warn($"Wi-Fi: lost {_joinedSsid}");
+            var lost = _joinedSsid;
+            Log.Warn($"Wi-Fi: lost {lost}");
             NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
             _joinedAdapter = null;
             _joinedSsid = null;
-            TrackRestore(ReturnToPreviousWiFiAsync(adapter));
+            TrackRestore(ReturnToPreviousWiFiAsync(adapter, lost));
             Lost?.Invoke();
         }
         catch (Exception ex)
@@ -618,7 +619,7 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
             }
         }
 
-        TrackRestore(ReturnToPreviousWiFiAsync(adapter));
+        TrackRestore(ReturnToPreviousWiFiAsync(adapter, ssid));
         if (Interlocked.Exchange(ref _addedProfile, null) is { } added) TrackRestore(WlanProfiles.RemoveAsync(added));
     }
 
@@ -652,8 +653,11 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         }
     }
 
-    /// <summary>Back to the Wi-Fi this PC was on before joining (Windows usually does this by itself; this makes sure).</summary>
-    private async Task ReturnToPreviousWiFiAsync(WiFiAdapter adapter)
+    /// <summary>
+    /// Back to the Wi-Fi this PC was on before joining <paramref name="left"/> (Windows usually does this by itself;
+    /// this makes sure), also when leaving didn't work and the PC is still on <paramref name="left"/>.
+    /// </summary>
+    private async Task ReturnToPreviousWiFiAsync(WiFiAdapter adapter, string? left)
     {
         var previous = _previousSsid;
         _previousSsid = null;
@@ -661,7 +665,9 @@ internal sealed class WindowsDirectLink : IDirectLink, IDirectLinkEvents, IInter
         try
         {
             await Task.Delay(1500).ConfigureAwait(false);
-            if (await ConnectedSsidAsync(adapter).ConfigureAwait(false) is { } now && now != _joinedSsid) return; // already back
+            // Already back. (This compared with the joined network's name, which was cleared by then: a PC still on the
+            // sender's network, because disconnecting failed, counted as back.)
+            if (await ConnectedSsidAsync(adapter).ConfigureAwait(false) is { } now && now != left) return;
             await adapter.ScanAsync().AsTask().ConfigureAwait(false);
             var network = adapter.NetworkReport.AvailableNetworks.FirstOrDefault(n => n.Ssid == previous);
             if (network != null)

@@ -280,7 +280,8 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             if (Environment.TickCount64 - old.At > HandshakeTimeout.TotalMilliseconds * 2) _answers.TryRemove(key, out _);
         if (_answers.Count >= MaxHandshakes)
         {
-            _answers[sender] = (Task.FromResult(NearbyHandshake.Refuse("Busy, try again.")), Environment.TickCount64);
+            _answers[sender] = (Task.FromResult(NearbyHandshake.Refuse(
+                L.T("{0} is busy with another request. Try again in a moment.", _settings.Current.DeviceName))), Environment.TickCount64);
             return;
         }
 
@@ -296,7 +297,10 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     byte[] INearbyResponder.Response(string sender)
     {
         if (!_answers.TryGetValue(sender, out var entry)) return NearbyHandshake.Refuse("No request.");
-        return entry.Answer.IsCompletedSuccessfully ? entry.Answer.Result : entry.Answer.IsCompleted ? NearbyHandshake.Refuse("Failed.") : NearbyHandshake.Working();
+        // The sender shows these to its user (in this device's language: the sender's isn't known here).
+        return entry.Answer.IsCompletedSuccessfully ? entry.Answer.Result
+            : entry.Answer.IsCompleted ? NearbyHandshake.Refuse(L.T("Something went wrong while starting the transfer. Try again; if it keeps happening, send the log from Settings."))
+            : NearbyHandshake.Working();
     }
 
     void INearbyResponder.Forget(string sender)
@@ -638,6 +642,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         TtlSeconds = message.TtlSeconds,
         HostIsComputer = message.HostIsComputer,
         Port = message.Port,
+        HostAddress = message.HostAddress, // a receiver that can't read the network's gateway (iOS) needs it
         Stage = message.Stage,
         Message = message.Message is { Length: > 80 } text ? text[..80] : message.Message,
         Proof = message.Proof,

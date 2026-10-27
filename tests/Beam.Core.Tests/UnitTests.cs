@@ -257,6 +257,38 @@ public class StorageTests
     }
 
     [Fact]
+    public void APartialTransferExpiresADayAfterItsLastProgressNotAfterItStarted()
+    {
+        using var dir = new TempDir();
+        var store = new Transfer.ResumeStore(dir.Path);
+
+        // Started 30 hours ago and still going (saved just now): it can resume.
+        store.Save(new Transfer.ResumeRecord { TransferId = "big", CreatedAt = DateTimeOffset.UtcNow.AddHours(-30) });
+        Assert.NotNull(store.TryLoad("big"));
+
+        // Nothing happened for 25 hours: expired.
+        Rewrite("idle", created: DateTimeOffset.UtcNow.AddHours(-30), updated: DateTimeOffset.UtcNow.AddHours(-25));
+        Assert.Null(store.TryLoad("idle"));
+
+        // A record from an older version (no "last progress"): its start counts, as before.
+        Rewrite("old", created: DateTimeOffset.UtcNow.AddHours(-25), updated: null);
+        Assert.Null(store.TryLoad("old"));
+        Rewrite("recent", created: DateTimeOffset.UtcNow.AddHours(-2), updated: null);
+        Assert.NotNull(store.TryLoad("recent"));
+
+        void Rewrite(string id, DateTimeOffset created, DateTimeOffset? updated)
+        {
+            store.Save(new Transfer.ResumeRecord { TransferId = id, CreatedAt = created });
+            var path = Path.Combine(dir.Path, id + ".json");
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            var key = json.Select(p => p.Key).Single(k => k.Equals("updatedAt", StringComparison.OrdinalIgnoreCase));
+            if (updated == null) json.Remove(key);
+            else json[key] = updated.Value.ToString("O");
+            File.WriteAllText(path, json.ToJsonString());
+        }
+    }
+
+    [Fact]
     public void HistoryIsCappedAndClearable()
     {
         using var dir = new TempDir();
