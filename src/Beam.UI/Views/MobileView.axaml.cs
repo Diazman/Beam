@@ -72,20 +72,7 @@ public partial class MobileView : UserControl, IUiServices
 
     private static string Address(IStorageItem item) => item.TryGetLocalPath() ?? item.Path.OriginalString;
 
-    public async Task CopyToClipboardAsync(string text)
-    {
-        if (Top?.Clipboard is { } clipboard) await clipboard.SetTextAsync(text);
-    }
+    public Task CopyToClipboardAsync(string text) => ClipboardText.CopyAsync(Top?.Clipboard, text);
 
-    public async Task<string?> GetClipboardTextAsync()
-    {
-        try
-        {
-            return Top?.Clipboard is { } clipboard ? await clipboard.TryGetTextAsync() : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    public Task<string?> GetClipboardTextAsync() => ClipboardText.ReadAsync(Top?.Clipboard);
 }

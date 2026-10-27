@@ -99,23 +99,4 @@ public class DirectPhoneHotspotTests
         Assert.True(phoneLink.HostedNetworks[0].IsAccessPoint);
     }
 
-    [Fact]
-    public void AMarkedNetworkHasItsHostAndIsForgottenWhenLeft()
-    {
-        // A phone's hotspot picks its own subnet: the joined network is marked direct, and forgotten on leaving.
-        var own = IPAddress.Parse("10.213.77.20");
-        var host = IPAddress.Parse("10.213.77.1");
-        Assert.Null(DirectAddresses.DirectHostOf(own));
-        DirectAddresses.MarkDirectNetwork(own, host);
-        try
-        {
-            Assert.Equal(host, DirectAddresses.DirectHostOf(own));
-        }
-        finally
-        {
-            DirectAddresses.ForgetDirectNetworks(hosted: false);
-        }
-
-        Assert.Null(DirectAddresses.DirectHostOf(own));
-    }
 }

@@ -430,6 +430,9 @@ public class TransferTests
         // E.g. the phone's direct network dropped and is being re-joined, or someone walked out of Wi-Fi range.
         await using var sender = new TestNode("Phone");
         await using var receiver = new TestNode("PC");
+        // It keeps trying for minutes (the old limit was about 30 s); here a shorter patience, so the test is quick.
+        Assert.True(sender.Node.Transfers.ReconnectPatience >= TimeSpan.FromMinutes(3));
+        sender.Node.Transfers.ReconnectPatience = TimeSpan.FromSeconds(30);
         var file = sender.CreateFile("video.mp4", 40L * 1024 * 1024, 7);
         using var proxy = new FlakyProxy(receiver.AsDevice().Endpoints[0]) { BytesPerSecond = 8L * 1024 * 1024 };
 
@@ -437,7 +440,7 @@ public class TransferTests
         await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 8L * 1024 * 1024, because: "transferring");
         proxy.Unreachable = true;
         proxy.CutAll();
-        await Task.Delay(TimeSpan.FromSeconds(40)); // longer than the old ~30 s of retries
+        await Task.Delay(TimeSpan.FromSeconds(12)); // several failed attempts meanwhile
         Assert.False(session.IsFinished, $"gave up while the other device was away ({session.State})");
         proxy.Unreachable = false;
 

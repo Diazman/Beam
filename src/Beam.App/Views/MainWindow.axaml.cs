@@ -70,35 +70,9 @@ public partial class MainWindow : Window, IUiServices
         return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
     }
 
-    /// <summary>Copies text; another app holding the clipboard (Windows lets one at a time) is waited out briefly.</summary>
-    public async Task CopyToClipboardAsync(string text)
-    {
-        if (Clipboard == null) return;
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                await Clipboard.SetTextAsync(text);
-                return;
-            }
-            catch (Exception) when (attempt < 5)
-            {
-                await Task.Delay(100 * attempt);
-            }
-        }
-    }
+    public Task CopyToClipboardAsync(string text) => ClipboardText.CopyAsync(Clipboard, text);
 
-    public async Task<string?> GetClipboardTextAsync()
-    {
-        try
-        {
-            return Clipboard == null ? null : await Clipboard.TryGetTextAsync();
-        }
-        catch
-        {
-            return null; // another app holds the clipboard
-        }
-    }
+    public Task<string?> GetClipboardTextAsync() => ClipboardText.ReadAsync(Clipboard);
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {

@@ -51,6 +51,7 @@ public sealed class BeamNode : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private Task? _manualPeerTask;
     private ConnectionMethod _connection;
+    private bool _allowDirectSenders;
     private bool _started;
     private int _disposed;
 
@@ -85,6 +86,7 @@ public sealed class BeamNode : IAsyncDisposable
             CreatePairingCode, selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
             () => Transfers.Sessions.Any(s => !s.IsFinished));
         _connection = Settings.Current.Connection;
+        _allowDirectSenders = Settings.Current.AllowDirectSenders;
         Settings.Changed += OnSettingsChanged;
     }
 
@@ -351,7 +353,12 @@ public sealed class BeamNode : IAsyncDisposable
     {
         Discovery.Discoverable = settings.Discoverable;
         Discovery.AnnounceNow();
-        if (!settings.AllowDirectSenders) Direct.OnDirectSendersNotAllowed();
+        // Only when it is switched off (every save came through here, ending direct sessions each time).
+        if (settings.AllowDirectSenders != _allowDirectSenders)
+        {
+            _allowDirectSenders = settings.AllowDirectSenders;
+            if (!settings.AllowDirectSenders) Direct.OnDirectSendersNotAllowed();
+        }
         if (settings.Connection != _connection)
         {
             _connection = settings.Connection;
