@@ -151,10 +151,29 @@ jobs:
           java-version: 17
       - name: Install the .NET Android workload
         run: dotnet workload install android
+      # Every APK must be signed with the same key, or a new one can't install over the last (testers would have to
+      # uninstall and lose their pairings). The key lives in the repository's secrets: see docs/ANDROID-SIGNING.md.
+      # Without them the build still works, but is signed with a throwaway key.
+      - name: Signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: this APK gets a throwaway key and won't install over earlier ones."
+            exit 0
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/beam.keystore"
+          echo "SIGNING_ARGS=-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=$RUNNER_TEMP/beam.keystore -p:AndroidSigningKeyAlias=${ANDROID_KEY_ALIAS:-beam} -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD -p:AndroidSigningKeyPass=env:ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Build APK
+        env:
+          # Read by the build from the environment (the "env:" in SIGNING_ARGS), so they never appear in the log.
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           dotnet publish src/Beam.Android -c Release -f net10.0-android \
-            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -o artifacts/android
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" $SIGNING_ARGS -o artifacts/android
+          rm -f "$RUNNER_TEMP/beam.keystore"
           ls -la artifacts/android
       - uses: actions/upload-artifact@v4
         with:

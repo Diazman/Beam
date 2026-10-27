@@ -2,14 +2,13 @@ using Beam.App.Platform;
 using Beam.Core.Diagnostics;
 using Foundation;
 using UIKit;
-using UserNotifications;
 
 namespace Beam.iOS;
 
 /// <summary>iOS integration: opening received files and links, notifications, sharing the log.</summary>
 internal sealed class IosPlatformServices : IPlatformServices
 {
-    private static int _notificationId;
+    private readonly IosNotifications _notifications = new();
 
     public bool IsPhone => true;
 
@@ -47,41 +46,18 @@ internal sealed class IosPlatformServices : IPlatformServices
 
     public void OpenUrl(string url) => Open(url);
 
-    public void ShowNotification(string title, string message, Action? onActivated = null) => Post(null, title, message);
+    public void ShowNotification(string title, string message, Action? onActivated = null) => _notifications.Post(null, title, message, onActivated);
 
     public void ShowQuestionNotification(string tag, string title, string message, Action onActivated, IReadOnlyList<NotificationButton> buttons) =>
-        Post(tag, title, message);
+        _notifications.Post(tag, title, message, onActivated, buttons);
 
-    public void CancelNotification(string tag)
-    {
-        try
-        {
-            UNUserNotificationCenter.Current.RemoveDeliveredNotifications(new[] { tag });
-            UNUserNotificationCenter.Current.RemovePendingNotificationRequests(new[] { tag });
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not remove a notification", ex);
-        }
-    }
+    public void CancelNotification(string tag) => _notifications.Cancel(tag);
 
-    public bool HasPermission(AppPermission permission) => true;
+    /// <summary>Notifications need the user's permission; the rest (local network) iOS asks for by itself when used.</summary>
+    public bool HasPermission(AppPermission permission) => permission != AppPermission.Notifications || _notifications.Allowed;
 
-    public async Task<bool> RequestPermissionAsync(AppPermission permission)
-    {
-        if (permission != AppPermission.Notifications) return true;
-        try
-        {
-            var (granted, _) = await UNUserNotificationCenter.Current.RequestAuthorizationAsync(
-                UNAuthorizationOptions.Alert | UNAuthorizationOptions.Sound | UNAuthorizationOptions.Badge);
-            return granted;
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not ask for notifications", ex);
-            return false;
-        }
-    }
+    public Task<bool> RequestPermissionAsync(AppPermission permission) =>
+        permission == AppPermission.Notifications ? _notifications.RequestAsync() : Task.FromResult(true);
 
     /// <summary>Hands the newest log to the share sheet (Mail, Messages, AirDrop, Save to Files…).</summary>
     public void ShareLog(string logDirectory)
@@ -101,23 +77,6 @@ internal sealed class IosPlatformServices : IPlatformServices
 
             controller.PresentViewController(share, true, null);
         });
-    }
-
-    private static void Post(string? tag, string title, string message)
-    {
-        try
-        {
-            var content = new UNMutableNotificationContent { Title = title, Body = message, Sound = UNNotificationSound.Default };
-            var id = tag ?? "beam-" + Interlocked.Increment(ref _notificationId);
-            UNUserNotificationCenter.Current.AddNotificationRequest(UNNotificationRequest.FromIdentifier(id, content, null), error =>
-            {
-                if (error != null) Log.Info($"Notification not shown: {error.LocalizedDescription}");
-            });
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not show a notification", ex);
-        }
     }
 
     private static void Open(string url) => UIApplication.SharedApplication.InvokeOnMainThread(() =>

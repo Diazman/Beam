@@ -89,6 +89,7 @@ internal sealed class AndroidPlatformServices : IPlatformServices
 
     public void CancelNotification(string tag)
     {
+        NotificationActions.Forget(tag);
         try
         {
             ((NotificationManager?)Context.GetSystemService(Context.NotificationService))?.Cancel(tag, 1);
@@ -128,9 +129,12 @@ internal sealed class AndroidPlatformServices : IPlatformServices
             if (manager.GetNotificationChannel(ChannelId) == null)
                 manager.CreateNotificationChannel(new NotificationChannel(ChannelId, L.T("Transfers"), NotificationImportance.High));
 
+            var number = tag == null ? Interlocked.Increment(ref _notificationId) : 1;
+            var group = tag ?? "n" + number;
+            NotificationActions.Forget(group); // a notification with this tag again: the old one's actions go
             var open = Context.PackageManager!.GetLaunchIntentForPackage(Context.PackageName!)!;
             open.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
-            if (onActivated != null) open.PutExtra(NotificationActions.Extra, NotificationActions.Register(onActivated));
+            if (onActivated != null) open.PutExtra(NotificationActions.Extra, NotificationActions.Register(onActivated, group));
             var pending = PendingIntent.GetActivity(Context, NotificationActions.NextRequestCode(), open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
             var builder = new Notification.Builder(Context, ChannelId);
             builder.SetContentTitle(title)
@@ -138,11 +142,14 @@ internal sealed class AndroidPlatformServices : IPlatformServices
                 .SetStyle(new Notification.BigTextStyle().BigText(message))
                 .SetSmallIcon(icon)
                 .SetContentIntent(pending)
+                .SetDeleteIntent(PendingIntent.GetBroadcast(Context, NotificationActions.NextRequestCode(),
+                    new Intent(Context, typeof(NotificationActionReceiver)).PutExtra(NotificationActions.ForgetExtra, group),
+                    PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent))
                 .SetAutoCancel(true);
             foreach (var button in buttons)
             {
                 var click = new Intent(Context, typeof(NotificationActionReceiver));
-                click.PutExtra(NotificationActions.Extra, NotificationActions.Register(button.OnClick));
+                click.PutExtra(NotificationActions.Extra, NotificationActions.Register(button.OnClick, group));
                 if (tag != null) click.PutExtra(NotificationActions.TagExtra, tag);
                 var action = PendingIntent.GetBroadcast(Context, NotificationActions.NextRequestCode(), click, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
                 builder.AddAction(new Notification.Action.Builder(
@@ -150,7 +157,7 @@ internal sealed class AndroidPlatformServices : IPlatformServices
             }
 
             if (tag != null) manager.Notify(tag, 1, builder.Build());
-            else manager.Notify(Interlocked.Increment(ref _notificationId), builder.Build());
+            else manager.Notify(number, builder.Build());
         }
         catch (Exception ex)
         {

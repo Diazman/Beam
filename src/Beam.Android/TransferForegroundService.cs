@@ -86,6 +86,28 @@ public sealed class TransferForegroundService : Service
         return StartCommandResult.NotSticky;
     }
 
+    /// <summary>Android ended the service (its daily time for this kind of service is used up).</summary>
+    internal static event Action? TimedOut;
+
+    /// <summary>
+    /// Android 15 and later give a data-sync service 6 hours a day, then call this: it must stop within seconds or
+    /// Android ends the whole app. The transfer goes on while Beam is on screen; hidden, Android may pause it.
+    /// </summary>
+    public override void OnTimeout(int startId, int fgsType)
+    {
+        Log.Warn("Android ended Beam's background service: its time for today is used up (6 hours). Keep Beam open to finish.");
+        lock (StateGate) _inForeground = false;
+        try
+        {
+            StopForeground(StopForegroundFlags.Remove);
+        }
+        finally
+        {
+            StopSelf();
+            TimedOut?.Invoke();
+        }
+    }
+
     internal static void Update(Context context, bool transferring)
     {
         try
@@ -143,6 +165,13 @@ internal sealed class TransferKeepAlive
         transfers.SessionStarted += _ => Update();
         transfers.SessionFinished += _ => Update();
         if (link != null) link.JoinedChanged += Update;
+        TransferForegroundService.TimedOut += OnTimedOut;
+    }
+
+    /// <summary>The service was ended by Android: started again (if Android lets it) by the next change or when Beam opens.</summary>
+    private void OnTimedOut()
+    {
+        lock (_gate) _running = false; // Wi-Fi and wake locks stay while something is still going on
     }
 
     /// <summary>Beam came to the screen: start the service now if Android refused it while Beam was hidden.</summary>
