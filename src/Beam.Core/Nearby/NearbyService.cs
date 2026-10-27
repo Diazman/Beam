@@ -425,12 +425,24 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         _sightings[hash] = (sighting, Environment.TickCount64);
         if (isNew) Log.Info($"Nearby: heard {beacon.Name} ({hash}) over Bluetooth, {beacon.Flags}");
 
+        // Listed under the lock that resolving a device also takes: a sighting handled while that device is being
+        // resolved could otherwise add its Bluetooth-only entry back next to the real one.
+        bool listedNow;
+        lock (_listing) listedNow = List(beacon, hash);
+        if (listedNow && isNew) Changed?.Invoke();
+    }
+
+    private readonly object _listing = new();
+
+    /// <summary>Lists a device heard over Bluetooth; false when nothing changed in the list.</summary>
+    private bool List(NearbyBeacon beacon, string hash)
+    {
         // Already listed with an address on this network: nothing to add.
         var listed = _discovery.Devices.FirstOrDefault(d => !IsPlaceholder(d) && Matches(beacon, d.Id));
         if (listed is { Endpoints.Count: > 0 })
         {
             _discovery.Forget(PlaceholderPrefix + hash);
-            return;
+            return false;
         }
 
         // Already listed by its real id (found out over Bluetooth, so no address): kept, and never listed twice.
@@ -438,7 +450,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         {
             _discovery.Forget(PlaceholderPrefix + hash);
             _discovery.ReportReachable(listed);
-            return;
+            return false;
         }
 
         // Known from an earlier handshake (or its code): list it by its real id, ready to join its network.
@@ -468,7 +480,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             });
         }
 
-        if (isNew) Changed?.Invoke();
+        return true;
     }
 
     /// <summary>What a device heard over Bluetooth can do (a computer joins others' networks as ordinary Wi-Fi).</summary>
@@ -495,8 +507,12 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             (connection, sender, code, _) => Task.FromResult(new OpenHandshake(connection, sender, code, Environment.TickCount64)),
             cancellationToken, keepOpen: true).ConfigureAwait(false);
         KeepOpen(code.DeviceId, handshake);
-        var resolved = _direct.AcceptNearby(code);
-        _discovery.Forget(device.Id);
+        DeviceInfo resolved;
+        lock (_listing)
+        {
+            resolved = _direct.AcceptNearby(code);
+            _discovery.Forget(device.Id);
+        }
         Changed?.Invoke();
         return resolved;
     }
