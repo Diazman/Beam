@@ -46,8 +46,12 @@ public sealed class FakeUi : IUiServices
 
     public void BringToFront() { }
 
+    /// <summary>Another app holds the clipboard: copying throws.</summary>
+    public bool ClipboardBusy { get; set; }
+
     public Task CopyToClipboardAsync(string text)
     {
+        if (ClipboardBusy) throw new InvalidOperationException("OpenClipboard failed");
         Clipboard = text;
         return Task.CompletedTask;
     }

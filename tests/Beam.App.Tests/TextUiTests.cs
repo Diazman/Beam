@@ -82,6 +82,29 @@ public class TextUiTests
     }
 
     [AvaloniaFact]
+    public async Task TrustedSenderTextIsShownWhenTheClipboardIsBusy()
+    {
+        await using var app = new UiHarness("Laptop");
+        await app.InitializeAsync();
+        await using var phone = new TestNode("Office PC");
+        app.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = phone.Node.Identity.Fingerprint, DeviceId = phone.Node.Identity.DeviceId, Name = "Office PC" }));
+        app.Ui.ClipboardBusy = true; // another app holds it
+
+        var session = phone.Node.SendText(new Beam.Core.Discovery.DeviceInfo
+        {
+            Id = app.Node.Identity.DeviceId,
+            Name = "Laptop",
+            Fingerprint = app.Node.Identity.Fingerprint,
+            Endpoints = new[] { new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, app.Node.Transfers.Port) },
+        }, "WiFi password: correct-horse");
+
+        // Not lost: shown instead, to copy once the clipboard is free.
+        await UiHarness.WaitForAsync(() => app.ViewModel.Dialog is IncomingTextViewModel, "the text is shown");
+        Assert.Equal("WiFi password: correct-horse", ((IncomingTextViewModel)app.ViewModel.Dialog!).Text);
+        Assert.False(session.IsFinished || session.State == TransferState.Failed);
+    }
+
+    [AvaloniaFact]
     public async Task SharedTextAndFilesFromAnotherAppAreSentWithOneTap()
     {
         await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);

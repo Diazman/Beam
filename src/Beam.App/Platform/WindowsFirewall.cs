@@ -142,9 +142,7 @@ internal static class WindowsFirewall
             start.RedirectStandardOutput = true;
         }
 
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("PowerShell didn't start.");
-        var output = elevated ? "" : await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
-        return (process.ExitCode, output);
+        // The administrator prompt waits for the user: that one gets longer.
+        return await ProcessRunner.RunAsync(start, elevated ? TimeSpan.FromMinutes(2) : TimeSpan.FromSeconds(30)).ConfigureAwait(false);
     }
 }

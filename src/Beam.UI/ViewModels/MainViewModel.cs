@@ -448,6 +448,21 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
 
     internal Task CopyToClipboardAsync(string text) => _ui.CopyToClipboardAsync(text);
 
+    /// <summary>Copies text; false when the clipboard can't be used now (another app holds it).</summary>
+    private async Task<bool> TryCopyAsync(string text)
+    {
+        try
+        {
+            await _ui.CopyToClipboardAsync(text);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not copy the received text: {ex.Message}");
+            return false;
+        }
+    }
+
     /// <summary>Sends text to one device. Returns false (after telling the user why) if it couldn't start.</summary>
     public async Task<bool> StartSendTextAsync(DeviceInfo device, string text)
     {
@@ -542,10 +557,9 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
     public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken) =>
         Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            if (text.IsTrusted)
+            if (text.IsTrusted && await TryCopyAsync(text.Text))
             {
                 // From a trusted device: no prompt — copy it and say so.
-                await _ui.CopyToClipboardAsync(text.Text);
                 var link = IncomingTextViewModel.TryGetLink(text.Text);
                 _platform.ShowNotification(link != null ? L.T("Link from {0} copied", text.SenderName) : L.T("Text from {0} copied", text.SenderName),
                     text.Text.Length > 120 ? text.Text[..117] + "…" : text.Text,

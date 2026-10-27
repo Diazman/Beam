@@ -107,9 +107,6 @@ internal static class WlanProfiles
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("netsh didn't start.");
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
-        return (process.ExitCode, output);
+        return await ProcessRunner.RunAsync(start, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
     }
 }

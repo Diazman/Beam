@@ -53,7 +53,7 @@ public sealed class HistoryItemViewModel
         }
     }
 
-    public string When => Format.When(_entry.Timestamp.ToLocalTime(), DateTime.Today);
+    public string When => Format.When(_entry.Timestamp.ToLocalTime().DateTime, DateTime.Today);
 
     public string StatusText => _entry.Status switch
     {

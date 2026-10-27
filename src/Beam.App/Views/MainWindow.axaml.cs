@@ -69,9 +69,22 @@ public partial class MainWindow : Window, IUiServices
         return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
     }
 
+    /// <summary>Copies text; another app holding the clipboard (Windows lets one at a time) is waited out briefly.</summary>
     public async Task CopyToClipboardAsync(string text)
     {
-        if (Clipboard != null) await Clipboard.SetTextAsync(text);
+        if (Clipboard == null) return;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await Clipboard.SetTextAsync(text);
+                return;
+            }
+            catch (Exception) when (attempt < 5)
+            {
+                await Task.Delay(100 * attempt);
+            }
+        }
     }
 
     public async Task<string?> GetClipboardTextAsync()
