@@ -6,7 +6,8 @@ namespace Beam.Core.Phone;
 /// <summary>
 /// Streams files as a ZIP archive without compressing them ("stored"), so a phone browser can download a whole
 /// folder at network speed. The exact size is known in advance (Content-Length, real progress in the browser);
-/// ZIP64 is used for files or archives of 4 GB and more. Each file's CRC is computed just before it is sent.
+/// ZIP64 is used for files or archives of 4 GB and more. Each file's CRC is computed while it is sent and follows
+/// its data (a "data descriptor"), so every file is read once.
 /// </summary>
 internal static class StoredZip
 {
@@ -22,6 +23,9 @@ internal static class StoredZip
         public int CentralExtra => (Zip64Size ? 16 : 0) + (Zip64Offset ? 8 : 0) is var n && n > 0 ? n + 4 : 0;
 
         public long LocalLength => 30 + Name.Length + LocalExtra;
+
+        /// <summary>After the data: signature, CRC and both sizes (8 bytes each for ZIP64).</summary>
+        public int DescriptorLength => Zip64Size ? 24 : 16;
 
         public long CentralLength => 46 + Name.Length + CentralExtra;
     }
@@ -44,19 +48,21 @@ internal static class StoredZip
         {
             var entry = layout.Entries[i];
             await using var file = new FileStream(entry.Item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.SequentialScan);
-            crcs[i] = await CrcAsync(file, entry.Item.Size, buffer, token).ConfigureAwait(false);
-            file.Position = 0;
-            await output.WriteAsync(LocalHeader(entry, crcs[i]), token).ConfigureAwait(false);
+            await output.WriteAsync(LocalHeader(entry), token).ConfigureAwait(false);
+            var crc = new System.IO.Hashing.Crc32();
             var remaining = entry.Item.Size;
             while (remaining > 0)
             {
                 var read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), token).ConfigureAwait(false);
                 if (read == 0) throw new IOException($"{entry.Item.Name} got smaller while it was being sent.");
+                crc.Append(buffer.AsSpan(0, read));
                 await output.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
                 remaining -= read;
                 progress(entry.Item, read);
             }
 
+            crcs[i] = crc.GetCurrentHashAsUInt32();
+            await output.WriteAsync(Descriptor(entry, crcs[i]), token).ConfigureAwait(false);
             fileDone(entry.Item);
         }
 
@@ -74,7 +80,7 @@ internal static class StoredZip
         {
             var entry = new Entry(item, Encoding.UTF8.GetBytes(item.Name), offset, item.Size >= Zip64Threshold, offset >= Zip64Threshold);
             entries.Add(entry);
-            offset += entry.LocalLength + item.Size;
+            offset += entry.LocalLength + item.Size + entry.DescriptorLength;
         }
 
         var centralSize = entries.Sum(e => e.CentralLength);
@@ -82,16 +88,17 @@ internal static class StoredZip
         return new Layout(entries, offset, centralSize, zip64End, offset + centralSize + (zip64End ? 56 + 20 : 0) + 22);
     }
 
-    private static byte[] LocalHeader(Entry e, uint crc)
+    /// <summary>The local header: the CRC isn't known yet (it follows the data, flag bit 3); the sizes are.</summary>
+    private static byte[] LocalHeader(Entry e)
     {
         var b = new byte[e.LocalLength];
         var s = b.AsSpan();
         BinaryPrimitives.WriteUInt32LittleEndian(s, 0x04034b50);
         BinaryPrimitives.WriteUInt16LittleEndian(s[4..], (ushort)(e.Zip64Size ? 45 : 20));
-        BinaryPrimitives.WriteUInt16LittleEndian(s[6..], 0x0800); // names are UTF-8
+        BinaryPrimitives.WriteUInt16LittleEndian(s[6..], Flags);
         BinaryPrimitives.WriteUInt16LittleEndian(s[8..], 0); // stored
         WriteDosTime(s[10..], e.Item.ModifiedUtc);
-        BinaryPrimitives.WriteUInt32LittleEndian(s[14..], crc);
+        BinaryPrimitives.WriteUInt32LittleEndian(s[14..], 0); // in the data descriptor
         var size = e.Zip64Size ? 0xFFFFFFFF : (uint)e.Item.Size;
         BinaryPrimitives.WriteUInt32LittleEndian(s[18..], size);
         BinaryPrimitives.WriteUInt32LittleEndian(s[22..], size);
@@ -110,6 +117,29 @@ internal static class StoredZip
         return b;
     }
 
+    /// <summary>Names are UTF-8 (bit 11); CRC and sizes follow each file's data (bit 3).</summary>
+    private const ushort Flags = 0x0808;
+
+    private static byte[] Descriptor(Entry e, uint crc)
+    {
+        var b = new byte[e.DescriptorLength];
+        var s = b.AsSpan();
+        BinaryPrimitives.WriteUInt32LittleEndian(s, 0x08074b50);
+        BinaryPrimitives.WriteUInt32LittleEndian(s[4..], crc);
+        if (e.Zip64Size)
+        {
+            BinaryPrimitives.WriteInt64LittleEndian(s[8..], e.Item.Size);
+            BinaryPrimitives.WriteInt64LittleEndian(s[16..], e.Item.Size);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(s[8..], (uint)e.Item.Size);
+            BinaryPrimitives.WriteUInt32LittleEndian(s[12..], (uint)e.Item.Size);
+        }
+
+        return b;
+    }
+
     private static byte[] CentralHeader(Entry e, uint crc)
     {
         var b = new byte[e.CentralLength];
@@ -118,7 +148,7 @@ internal static class StoredZip
         BinaryPrimitives.WriteUInt32LittleEndian(s, 0x02014b50);
         BinaryPrimitives.WriteUInt16LittleEndian(s[4..], 45);
         BinaryPrimitives.WriteUInt16LittleEndian(s[6..], (ushort)(zip64 ? 45 : 20));
-        BinaryPrimitives.WriteUInt16LittleEndian(s[8..], 0x0800);
+        BinaryPrimitives.WriteUInt16LittleEndian(s[8..], Flags);
         BinaryPrimitives.WriteUInt16LittleEndian(s[10..], 0);
         WriteDosTime(s[12..], e.Item.ModifiedUtc);
         BinaryPrimitives.WriteUInt32LittleEndian(s[16..], crc);
@@ -192,20 +222,5 @@ internal static class StoredZip
         if (t.Year > 2107) t = new DateTime(2107, 12, 31);
         BinaryPrimitives.WriteUInt16LittleEndian(s, (ushort)((t.Hour << 11) | (t.Minute << 5) | (t.Second / 2)));
         BinaryPrimitives.WriteUInt16LittleEndian(s[2..], (ushort)(((t.Year - 1980) << 9) | (t.Month << 5) | t.Day));
-    }
-
-    private static async Task<uint> CrcAsync(Stream file, long size, byte[] buffer, CancellationToken token)
-    {
-        var crc = new System.IO.Hashing.Crc32();
-        var remaining = size;
-        while (remaining > 0)
-        {
-            var read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), token).ConfigureAwait(false);
-            if (read == 0) throw new IOException("A file got smaller while it was being sent.");
-            crc.Append(buffer.AsSpan(0, read));
-            remaining -= read;
-        }
-
-        return crc.GetCurrentHashAsUInt32();
     }
 }

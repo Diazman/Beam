@@ -21,7 +21,8 @@ public sealed record NearbyBeacon(byte[] IdHash, string Name, NearbyBeaconFlags 
     /// <summary>The first 6 bytes of SHA-256 of the device id.</summary>
     public static byte[] HashOf(string deviceId) => SHA256.HashData(Encoding.UTF8.GetBytes(deviceId))[..6];
 
-    public string IdHashText => Convert.ToHexString(IdHash).ToLowerInvariant();
+    /// <summary><see cref="IdHash"/> as text (worked out once: it is compared for every advert heard).</summary>
+    public string IdHashText { get; } = Convert.ToHexString(IdHash).ToLowerInvariant();
 
     public bool Matches(string deviceId) => HashOf(deviceId).AsSpan().SequenceEqual(IdHash);
 

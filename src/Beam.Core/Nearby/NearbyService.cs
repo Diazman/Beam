@@ -419,14 +419,14 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     private void OnSighting(NearbySighting sighting)
     {
         var beacon = sighting.Beacon;
-        if (beacon.Matches(_selfId())) return;
         var hash = beacon.IdHashText;
+        if (hash == HashText(_selfId())) return;
         var isNew = !_sightings.TryGetValue(hash, out var previous) || !Fresh(previous.At);
         _sightings[hash] = (sighting, Environment.TickCount64);
         if (isNew) Log.Info($"Nearby: heard {beacon.Name} ({hash}) over Bluetooth, {beacon.Flags}");
 
         // Already listed with an address on this network: nothing to add.
-        var listed = _discovery.Devices.FirstOrDefault(d => !IsPlaceholder(d) && beacon.Matches(d.Id));
+        var listed = _discovery.Devices.FirstOrDefault(d => !IsPlaceholder(d) && Matches(beacon, d.Id));
         if (listed is { Endpoints.Count: > 0 })
         {
             _discovery.Forget(PlaceholderPrefix + hash);
@@ -442,7 +442,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         }
 
         // Known from an earlier handshake (or its code): list it by its real id, ready to join its network.
-        var known = _settings.Current.KnownDirectNetworks.FirstOrDefault(k => beacon.Matches(k.DeviceId));
+        var known = _settings.Current.KnownDirectNetworks.FirstOrDefault(k => Matches(beacon, k.DeviceId));
         if (known != null)
         {
             _discovery.Forget(PlaceholderPrefix + hash);
@@ -885,9 +885,11 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
     private static async Task<string> ReadUntilDoneAsync(INearbyConnection connection, NearbyHandshake.Sender sender, string name,
         NearbyHandshake.Status wanted, CancellationToken token)
     {
-        while (true)
+        // Asked right away (the answer is often ready: a proposal, an end), then every 200 ms while it is "working";
+        // this waited 400 ms before every read.
+        for (var attempt = 0; ; attempt++)
         {
-            await Task.Delay(400, token).ConfigureAwait(false);
+            if (attempt > 0) await Task.Delay(200, token).ConfigureAwait(false);
             NearbyHandshake.Status status;
             string? text;
             try
@@ -906,7 +908,17 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
         }
     }
 
-    private static string HashText(string deviceId) => Convert.ToHexString(NearbyBeacon.HashOf(deviceId)).ToLowerInvariant();
+    /// <summary>A device id's beacon hash, as text. Remembered: every Bluetooth advert heard is compared with each known id.</summary>
+    private static string HashText(string deviceId)
+    {
+        if (HashTexts.TryGetValue(deviceId, out var known)) return known;
+        if (HashTexts.Count > 1000) HashTexts.Clear();
+        return HashTexts[deviceId] = Convert.ToHexString(NearbyBeacon.HashOf(deviceId)).ToLowerInvariant();
+    }
+
+    private static readonly ConcurrentDictionary<string, string> HashTexts = new();
+
+    private static bool Matches(NearbyBeacon beacon, string deviceId) => beacon.IdHashText == HashText(deviceId);
 
     /// <summary>Tests: the connections kept open after finding out who a device is are closed (as when they time out).</summary>
     internal async Task CloseOpenHandshakesForTests()
