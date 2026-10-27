@@ -93,7 +93,7 @@ public sealed class TransferForegroundService : Service
     /// Android 15 and later give a data-sync service 6 hours a day, then call this: it must stop within seconds or
     /// Android ends the whole app. The transfer goes on while Beam is on screen; hidden, Android may pause it.
     /// </summary>
-    public override void OnTimeout(int startId, int fgsType)
+    public override void OnTimeout(int startId, ForegroundService fgsType)
     {
         Log.Warn("Android ended Beam's background service: its time for today is used up (6 hours). Keep Beam open to finish.");
         lock (StateGate) _inForeground = false;

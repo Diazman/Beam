@@ -128,8 +128,8 @@ internal sealed class IosNotifications : UNUserNotificationCenterDelegate
         {
             if (_handlers.TryRemove(response.Notification.Request.Identifier, out var handlers))
             {
-                var action = response.ActionIdentifier;
-                Action? run = action == UNNotificationAction.DefaultActionIdentifier ? handlers.OnActivated
+                var action = response.ActionIdentifier.ToString();
+                Action? run = response.IsDefaultAction ? handlers.OnActivated
                     : action.StartsWith('b') && int.TryParse(action.AsSpan(1), out var index) && index < handlers.Buttons.Count ? handlers.Buttons[index].OnClick
                     : null;
                 run?.Invoke();
