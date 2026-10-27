@@ -47,10 +47,22 @@ public static class Format
         if (seconds < 60) return L.Plural(RoundSeconds(seconds), "About {0} second remaining", "About {0} seconds remaining");
         var minutes = (int)Math.Round(remaining.TotalMinutes);
         if (minutes < 60) return L.Plural(minutes, "About {0} minute remaining", "About {0} minutes remaining");
-        var hours = (int)remaining.TotalHours;
-        var restMinutes = remaining.Minutes;
+        // From the rounded minutes, so 59.7 minutes reads "About 1 hour", not "0 hours 60 min".
+        var hours = minutes / 60;
+        var restMinutes = minutes % 60;
         if (restMinutes == 0) return L.Plural(hours, "About {0} hour remaining", "About {0} hours remaining");
         return L.Plural(hours, "About {0} hour {1} min remaining", "About {0} hours {1} min remaining", restMinutes);
+    }
+
+    /// <summary>
+    /// When something happened, in the language's own date order: "Today, 4:15 PM", "Yesterday, 9:02 AM",
+    /// "October 3, 4:15 PM" (this year), "10/3/2025, 4:15 PM" (earlier years).
+    /// </summary>
+    public static string When(DateTime local, DateTime today)
+    {
+        if (local.Date == today.Date) return L.T("Today, {0:t}", local);
+        if (local.Date == today.Date.AddDays(-1)) return L.T("Yesterday, {0:t}", local);
+        return string.Format(CultureInfo.CurrentCulture, local.Year == today.Year ? "{0:M}, {0:t}" : "{0:d}, {0:t}", local);
     }
 
     /// <summary>"3 files", "1 folder, 12 files".</summary>

@@ -47,10 +47,18 @@ public sealed class TestHandler : IIncomingTransferHandler
     /// <summary>What the receiving "user" does with text: true = read it, false = dismiss.</summary>
     public bool ShowText { get; set; } = true;
 
-    public Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken)
+    /// <summary>Texts stay on screen until cancelled (the user hasn't looked yet).</summary>
+    public bool HoldTexts { get; set; }
+
+    /// <summary>Showing a text throws this (the UI failed).</summary>
+    public Exception? TextFails { get; set; }
+
+    public async Task<bool> ReceiveTextAsync(IncomingText text, TransferSession session, CancellationToken cancellationToken)
     {
         lock (Texts) Texts.Add(text);
-        return Task.FromResult(ShowText);
+        if (TextFails != null) throw TextFails;
+        if (HoldTexts) await Task.Delay(Timeout.Infinite, cancellationToken);
+        return ShowText;
     }
 
     public List<IReadOnlyList<FileConflict>> Conflicts { get; } = new();

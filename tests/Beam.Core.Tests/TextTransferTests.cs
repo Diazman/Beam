@@ -46,6 +46,43 @@ public class TextTransferTests
     }
 
     [Fact]
+    public async Task AnUnpairedDeviceGetsOneOpenTextAtATime()
+    {
+        await using var pc = new TestNode("Office PC");
+        await using var laptop = new TestNode("Laptop");
+        laptop.Handler.HoldTexts = true; // nobody has looked at the first one yet
+
+        var first = pc.Node.SendText(laptop.AsDevice(), "first");
+        await Wait.UntilAsync(() => laptop.Handler.Texts.Count == 1, because: "the first text is shown");
+        var second = pc.Node.SendText(laptop.AsDevice(), "second");
+        await Wait.ForFinishAsync(second);
+
+        Assert.Equal(TransferState.Declined, second.State);
+        Assert.Single(laptop.Handler.Texts); // not a second prompt
+        Assert.False(first.IsFinished);
+    }
+
+    [Fact]
+    public async Task ATextThatCantBeShownEndsInsteadOfWaitingForever()
+    {
+        await using var pc = new TestNode("Office PC");
+        await using var laptop = new TestNode("Laptop");
+        laptop.Handler.TextFails = new InvalidOperationException("the window is gone");
+
+        var session = pc.Node.SendText(laptop.AsDevice(), "hello");
+        await Wait.ForFinishAsync(session);
+
+        Assert.NotEqual(TransferState.Completed, session.State);
+        await Wait.UntilAsync(() => laptop.Node.Transfers.Sessions.Single().IsFinished, because: "the receiver doesn't keep it open");
+        Assert.Equal(TransferState.Failed, laptop.Node.Transfers.Sessions.Single().State);
+
+        laptop.Handler.TextFails = null; // and the next one gets through
+        var again = pc.Node.SendText(laptop.AsDevice(), "hello again");
+        await Wait.ForFinishAsync(again);
+        Assert.Equal(TransferState.Completed, again.State);
+    }
+
+    [Fact]
     public async Task UnreachableAndOversizedTextFailClearly()
     {
         await using var pc = new TestNode("Office PC");

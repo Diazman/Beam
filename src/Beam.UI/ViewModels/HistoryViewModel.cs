@@ -53,17 +53,7 @@ public sealed class HistoryItemViewModel
         }
     }
 
-    public string When
-    {
-        get
-        {
-            var local = _entry.Timestamp.ToLocalTime();
-            var today = DateTime.Today;
-            if (local.Date == today) return L.T("Today, {0:t}", local);
-            if (local.Date == today.AddDays(-1)) return L.T("Yesterday, {0:t}", local);
-            return local.Year == today.Year ? local.ToString("MMM d, t") : local.ToString("MMM d yyyy, t");
-        }
-    }
+    public string When => Format.When(_entry.Timestamp.ToLocalTime(), DateTime.Today);
 
     public string StatusText => _entry.Status switch
     {

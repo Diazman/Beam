@@ -72,12 +72,41 @@ internal static class TextTransfer
         if (message.Text.Length == 0 || message.Text.Length > MaxLength) throw new ProtocolException("Invalid text.");
 
         var hello = connection.RemoteHello;
-        var id = string.IsNullOrWhiteSpace(message.TransferId) ? Guid.NewGuid().ToString("N") : message.TransferId;
-        var session = service.CreateIncomingSession(id, connection);
+        var trusted = service.Policy().TrustedFingerprints.Contains(connection.RemoteFingerprint);
+        // Like files: one open question per device (and a few in all), so a device can't fill the screen with texts.
+        if (!trusted && !service.TryReservePrompt(connection.RemoteFingerprint))
+        {
+            await connection.Channel.SendAsync(FrameType.Cancel, new CancelMessage { Reason = Reasons.Busy }, serviceToken).ConfigureAwait(false);
+            return;
+        }
+
+        TransferSession? session = null;
+        try
+        {
+            var id = string.IsNullOrWhiteSpace(message.TransferId) ? Guid.NewGuid().ToString("N") : message.TransferId;
+            session = service.CreateIncomingSession(id, connection);
+            await ReceiveCoreAsync(service, connection, session, message, trusted, serviceToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (session is { IsFinished: false })
+        {
+            // The sender went away while the text was shown, or showing it failed: don't leave it waiting forever.
+            Log.Warn($"Receiving text from {session.PeerName} failed: {ex.GetType().Name}: {ex.Message}");
+            session.SetState(TransferState.Failed, ErrorTranslator.FromException(ex, session.PeerName));
+            throw;
+        }
+        finally
+        {
+            if (!trusted) service.ReleasePrompt(connection.RemoteFingerprint);
+        }
+    }
+
+    private static async Task ReceiveCoreAsync(TransferService service, PeerConnection connection, TransferSession session, TextMessage message,
+        bool trusted, CancellationToken serviceToken)
+    {
+        var hello = connection.RemoteHello;
         session.Text = message.Text;
         session.SetDescription(new[] { Describe(message.Text) });
         session.SetTotals(1, message.Text.Length, 0, 0, 0);
-        var trusted = service.Policy().TrustedFingerprints.Contains(connection.RemoteFingerprint);
         session.SetState(trusted ? TransferState.Transferring : TransferState.AwaitingDecision);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(serviceToken, session.CancellationToken);

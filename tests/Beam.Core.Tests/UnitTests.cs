@@ -138,6 +138,33 @@ public class FormatTests
         Assert.Equal("About 1 minute remaining", Format.Remaining(TimeSpan.FromSeconds(70)));
         Assert.Equal("About 12 minutes remaining", Format.Remaining(TimeSpan.FromMinutes(12.2)));
         Assert.Equal("About 2 hours 5 min remaining", Format.Remaining(TimeSpan.FromMinutes(125)));
+        Assert.Equal("About 1 hour remaining", Format.Remaining(TimeSpan.FromMinutes(59.7))); // not "0 hours 60 min"
+        Assert.Equal("About 2 hours remaining", Format.Remaining(TimeSpan.FromMinutes(119.8)));
+        Assert.Equal("About 59 minutes remaining", Format.Remaining(TimeSpan.FromMinutes(59.4)));
+    }
+
+    [Fact]
+    public void WhenShowsTheTimeInTheLanguagesOwnDateOrder()
+    {
+        // ICU writes the space before AM/PM as a narrow no-break space on some systems.
+        static string When(DateTime local, DateTime today) => Format.When(local, today).Replace('\u202F', ' ').Replace('\u00A0', ' ');
+        var saved = CultureInfo.CurrentCulture;
+        try
+        {
+            var today = new DateTime(2026, 10, 27);
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal("Today, 4:15 PM", When(new DateTime(2026, 10, 27, 16, 15, 0), today));
+            Assert.Equal("Yesterday, 9:02 AM", When(new DateTime(2026, 10, 26, 9, 2, 0), today));
+            Assert.Equal("October 3, 4:15 PM", When(new DateTime(2026, 10, 3, 16, 15, 0), today)); // not "Oct 3, P"
+            Assert.Equal("10/3/2025, 4:15 PM", When(new DateTime(2025, 10, 3, 16, 15, 0), today));
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ru-RU");
+            Assert.Equal("3 октября, 16:15", When(new DateTime(2026, 10, 3, 16, 15, 0), today));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = saved;
+        }
     }
 
     [Fact]

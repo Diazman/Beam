@@ -89,6 +89,29 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task AnOfferThatFailsBeforeTheUserAnswersEndsAndTheSenderCanTryAgain()
+    {
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        var asked = 0;
+        receiver.Handler.Decide = _ => Interlocked.Increment(ref asked) == 1
+            ? throw new InvalidOperationException("the dialog couldn't open")
+            : IncomingDecision.Accept();
+        var file = sender.CreateFile("photo.jpg", 1000);
+
+        var session = sender.Node.Send(receiver.AsDevice(), new[] { file });
+        await Wait.UntilAsync(() => receiver.Node.Transfers.Sessions.Any(s => s.State == TransferState.Failed),
+            because: "the first try isn't left waiting for a decision");
+
+        // The same transfer again (the sender's retry, or "Try again"): not refused as "already in progress".
+        await Wait.UntilAsync(() => session.IsFinished || session.CanResume, because: "the sender noticed", timeout: TimeSpan.FromSeconds(60));
+        if (session.CanResume) session.Resume();
+        await Wait.UntilAsync(() => session.State == TransferState.Completed, because: "sent on the second try", timeout: TimeSpan.FromSeconds(60));
+        Assert.Equal(2, asked);
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(receiver.ReceiveFolder, "photo.jpg")));
+    }
+
+    [Fact]
     public async Task DeclinedTransferSendsNothing()
     {
         await using var sender = new TestNode("Sender");

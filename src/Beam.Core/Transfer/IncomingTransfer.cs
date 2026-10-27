@@ -67,6 +67,23 @@ internal sealed class IncomingTransfer
 
     private async Task HandleNewOfferAsync(OfferMessage offer, List<IncomingEntry> entries, string manifestHash, CancellationToken serviceToken)
     {
+        try
+        {
+            await HandleNewOfferCoreAsync(offer, entries, manifestHash, serviceToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (_session is { IsFinished: false, State: not TransferState.Interrupted } open)
+        {
+            // Anything that failed after the offer arrived (the sender dropped while it was answered, a folder that
+            // can't be used): end the transfer here, or it would wait for a decision forever and the sender's next
+            // try would be refused as "already in progress".
+            Log.Warn($"The transfer from {PeerName} ended before it started: {ex.GetType().Name}: {ex.Message}");
+            open.SetState(TransferState.Failed, ex is TransferException te ? te.Error : ErrorTranslator.FromException(ex, PeerName));
+            throw;
+        }
+    }
+
+    private async Task HandleNewOfferCoreAsync(OfferMessage offer, List<IncomingEntry> entries, string manifestHash, CancellationToken serviceToken)
+    {
         if (!_service.TryReservePrompt(Fingerprint))
         {
             await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.Busy }, serviceToken).ConfigureAwait(false);
