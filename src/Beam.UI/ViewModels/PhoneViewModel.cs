@@ -127,12 +127,12 @@ public sealed class PhoneViewModel : ObservableObject
     }
 
     /// <summary>Shares paths with the phone's browser (the page's buttons and drag and drop).</summary>
-    public Task ShareAsync(IReadOnlyList<string> paths)
+    public async Task ShareAsync(IReadOnlyList<string> paths)
     {
-        if (paths.Count == 0 || !IsOn) return Task.CompletedTask;
+        if (paths.Count == 0 || !IsOn) return;
         try
         {
-            _node.PhoneLink.Share(paths);
+            await _node.PhoneLink.ShareAsync(paths); // listing a big folder doesn't freeze the window
             Problem = "";
         }
         catch (TransferException ex)
@@ -141,7 +141,6 @@ public sealed class PhoneViewModel : ObservableObject
         }
 
         Refresh();
-        return Task.CompletedTask;
     }
 
     /// <summary>Starts Beam's page for phone browsers (it stops after a while without activity).</summary>

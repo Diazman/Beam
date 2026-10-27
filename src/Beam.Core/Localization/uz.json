@@ -541,5 +541,6 @@
   "This device sends directly to one device at a time. Send to the others when this is done.": "Bu qurilma bir vaqtda faqat bitta qurilmaga toʻgʻridan-toʻgʻri yuboradi. Bu tugagach, qolganlariga yuboring.",
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} bilan faqat Bluetooth orqali bogʻlanish mumkin, u orqali esa bu qurilma uchun uning tarmogʻini sozlab boʻlmaydi. Avval ikkalasini bitta Wi-Fi tarmogʻiga ulang.",
   "The phone's user didn't allow joining the direct network.": "Telefon foydalanuvchisi toʻgʻridan-toʻgʻri tarmoqqa ulanishga ruxsat bermadi.",
-  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} bilan to'g'ridan-to'g'ri ulanish uchun qurilmangizdagi Beam'ni yangilang yoki ikkala qurilmani bir xil Wi-Fi'ga ulang."
+  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} bilan to'g'ridan-to'g'ri ulanish uchun qurilmangizdagi Beam'ni yangilang yoki ikkala qurilmani bir xil Wi-Fi'ga ulang.",
+  "The transfer was cancelled on the computer.": "O'tkazish kompyuterda bekor qilindi."
 }

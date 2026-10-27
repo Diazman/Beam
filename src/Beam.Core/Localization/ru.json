@@ -629,5 +629,6 @@
   "This device sends directly to one device at a time. Send to the others when this is done.": "Это устройство отправляет напрямую только на одно устройство за раз. Отправьте остальным, когда закончится эта передача.",
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} доступен только по Bluetooth, а через него нельзя настроить его сеть для этого устройства. Сначала подключите оба устройства к одной сети Wi-Fi.",
   "The phone's user didn't allow joining the direct network.": "Пользователь телефона не разрешил подключиться к прямой сети.",
-  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "Чтобы подключиться к {0} напрямую, обновите Beam на своём устройстве или подключите оба устройства к одной сети Wi-Fi."
+  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "Чтобы подключиться к {0} напрямую, обновите Beam на своём устройстве или подключите оба устройства к одной сети Wi-Fi.",
+  "The transfer was cancelled on the computer.": "Передача отменена на компьютере."
 }

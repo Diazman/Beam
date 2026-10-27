@@ -541,5 +541,6 @@
   "This device sends directly to one device at a time. Send to the others when this is done.": "Bu cihaz aynı anda yalnızca bir cihaza doğrudan gönderir. Bu bitince diğerlerine gönderin.",
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} cihazına yalnızca Bluetooth ile ulaşılabiliyor ve bununla bu cihaz için ağı kurulamıyor. Önce ikisini aynı Wi-Fi ağına bağlayın.",
   "The phone's user didn't allow joining the direct network.": "Telefonun kullanıcısı doğrudan ağa katılmaya izin vermedi.",
-  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} cihazına doğrudan bağlanmak için cihazınızdaki Beam'i güncelleyin veya iki cihazı da aynı Wi-Fi'ye bağlayın."
+  "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} cihazına doğrudan bağlanmak için cihazınızdaki Beam'i güncelleyin veya iki cihazı da aynı Wi-Fi'ye bağlayın.",
+  "The transfer was cancelled on the computer.": "Aktarım bilgisayarda iptal edildi."
 }

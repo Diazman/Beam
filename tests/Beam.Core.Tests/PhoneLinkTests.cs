@@ -104,6 +104,57 @@ public class PhoneLinkTests
     }
 
     [Fact]
+    public async Task AnUploadCancelledOnTheComputerIsReportedToThePhoneAsNotSent()
+    {
+        await using var pc = new TestNode("Office PC");
+        pc.Node.PhoneLink.Start(0);
+        using var client = Client(pc);
+        const long size = 20L * 1024 * 1024;
+        var offer = await JsonAsync(await client.PostAsync("api/offer", Json(new { files = new[] { new { name = "video.mp4", size } } })));
+        var id = offer.GetProperty("offerId").GetString();
+        var session = pc.Node.Transfers.Sessions.Single(s => s.Direction == TransferDirection.Receive);
+
+        // Raw, so the computer's answer can be read even though it stops reading the upload when it is cancelled.
+        using var socket = new System.Net.Sockets.TcpClient();
+        await socket.ConnectAsync(IPAddress.Loopback, pc.Node.PhoneLink.Port);
+        var stream = socket.GetStream();
+        var header = $"PUT /{pc.Node.PhoneLink.Token}/api/upload/{id}/0 HTTP/1.1\r\nHost: 127.0.0.1\r\nUser-Agent: Mozilla/5.0 (iPhone) Mobile\r\nContent-Length: {size}\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        var sending = Task.Run(async () =>
+        {
+            var piece = new byte[64 * 1024];
+            try
+            {
+                for (long sent = 0; sent < size; sent += piece.Length)
+                {
+                    await stream.WriteAsync(piece);
+                    await Task.Delay(50);
+                }
+            }
+            catch (IOException)
+            {
+                // the computer closed the connection
+            }
+        });
+        await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 0, because: "the upload started");
+        session.Cancel(); // the user cancels it on the computer
+
+        var answer = new MemoryStream();
+        var buffer = new byte[4096];
+        int read;
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while ((read = await stream.ReadAsync(buffer, limit.Token)) > 0) answer.Write(buffer, 0, read);
+        var text = Encoding.UTF8.GetString(answer.ToArray());
+        var json = JsonDocument.Parse(text[text.IndexOf('{')..]).RootElement;
+        Assert.False(json.GetProperty("ok").GetBoolean()); // was "ok": true
+        Assert.Contains("cancelled", json.GetProperty("message").GetString());
+        await sending;
+
+        Assert.Equal(TransferState.Cancelled, session.State);
+        Assert.Empty(Directory.GetFiles(pc.ReceiveFolder));
+    }
+
+    [Fact]
     public async Task PhoneDownloadsSharedFilesAndFolders()
     {
         await using var pc = new TestNode("Office PC");

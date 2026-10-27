@@ -817,6 +817,9 @@ internal sealed class IncomingTransfer
 
         public List<string> Directories { get; } = new();
 
+        /// <summary>The same as <see cref="Directories"/>, to look up (a folder of 100,000 files has many).</summary>
+        public HashSet<string> DirectorySet { get; } = new(PathComparer);
+
         public List<string> RootPaths { get; } = new();
 
         public HashSet<string> PlannedPaths { get; } = new(PathComparer);
@@ -864,7 +867,7 @@ internal sealed class IncomingTransfer
 
                 actual = parent.Append(name).ToArray();
                 directoryMap[key] = actual;
-                if (!plan.Directories.Contains(full, PathComparer)) plan.Directories.Add(full);
+                if (plan.DirectorySet.Add(full)) plan.Directories.Add(full);
             }
 
             return actual;
@@ -945,7 +948,12 @@ internal sealed class IncomingTransfer
     private static void ApplyConflictActions(Plan plan, IReadOnlyList<ConflictAction> actions)
     {
         if (actions.Count != plan.Conflicts.Count) throw new InvalidOperationException("One action is required per conflict.");
+        // Lookups instead of searching the lists for each conflict: skipping 100,000 existing files stays quick.
         var byIndex = plan.Files.ToDictionary(f => f.Index);
+        var rootIndexes = new Dictionary<string, int>(PathComparer);
+        for (var r = 0; r < plan.RootPaths.Count; r++) rootIndexes.TryAdd(plan.RootPaths[r], r);
+        var skipped = new HashSet<ResumeFile>();
+        var skippedRoots = new HashSet<string>(PathComparer);
         for (var i = 0; i < actions.Count; i++)
         {
             var file = byIndex[plan.Conflicts[i].Index];
@@ -965,32 +973,46 @@ internal sealed class IncomingTransfer
                     file.TargetPath = Path.Combine(directory, name);
                     file.PartPath = file.TargetPath + file.PartPath[oldTarget.Length..];
                     plan.PlannedPaths.Add(file.TargetPath);
-                    var rootIndex = plan.RootPaths.FindIndex(p => PathComparer.Equals(p, oldTarget));
-                    if (rootIndex >= 0) plan.RootPaths[rootIndex] = file.TargetPath;
+                    if (rootIndexes.Remove(oldTarget, out var rootIndex))
+                    {
+                        plan.RootPaths[rootIndex] = file.TargetPath;
+                        rootIndexes[file.TargetPath] = rootIndex;
+                    }
                     break;
                 case ConflictAction.Skip:
-                    plan.Files.Remove(file);
+                    skipped.Add(file);
                     plan.SkippedCount++;
-                    plan.RootPaths.RemoveAll(p => PathComparer.Equals(p, file.TargetPath));
+                    skippedRoots.Add(file.TargetPath);
                     break;
             }
         }
+
+        // Removed in one pass each (removing one by one went through the whole list every time).
+        if (skipped.Count > 0) plan.Files.RemoveAll(skipped.Contains);
+        if (skippedRoots.Count > 0) plan.RootPaths.RemoveAll(skippedRoots.Contains);
     }
 
     private static List<string> ComputeSavedRootPaths(ResumeRecord record)
     {
         // Files may have been renamed at the last moment; prefer their final paths.
+        var byPath = new Dictionary<string, ResumeFile>(PathComparer);
+        foreach (var f in record.Files)
+        {
+            byPath.TryAdd(f.TargetPath, f);
+            byPath.TryAdd(f.PartPath, f);
+        }
+
         var result = new List<string>();
+        var listed = new HashSet<string>(PathComparer);
         foreach (var path in record.SavedRootPaths)
         {
-            var file = record.Files.FirstOrDefault(f => PathComparer.Equals(f.TargetPath, path) || PathComparer.Equals(f.PartPath, path));
-            if (file != null && !file.Done) continue;
-            if (FileNaming.Exists(path)) result.Add(path);
+            if (byPath.TryGetValue(path, out var file) && !file.Done) continue;
+            if (FileNaming.Exists(path) && listed.Add(path)) result.Add(path);
         }
 
         foreach (var file in record.Files.Where(f => f.Done && !f.RelativePath.Contains('/')))
         {
-            if (!result.Contains(file.TargetPath, PathComparer)) result.Add(file.TargetPath);
+            if (listed.Add(file.TargetPath)) result.Add(file.TargetPath);
         }
 
         return result;

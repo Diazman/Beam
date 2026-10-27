@@ -129,6 +129,11 @@ public sealed class PhoneLinkServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// <see cref="Share"/> off the UI thread: a folder of many thousands of files takes a while to list.
+    /// </summary>
+    public Task<TransferSession> ShareAsync(IReadOnlyList<string> paths) => Task.Run(() => Share(paths));
+
+    /// <summary>
     /// Offers files (folders are expanded) for the phone to download.
     /// </summary>
     public TransferSession Share(IReadOnlyList<string> paths)
@@ -140,7 +145,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
             if (File.Exists(path))
             {
                 var info = new FileInfo(path);
-                entries.Add(new SharedEntry(Path.GetFileName(path), path, info.Length, null, info.LastWriteTimeUtc));
+                if (info.Exists) entries.Add(new SharedEntry(Path.GetFileName(path), path, info.Length, null, info.LastWriteTimeUtc));
             }
             else if (Directory.Exists(path))
             {
@@ -148,7 +153,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 var folder = folders.Count;
                 folders.Add(Path.GetFileName(root) is { Length: > 0 } folderName ? folderName : "Folder");
                 var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
-                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", options))
+                foreach (var file in FilesIn(new DirectoryInfo(root), options))
                 {
                     var relative = Path.GetRelativePath(Path.GetDirectoryName(root) ?? root, file.FullName).Replace('\\', '/');
                     entries.Add(new SharedEntry(relative, file.FullName, file.Length, folder, file.LastWriteTimeUtc));
@@ -174,6 +179,42 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         _transfers.RegisterExternal(session);
         Activity?.Invoke();
         return session;
+    }
+
+    /// <summary>
+    /// The folder's files; a folder that disappears while it is listed (moved or deleted meanwhile) ends the list
+    /// there instead of failing the whole share.
+    /// </summary>
+    private static IEnumerable<FileInfo> FilesIn(DirectoryInfo folder, EnumerationOptions options)
+    {
+        IEnumerator<FileInfo> files;
+        try
+        {
+            files = folder.EnumerateFiles("*", options).GetEnumerator();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Info($"Phone link: couldn't list {folder.FullName}: {ex.Message}");
+            yield break;
+        }
+
+        using (files)
+        {
+            while (true)
+            {
+                try
+                {
+                    if (!files.MoveNext()) yield break;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Log.Info($"Phone link: stopped listing {folder.FullName}: {ex.Message}");
+                    yield break;
+                }
+
+                yield return files.Current;
+            }
+        }
     }
 
     /// <summary>Peer id used for transfers with phones (lets the UI word things differently).</summary>
@@ -470,6 +511,10 @@ public sealed class PhoneLinkServer : IAsyncDisposable
         try
         {
             await upload.ReceiveAsync(index, request.Body, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (upload.Session.CancellationToken.IsCancellationRequested)
+        {
+            error = L.T("The transfer was cancelled on the computer.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -804,6 +849,7 @@ public sealed class PhoneLinkServer : IAsyncDisposable
                 Session.AddTransferred(-received);
                 FileCleanup.TryDelete(part);
                 Finish(L.T("You cancelled the transfer."), cancelled: true);
+                throw; // the phone is told it was cancelled, not that the file arrived
             }
             catch
             {
