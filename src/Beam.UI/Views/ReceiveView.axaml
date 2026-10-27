@@ -79,7 +79,8 @@
           <StackPanel Spacing="12">
             <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
             <Border Background="White" CornerRadius="12" Padding="16" HorizontalAlignment="Left">
-              <Path Data="{Binding Code}" Fill="Black" Stretch="Uniform" Width="220" Height="220" />
+              <Path Data="{Binding Code}" Fill="Black" Stretch="Uniform" Width="220" Height="220"
+                    AutomationProperties.Name="{l:T 'Pairing code. Scan it with Beam on your phone.'}" />
             </Border>
             <TextBlock Classes="secondary" TextWrapping="Wrap"
                        Text="{l:T 'In Beam on the other phone, tap the scan button next to Nearby devices and scan this code. The two are paired from then on.'}" />

@@ -37,11 +37,11 @@
             <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a device?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding ScanCodeCommand}" IsVisible="{Binding CanScanCodes}"
-                    ToolTip.Tip="{l:T 'Scan a computer\'s code to pair with it'}" Margin="4,0,0,0">
+                    AutomationProperties.Name="{l:T 'Scan a computer\'s code to pair with it'}" ToolTip.Tip="{l:T 'Scan a computer\'s code to pair with it'}" Margin="4,0,0,0">
               <PathIcon Data="{StaticResource IconQr}" />
             </Button>
             <Button Grid.Column="3" Classes="icon" Command="{Binding RefreshCommand}"
-                    ToolTip.Tip="{l:T 'Look for nearby devices again'}" Margin="4,0,0,0">
+                    AutomationProperties.Name="{l:T 'Look for nearby devices again'}" ToolTip.Tip="{l:T 'Look for nearby devices again'}" Margin="4,0,0,0">
               <PathIcon Data="{StaticResource IconRefresh}" />
             </Button>
           </Grid>
@@ -199,7 +199,7 @@
                 <TextBlock Text="{Binding SharedText}" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
               </StackPanel>
               <Button Grid.Column="2" Classes="icon" Command="{Binding ClearSharedTextCommand}"
-                      ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Top">
+                      AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Top">
                 <PathIcon Data="{StaticResource IconClose}" />
               </Button>
             </Grid>
@@ -221,7 +221,7 @@
                           <TextBlock Classes="caption" Text="{Binding Details}" />
                         </StackPanel>
                         <Button Grid.Column="2" Classes="icon" Command="{Binding RemoveCommand}"
-                                ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Center">
+                                AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Center">
                           <PathIcon Data="{StaticResource IconClose}" />
                         </Button>
                       </Grid>

@@ -12,5 +12,7 @@ Beam includes or depends on the following components.
 | [Material Design Icons](https://github.com/google/material-design-icons) | Apache License 2.0 | Icon shapes in `src/Beam.UI/Styles/Icons.axaml` |
 | [Windows SDK projection (CsWinRT)](https://github.com/microsoft/CsWinRT) | MIT | Windows toast notifications |
 | System.Security.Cryptography.ProtectedData | MIT | Protecting the device key with DPAPI |
+| System.IO.Hashing | MIT | Checksums of folders downloaded as ZIP on the Phone page |
+| [Google code scanner](https://developers.google.com/ml-kit/vision/barcode-scanning/code-scanner) (Google Play services, via Xamarin.GooglePlayServices.Code.Scanner) | [Google APIs Terms of Service](https://developers.google.com/terms); .NET bindings MIT | Scanning a pairing code on Android |
 
 Test-only: xUnit (Apache 2.0), Microsoft.NET.Test.Sdk (MIT), Avalonia.Headless (MIT).

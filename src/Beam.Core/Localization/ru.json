@@ -630,5 +630,7 @@
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} доступен только по Bluetooth, а через него нельзя настроить его сеть для этого устройства. Сначала подключите оба устройства к одной сети Wi-Fi.",
   "The phone's user didn't allow joining the direct network.": "Пользователь телефона не разрешил подключиться к прямой сети.",
   "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "Чтобы подключиться к {0} напрямую, обновите Beam на своём устройстве или подключите оба устройства к одной сети Wi-Fi.",
-  "The transfer was cancelled on the computer.": "Передача отменена на компьютере."
+  "The transfer was cancelled on the computer.": "Передача отменена на компьютере.",
+  "Code that opens Beam's page on a phone. Point the phone's camera at it.": "Код, который открывает страницу Beam на телефоне. Наведите на него камеру телефона.",
+  "Pairing code. Scan it with Beam on your phone.": "Код для связывания. Отсканируйте его в Beam на телефоне."
 }

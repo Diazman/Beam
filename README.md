@@ -104,12 +104,14 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | `src/Beam.Core` | Cross-platform engine: discovery, protocol, transfers, resume, security, settings, history. No UI. |
 | `src/Beam.UI` | Shared user interface (Avalonia, MVVM): views, view models, dialogs, styles, translations. Used by every app. |
 | `src/Beam.App` | Desktop app host (Windows/Linux): main window, tray, notifications, Microsoft Store and Windows integration. |
+| `src/Beam.Android` | Android app host: Wi-Fi Direct and hotspot links, Bluetooth, notifications, the transfer service. See [phone apps](docs/MOBILE-APPS.md). |
+| `src/Beam.iOS` | iPhone and iPad app host: joining a computer's direct network, notifications, the Files app folder. See [phone apps](docs/MOBILE-APPS.md). |
 | `tests/Beam.Core.Tests` | Engine tests: real two-device transfers over loopback TLS, failure injection, resume, security. |
 | `tests/Beam.App.Tests` | Headless UI tests that drive real transfers through the UI and render screenshots. |
 | `native/BeamContextMenu` | Small C++ handler for "Send with Beam" in the Windows 11 right-click menu (Store package). |
 | `installer/Beam.iss` | Inno Setup installer script. |
 | `packaging/` | Microsoft Store: MSIX manifest, logos, packaging script, listing text and screenshots. |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md). |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md), [phone apps](docs/MOBILE-APPS.md), [Android signing](docs/ANDROID-SIGNING.md). |
 
 ## Troubleshooting
 

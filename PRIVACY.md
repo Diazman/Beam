@@ -1,8 +1,8 @@
 # Beam privacy policy
 
-_Last updated: October 20, 2026_
+_Last updated: October 27, 2026_
 
-Beam is an app for Windows and Android that sends files directly between nearby devices. This policy explains
+Beam is an app for Windows, Android and iPhone/iPad that sends files directly between nearby devices. This policy explains
 what Beam does with information. In short: **Beam does not collect, sell or share any personal data, has no
 servers, and has no accounts, ads, analytics or tracking.**
 
@@ -19,14 +19,15 @@ servers, and has no accounts, ads, analytics or tracking.**
 To work, Beam stores the following **only on your own device**, in its private app storage:
 
 - The name you give your device in Beam and your settings (for example the folder received files are saved to).
-- The devices you chose to trust or paired by scanning a code. For a computer you paired with your phone, this
-  includes the name and password of that computer's own Beam Wi-Fi network, so the phone can connect to it later.
+- The devices you chose to trust or paired by scanning a code: their Beam name, identifier and the fingerprint of
+  their encryption key, so Beam can tell it is really them. No Wi-Fi passwords are kept: each direct connection
+  gets a new one.
 - A device identifier and an encryption key that let your other devices recognise this one. On Windows the key is
   protected with Windows' built-in data protection.
 - A history of recent transfers (direction, device name, file or folder name, size, time and result). You can
-  clear it at any time in Beam (History on Windows, Transfers on Android).
+  clear it at any time in Beam (History on Windows, Transfers on Android and iPhone).
 - Log files with technical details for troubleshooting, kept for 7 days. They never leave your device unless you
-  choose to send them yourself ("Send log" on Android, "Open log folder" on Windows).
+  choose to send them yourself ("Send log" on Android and iPhone, "Open log folder" on Windows).
 
 Beam never keeps copies of the files you send or receive.
 
@@ -71,8 +72,8 @@ Beam asks for each permission when you use the feature that needs it, and explai
 
 - **Notifications** – to tell you when someone sends you files (with Accept and Decline buttons) and when a
   transfer has finished.
-- **Nearby devices** (Android 13 and later) – for direct connections between your phone and a computer (Wi-Fi
-  Direct), and to notice a paired computer's Beam Wi-Fi network nearby. Beam declares that it does not use this
+- **Nearby devices** (Android 12 and later) – for direct connections between your phone and a computer (Wi-Fi
+  Direct and Bluetooth), and to notice your paired computers nearby. Beam declares that it does not use this
   permission to find your location.
 - **Location** (Android 10 to 12 only) – on these versions Android requires the location permission for Wi-Fi
   Direct and for seeing nearby Wi-Fi networks. Beam uses it only for that and **never reads, uses or stores your
@@ -86,6 +87,17 @@ Beam asks for each permission when you use the feature that needs it, and explai
 
 Files you choose to send are opened only through Android's file picker or "Share" menu, for the files you select.
 
+## iPhone and iPad
+
+- **Local network** – iOS asks once whether Beam may find and connect to devices on your Wi-Fi network. Beam
+  needs it to find your computers and send files to them.
+- **Notifications** – Beam asks the first time it would tell you about incoming files or a finished transfer.
+- **Joining a computer's Wi-Fi** – for a direct connection, Beam asks iOS to join the network the computer
+  started for that transfer; iOS shows its own "Join" question. Beam leaves the network when the transfer is done.
+- Files you send are opened only through the iOS file picker or the Share menu, for the files you select.
+  Received files are saved in Beam's folder, which the Files app shows ("On My iPhone" → Beam).
+- Beam on iPhone and iPad doesn't use Bluetooth, the camera, the photo library or your location.
+
 ## Scanning codes (Android)
 
 To pair your phone with a computer, Beam uses the code scanner provided by Google Play services. The camera image
@@ -98,15 +110,15 @@ the scanned code. Google Play services is provided by Google under the
 Beam is free and has no in-app purchases. The Microsoft Store version may show the Store's own "Rate and review"
 dialog once; that dialog is provided by Microsoft under the
 [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement). Downloads and updates through the
-Microsoft Store or Google Play are handled by those stores under their own privacy policies.
+Microsoft Store, Google Play or Apple's App Store are handled by those stores under their own privacy policies.
 
 ## Your choices
 
 - Hide your device from others (Settings).
 - Remove trusted or paired devices (Settings).
-- Clear the transfer history (History on Windows, Transfers on Android).
-- Deny or revoke Android permissions at any time in the phone's settings; Beam keeps working over Wi-Fi without
-  them (without notifications or direct connections).
+- Clear the transfer history (History on Windows, Transfers on Android and iPhone).
+- Deny or revoke permissions at any time in the phone's settings; Beam keeps working over Wi-Fi without them
+  (without notifications or direct connections).
 - Remove all Beam data by uninstalling Beam (on Windows, also delete its app data folder).
 
 ## Children

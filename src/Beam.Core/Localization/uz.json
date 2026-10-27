@@ -542,5 +542,7 @@
   "{0} can only be reached over Bluetooth, which can't set up its network for this device. Connect both to the same Wi-Fi first.": "{0} bilan faqat Bluetooth orqali bogʻlanish mumkin, u orqali esa bu qurilma uchun uning tarmogʻini sozlab boʻlmaydi. Avval ikkalasini bitta Wi-Fi tarmogʻiga ulang.",
   "The phone's user didn't allow joining the direct network.": "Telefon foydalanuvchisi toʻgʻridan-toʻgʻri tarmoqqa ulanishga ruxsat bermadi.",
   "{0} needs a newer Beam on your device to connect directly. Update Beam, or connect both devices to the same Wi-Fi.": "{0} bilan to'g'ridan-to'g'ri ulanish uchun qurilmangizdagi Beam'ni yangilang yoki ikkala qurilmani bir xil Wi-Fi'ga ulang.",
-  "The transfer was cancelled on the computer.": "O'tkazish kompyuterda bekor qilindi."
+  "The transfer was cancelled on the computer.": "O'tkazish kompyuterda bekor qilindi.",
+  "Code that opens Beam's page on a phone. Point the phone's camera at it.": "Telefonda Beam sahifasini ochadigan kod. Telefon kamerasini unga qarating.",
+  "Pairing code. Scan it with Beam on your phone.": "Bog'lash kodi. Uni telefoningizdagi Beam bilan skanerlang."
 }
