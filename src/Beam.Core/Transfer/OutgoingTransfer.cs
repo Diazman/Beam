@@ -49,7 +49,7 @@ internal sealed class OutgoingTransfer
         if (_session.IsFinished) _session.SetState(_accepted ? TransferState.Reconnecting : TransferState.Connecting);
         // RunAsync handles every exception and always ends in Finish(), which clears _running,
         // or in a completed transfer (which can't be resumed).
-        _ = Task.Run(RunAsync);
+        Task.Run(RunAsync).Forget("Sending");
     }
 
     private string PeerName => _session.PeerName;
@@ -268,7 +268,7 @@ internal sealed class OutgoingTransfer
                     {
                         var (readIndex, readOffset) = toSend[nextToRead];
                         if (readOffset == 0 && entries[readIndex].Size <= TransferTuning.SmallFileLimit)
-                            readAhead[nextToRead] = Task.Run(() => ReadSmallFileAsync(entries[readIndex], token), CancellationToken.None);
+                            readAhead[nextToRead] = Task.Run(() => ReadSmallFileAsync(entries[readIndex], readIndex, token), CancellationToken.None);
                     }
 
                     var (index, offset) = toSend[i];
@@ -449,27 +449,53 @@ internal sealed class OutgoingTransfer
         }
     }
 
-    private sealed record SmallFile(byte[]? Data, string Sha256, Exception? Error);
+    /// <summary>A small file, read: its frames ready to send as one write, or why it couldn't be read.</summary>
+    private sealed record SmallFile(byte[]? Frames, int FramesLength, int DataLength, Exception? Error);
 
-    /// <summary>Reads and hashes a whole small file. Never throws: problems are returned in <see cref="SmallFile.Error"/>.</summary>
-    private static async Task<SmallFile> ReadSmallFileAsync(ManifestEntry entry, CancellationToken token)
+    /// <summary>The footer's JSON never gets longer than this (index, length and a 64-character hash).</summary>
+    private const int MaxFooterLength = 192;
+
+    /// <summary>
+    /// Reads and hashes a whole small file straight into its frames (header, data in chunks, footer), so the bytes are
+    /// read once and not copied again. Never throws: problems are returned in <see cref="SmallFile.Error"/>.
+    /// </summary>
+    private static async Task<SmallFile> ReadSmallFileAsync(ManifestEntry entry, int index, CancellationToken token)
     {
         try
         {
             await using var stream = entry.OpenRead();
             // Grown since it was chosen (e.g. a log being written): the first bytes, as chosen. Shrunk: can't send it.
             if (stream.CanSeek && stream.Length < entry.Size) throw new IOException("The file was changed after it was selected.");
-            var data = new byte[entry.Size];
-            await stream.ReadExactlyAsync(data, token).ConfigureAwait(false);
-            return new SmallFile(data, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant(), null);
+            var size = (int)entry.Size;
+            var header = FrameChannel.Encode(FrameType.FileHeader, new FileHeaderMessage { Index = index, Offset = 0 });
+            var chunks = (size + FrameChannel.DataChunkSize - 1) / FrameChannel.DataChunkSize;
+            var frames = new byte[header.Length + size + chunks * FrameChannel.HeaderSize + MaxFooterLength];
+            header.CopyTo(frames, 0);
+            var position = header.Length;
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            for (var offset = 0; offset < size; offset += FrameChannel.DataChunkSize)
+            {
+                var length = Math.Min(FrameChannel.DataChunkSize, size - offset);
+                FrameChannel.WriteDataHeader(frames.AsSpan(position), length);
+                var data = frames.AsMemory(position + FrameChannel.HeaderSize, length);
+                await stream.ReadExactlyAsync(data, token).ConfigureAwait(false);
+                hash.AppendData(data.Span);
+                position += FrameChannel.HeaderSize + length;
+            }
+
+            var sha = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            var footer = FrameChannel.Encode(FrameType.FileFooter, new FileFooterMessage { Index = index, Length = size, Sha256 = sha });
+            if (footer.Length > MaxFooterLength) throw new InvalidOperationException("File footer too long.");
+            footer.CopyTo(frames, position);
+            return new SmallFile(frames, position + footer.Length, size, null);
         }
         catch (EndOfStreamException)
         {
-            return new SmallFile(null, "", new IOException("The file got smaller while it was being sent."));
+            return new SmallFile(null, 0, 0, new IOException("The file got smaller while it was being sent."));
         }
         catch (Exception ex)
         {
-            return new SmallFile(null, "", ex);
+            return new SmallFile(null, 0, 0, ex);
         }
     }
 
@@ -478,7 +504,7 @@ internal sealed class OutgoingTransfer
     {
         token.ThrowIfCancellationRequested();
         if (file.Error is OperationCanceledException) throw file.Error;
-        if (file.Error != null || file.Data == null)
+        if (file.Error != null || file.Frames == null)
         {
             if (file.Error is not (IOException or UnauthorizedAccessException or System.Security.SecurityException))
                 Log.Warn($"Unexpected error reading {_manifest!.Entries[index].SourcePath}", file.Error);
@@ -486,26 +512,9 @@ internal sealed class OutgoingTransfer
             return false;
         }
 
-        var data = file.Data;
-        var header = FrameChannel.Encode(FrameType.FileHeader, new FileHeaderMessage { Index = index, Offset = 0 });
-        var footer = FrameChannel.Encode(FrameType.FileFooter, new FileFooterMessage { Index = index, Length = data.Length, Sha256 = file.Sha256 });
-        var chunks = (data.Length + FrameChannel.DataChunkSize - 1) / FrameChannel.DataChunkSize;
-        var frames = new byte[header.Length + data.Length + chunks * FrameChannel.HeaderSize + footer.Length];
-        header.CopyTo(frames, 0);
-        var position = header.Length;
-        for (var offset = 0; offset < data.Length; offset += FrameChannel.DataChunkSize)
-        {
-            var length = Math.Min(FrameChannel.DataChunkSize, data.Length - offset);
-            FrameChannel.WriteDataHeader(frames.AsSpan(position), length);
-            data.AsSpan(offset, length).CopyTo(frames.AsSpan(position + FrameChannel.HeaderSize));
-            position += FrameChannel.HeaderSize + length;
-        }
-
-        footer.CopyTo(frames, position);
-
         _session.SetCurrentFile(_manifest!.Entries[index].RelativePath);
-        await WriteAsync(io, t => connection.Channel.SendFramesAsync(frames, t), token).ConfigureAwait(false);
-        _session.AddTransferred(data.Length);
+        await WriteAsync(io, t => connection.Channel.SendFramesAsync(file.Frames.AsMemory(0, file.FramesLength), t), token).ConfigureAwait(false);
+        _session.AddTransferred(file.DataLength);
         if (state.RemoteCancel != null) ThrowIfRemoteCancelled(state);
         return true;
     }

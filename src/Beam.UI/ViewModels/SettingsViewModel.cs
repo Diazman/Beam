@@ -4,6 +4,7 @@ using Beam.App.Infrastructure;
 using Beam.App.Platform;
 using Beam.App.Services;
 using Beam.App.ViewModels.Dialogs;
+using Beam.Core.Diagnostics;
 using Beam.Core;
 using Beam.Core.Identity;
 using Beam.Core.Localization;
@@ -270,13 +271,21 @@ public sealed class SettingsViewModel : ObservableObject
 
             ResetFolderCommand.RaiseCanExecuteChanged();
 
-            TrustedDevices.Clear();
-            foreach (var device in settings.TrustedDevices) TrustedDevices.Add(new TrustedDeviceViewModel(device, RemoveTrusted));
-            OnPropertyChanged(nameof(HasTrustedDevices));
+            // The lists are rebuilt only when they changed (any setting saved, e.g. the window size, came through here).
+            static string Key(TrustedDevice t) => $"{t.Fingerprint}|{t.DeviceId}|{t.Name}|{t.AddedAt:O}";
+            if (!TrustedDevices.Select(t => Key(t.Device)).SequenceEqual(settings.TrustedDevices.Select(Key)))
+            {
+                TrustedDevices.Clear();
+                foreach (var device in settings.TrustedDevices) TrustedDevices.Add(new TrustedDeviceViewModel(device, RemoveTrusted));
+                OnPropertyChanged(nameof(HasTrustedDevices));
+            }
 
-            ManualAddresses.Clear();
-            foreach (var address in settings.ManualAddresses) ManualAddresses.Add(new ManualAddressViewModel(address, RemoveManual));
-            OnPropertyChanged(nameof(HasManualAddresses));
+            if (!ManualAddresses.Select(m => m.Address).SequenceEqual(settings.ManualAddresses))
+            {
+                ManualAddresses.Clear();
+                foreach (var address in settings.ManualAddresses) ManualAddresses.Add(new ManualAddressViewModel(address, RemoveManual));
+                OnPropertyChanged(nameof(HasManualAddresses));
+            }
         }
         finally
         {
@@ -303,12 +312,19 @@ public sealed class SettingsViewModel : ObservableObject
 
     private async void RemoveTrusted(TrustedDeviceViewModel device)
     {
-        var confirmed = await _main.ShowDialogAsync(new ConfirmViewModel(
-            L.T("Stop trusting {0}?", device.Name),
-            L.T("Beam will ask you again before accepting files from {0}.", device.Name),
-            L.T("Stop trusting")));
-        if (confirmed is true)
-            _node.Settings.Update(s => s.TrustedDevices.RemoveAll(t => t.Fingerprint == device.Device.Fingerprint));
+        try
+        {
+            var confirmed = await _main.ShowDialogAsync(new ConfirmViewModel(
+                L.T("Stop trusting {0}?", device.Name),
+                L.T("Beam will ask you again before accepting files from {0}.", device.Name),
+                L.T("Stop trusting")));
+            if (confirmed is true)
+                _node.Settings.Update(s => s.TrustedDevices.RemoveAll(t => t.Fingerprint == device.Device.Fingerprint));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Removing a trusted device failed", ex); // an async void that throws would end the app
+        }
     }
 
     private void RemoveManual(ManualAddressViewModel address) => _node.ForgetManualAddress(address.Address);

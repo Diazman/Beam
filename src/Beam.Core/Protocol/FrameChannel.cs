@@ -25,6 +25,18 @@ public sealed class FrameChannel
     public const int MaxDataPayload = 1024 * 1024;
     public const int MaxControlPayload = 32 * 1024 * 1024; // ~250,000 files in one offer
 
+    /// <summary>Messages that never get big (hello, direct setup, file header/footer…): anyone can send these.</summary>
+    public const int MaxSmallPayload = 64 * 1024;
+
+    /// <summary>The largest frame of a type: only file lists and their answers can be big, and text up to its limit.</summary>
+    public static int MaxPayload(FrameType type) => type switch
+    {
+        FrameType.FileData => MaxDataPayload,
+        FrameType.Offer or FrameType.OfferResponse or FrameType.Result => MaxControlPayload,
+        FrameType.Text => 2 * 1024 * 1024, // 256K characters, escaped
+        _ => MaxSmallPayload,
+    };
+
     private readonly Stream _stream;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly byte[] _header = new byte[HeaderSize];
@@ -77,11 +89,20 @@ public sealed class FrameChannel
         var type = (FrameType)_header[0];
         var length = BinaryPrimitives.ReadInt32BigEndian(_header.AsSpan(1));
         if (!Enum.IsDefined(type)) throw new ProtocolException($"Unknown frame type {(byte)type}.");
-        var max = type == FrameType.FileData ? MaxDataPayload : MaxControlPayload;
+        var max = MaxPayload(type);
         if (length < 0 || length > max) throw new ProtocolException($"Frame of {length} bytes exceeds the limit for {type}.");
-        if (_readBuffer.Length < length)
-            _readBuffer = new byte[Math.Max(length, Math.Min(_readBuffer.Length * 2, max))];
-        await _stream.ReadExactlyAsync(_readBuffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
+        // The buffer grows with what actually arrives, not with what the header claims: a header announcing 32 MB
+        // and then nothing would otherwise hold 32 MB for as long as the connection stays open.
+        var received = 0;
+        while (received < length)
+        {
+            if (_readBuffer.Length == received)
+                Array.Resize(ref _readBuffer, (int)Math.Min(length, Math.Max(received * 2L, received + 1024L * 1024)));
+            var chunk = Math.Min(length, _readBuffer.Length) - received;
+            await _stream.ReadExactlyAsync(_readBuffer.AsMemory(received, chunk), cancellationToken).ConfigureAwait(false);
+            received += chunk;
+        }
+
         return new Frame(type, _readBuffer.AsMemory(0, length));
     }
 

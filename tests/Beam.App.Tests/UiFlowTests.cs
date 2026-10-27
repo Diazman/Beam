@@ -12,6 +12,29 @@ namespace Beam.App.Tests;
 public class UiFlowTests
 {
     [AvaloniaFact]
+    public async Task ANewHistoryEntryAddsItsRowWithoutRebuildingTheOthers()
+    {
+        await using var app = new UiHarness("Laptop");
+        await app.InitializeAsync();
+        var store = app.Node.History;
+        for (var i = 0; i < HistoryStore.MaxEntries; i++)
+            store.Add(new HistoryEntry { Id = "t" + i, Title = $"t{i}", Timestamp = DateTimeOffset.Now });
+        await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == HistoryStore.MaxEntries, "full history");
+        var rows = app.ViewModel.History.Items.ToList();
+
+        store.Add(new HistoryEntry { Id = "new", Title = "new", Timestamp = DateTimeOffset.Now });
+        await UiHarness.WaitForAsync(() => app.ViewModel.History.Items[0].Title == "new", "the new row");
+
+        var items = app.ViewModel.History.Items;
+        Assert.Equal(HistoryStore.MaxEntries, items.Count); // the oldest dropped at the limit
+        Assert.Same(rows[0], items[1]); // the others are the same rows, not rebuilt
+        Assert.Same(rows[^2], items[^1]);
+
+        store.Clear();
+        await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 0, "cleared");
+    }
+
+    [AvaloniaFact]
     public async Task FirstRunShowsWelcomeThenStartsNetworking()
     {
         await using var app = new UiHarness(firstRunDone: false);
@@ -101,7 +124,7 @@ public class UiFlowTests
         await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 1, "history");
         app.ViewModel.Navigate(Page.History);
         await UiHarness.PumpAsync();
-        Assert.True(app.ViewModel.History.Items[0].CanShow);
+        await UiHarness.WaitForAsync(() => app.ViewModel.History.Items[0].CanShow, "the received file can be shown");
         app.Screenshot("07-history");
     }
 

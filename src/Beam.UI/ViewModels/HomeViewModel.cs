@@ -239,7 +239,7 @@ public sealed class HomeViewModel : ObservableObject
     public bool PreferDirect
     {
         get => _node.Settings.Current.Connection == Beam.Core.Settings.ConnectionMethod.Direct;
-        set => _ = SetPreferDirectAsync(value);
+        set => SetPreferDirectAsync(value).Forget("Changing the connection");
     }
 
     public bool CanConnectDirectly => _node.Direct.CanHost;
@@ -413,7 +413,7 @@ public sealed class HomeViewModel : ObservableObject
                 if (Items.Any(i => i.Path == raw)) continue;
                 var folder = new PendingItemViewModel(raw, isFolder: true, RemoveItem, folderName) { IsMeasuring = true };
                 Items.Add(folder);
-                _ = MeasureExternalFolderAsync(folder, externals);
+                MeasureExternalFolderAsync(folder, externals).Forget("Measuring a folder");
                 continue;
             }
 
@@ -448,7 +448,7 @@ public sealed class HomeViewModel : ObservableObject
             {
                 var item = new PendingItemViewModel(path, isFolder: true, RemoveItem) { IsMeasuring = true };
                 Items.Add(item);
-                _ = MeasureFolderAsync(item);
+                MeasureFolderAsync(item).Forget("Measuring a folder");
             }
             else if (File.Exists(path))
             {

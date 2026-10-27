@@ -269,7 +269,7 @@ public sealed partial class DirectManager
             }
 
             Log.Info($"Direct: {incoming}: accepted ({(trusted ? "paired" : proven ? "setting up again a link its user accepted (proven)" : "this device's user agreed")}, over {channel})");
-            _ = WatchIncomingAsync(incoming);
+            WatchIncomingAsync(incoming).Forget("Direct: watching an incoming session");
             return new DirectResponseMessage { Ok = true };
         }
         catch
@@ -391,7 +391,7 @@ public sealed partial class DirectManager
             var message = ex is DirectLinkException ? ex.Message : L.T("{0} couldn't join the direct network.", _settings.Current.DeviceName);
             if (!cancelled) Log.Warn($"Direct: {incoming}: joining failed: {ex.GetType().Name}: {ex.Message}");
             EndIncoming(incoming, cancelled ? "cancelled" : "join failed");
-            if (!cancelled && incoming.Channel == DirectControlChannel.Lan) _ = TellSenderFailedAsync(incoming, message);
+            if (!cancelled && incoming.Channel == DirectControlChannel.Lan) TellSenderFailedAsync(incoming, message).Forget("Direct: telling the sender a session failed");
             if (cancelled) throw;
             throw new DirectLinkException(message, ex);
         }
@@ -598,7 +598,7 @@ public sealed partial class DirectManager
             return;
         }
 
-        _ = Task.Run(async () =>
+        Task.Run(async () =>
         {
             try
             {
@@ -611,7 +611,7 @@ public sealed partial class DirectManager
 
             if (StillWanted()) return; // the same sender's next session uses it now
             ReleaseHost(owner);
-        });
+        }).Forget("Direct: letting go of the network kept for a sender");
     }
 
     /// <summary>Ends every incoming session (closing Beam, or "Let senders connect directly" turned off).</summary>
@@ -619,7 +619,7 @@ public sealed partial class DirectManager
     {
         foreach (var incoming in _incoming.Values.ToList())
         {
-            if (notify && incoming.Stage is IncomingStage.Joined or IncomingStage.Verified) _ = TellSenderEndedAsync(incoming, why);
+            if (notify && incoming.Stage is IncomingStage.Joined or IncomingStage.Verified) TellSenderEndedAsync(incoming, why).Forget("Direct: telling the sender a session ended");
             EndIncoming(incoming, why);
         }
     }
@@ -656,7 +656,7 @@ public sealed partial class DirectManager
             EndIncoming(incoming, "its network was lost");
             // The sender may not notice for a minute (its data just stops being acknowledged): tell it, so it sets the
             // link up again right away. Only over the shared network, once this device is back on it.
-            if (wasUp) _ = TellSenderLinkLostAsync(incoming);
+            if (wasUp) TellSenderLinkLostAsync(incoming).Forget("Direct: telling the sender the link was lost");
         }
     }
 

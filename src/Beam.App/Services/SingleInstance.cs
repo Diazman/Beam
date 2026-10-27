@@ -44,7 +44,7 @@ public sealed class SingleInstance : IDisposable
         }
 
         var instance = new SingleInstance(mutex, key);
-        _ = Task.Run(instance.ListenAsync);
+        Task.Run(instance.ListenAsync).Forget("Listening for a second start");
         return instance;
     }
 

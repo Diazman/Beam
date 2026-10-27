@@ -112,7 +112,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
             if (!receiving && ReceiveGrace > TimeSpan.Zero)
             {
                 var grace = _grace = new CancellationTokenSource();
-                _ = StopAfterGraceAsync(grace.Token);
+                StopAfterGraceAsync(grace.Token).Forget("Nearby: staying visible after Receive closed");
                 Log.Info($"Nearby: Receive left; still receivable for {ReceiveGrace.TotalMinutes:0} min");
                 return;
             }
@@ -526,7 +526,7 @@ public sealed class NearbyService : INearbyResponder, IBluetoothDirectControl
 
     private void KeepOpen(string deviceId, OpenHandshake handshake)
     {
-        if (_open.TryGetValue(deviceId, out var older) && _open.TryRemove(new KeyValuePair<string, OpenHandshake>(deviceId, older))) _ = older.CloseAsync();
+        if (_open.TryGetValue(deviceId, out var older) && _open.TryRemove(new KeyValuePair<string, OpenHandshake>(deviceId, older))) older.CloseAsync().Forget("Nearby: closing an older connection");
         _open[deviceId] = handshake;
         _ = Task.Delay(KeepHandshakeOpen).ContinueWith(async _ =>
         {

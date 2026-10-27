@@ -69,7 +69,7 @@ public sealed class RadioOperations
             Interlocked.Increment(ref _abandoned);
             Log.Warn($"{_name}: {what} is still running after it was {(cancellationToken.IsCancellationRequested ? "cancelled" : "given up")}; " +
                      "later operations wait for it");
-            _ = FinishAbandonedAsync(what, task, undoLateResult, limit);
+            FinishAbandonedAsync(what, task, undoLateResult, limit).Forget($"Direct: finishing {what}");
             cancellationToken.ThrowIfCancellationRequested();
             throw timedOut();
         }

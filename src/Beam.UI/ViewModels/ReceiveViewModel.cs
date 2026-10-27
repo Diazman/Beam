@@ -9,6 +9,7 @@ using Beam.Core.Identity;
 using Beam.Core.Localization;
 using Beam.Core.Nearby;
 using Beam.Core.Settings;
+using Beam.Core.Diagnostics;
 
 namespace Beam.App.ViewModels;
 
@@ -55,7 +56,7 @@ public sealed class ReceiveViewModel : ObservableObject
     public bool AllowDirect
     {
         get => _node.Settings.Current.AllowDirectSenders;
-        set => _ = SetAllowDirectAsync(value);
+        set => SetAllowDirectAsync(value).Forget("Changing direct connections");
     }
 
     public bool CanConnectDirectly => _node.Direct.IsSupported;

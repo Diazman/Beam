@@ -6,6 +6,7 @@ using Avalonia.Platform.Storage;
 using Beam.App.Services;
 using Beam.App.ViewModels;
 using Beam.Core.Localization;
+using Beam.Core.Diagnostics;
 
 namespace Beam.App.Views;
 
@@ -159,7 +160,7 @@ public partial class MainWindow : Window, IUiServices
         if (paths is not { Count: > 0 }) return;
         if (vm.CurrentPageKind == Page.Phone)
         {
-            _ = vm.Phone.ShareAsync(paths); // dropped on the Phone page: share with the phone
+            vm.Phone.ShareAsync(paths).Forget("Sharing with the phone"); // dropped on the Phone page: share with the phone
         }
         else
         {

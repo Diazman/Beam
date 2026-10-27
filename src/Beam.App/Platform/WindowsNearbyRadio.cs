@@ -50,7 +50,7 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
 #if WINDOWS_WINRT
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)) return null;
         var radio = new WindowsNearbyRadio();
-        _ = radio.InitializeAsync();
+        radio.InitializeAsync().Forget("Bluetooth: starting");
         return radio;
 #else
         return null;
@@ -117,7 +117,7 @@ internal sealed class WindowsNearbyRadio : INearbyRadio
             _publisher.Start();
         }
 
-        if (_adapter?.IsPeripheralRoleSupported == true) _ = StartServiceAsync(generation);
+        if (_adapter?.IsPeripheralRoleSupported == true) StartServiceAsync(generation).Forget("Bluetooth: starting the service");
         else Log.Warn("Nearby: this PC's Bluetooth can't accept connections (no peripheral role); senders need the same Wi-Fi");
     }
 

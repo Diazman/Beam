@@ -12,10 +12,12 @@ using Beam.Core.Util;
 
 namespace Beam.App.ViewModels;
 
-public sealed class HistoryItemViewModel
+public sealed class HistoryItemViewModel : ObservableObject
 {
     private readonly HistoryEntry _entry;
     private readonly IPlatformServices _platform;
+    private bool _canShow;
+    private bool _checkedFiles;
 
     public HistoryItemViewModel(HistoryEntry entry, IPlatformServices platform, Func<string, Task>? copy = null)
     {
@@ -76,8 +78,30 @@ public sealed class HistoryItemViewModel
 
     public string Tooltip => _entry.Message ?? StatusText;
 
-    public bool CanShow => !IsSend && (_entry.Paths.Any(p => File.Exists(p) || Directory.Exists(p))
-                                       || (_entry.Folder != null && Directory.Exists(_entry.Folder) && _entry.Status != HistoryStatus.Declined));
+    internal HistoryEntry Entry => _entry;
+
+    /// <summary>
+    /// The received files (or their folder) are still there. Checked once, off the UI thread (a network drive or a
+    /// removed USB stick can take seconds to answer); false until then.
+    /// </summary>
+    public bool CanShow
+    {
+        get
+        {
+            if (!_checkedFiles && !IsSend)
+            {
+                _checkedFiles = true;
+                Task.Run(() => _entry.Paths.Any(p => File.Exists(p) || Directory.Exists(p))
+                               || (_entry.Folder != null && Directory.Exists(_entry.Folder) && _entry.Status != HistoryStatus.Declined))
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsCompletedSuccessfully && t.Result) Dispatcher.UIThread.Post(() => SetProperty(ref _canShow, true, nameof(CanShow)));
+                    }, TaskScheduler.Default);
+            }
+
+            return _canShow;
+        }
+    }
 
     public RelayCommand ShowCommand { get; }
 
@@ -113,13 +137,38 @@ public sealed class HistoryViewModel : ObservableObject
 
     public AsyncCommand ClearCommand { get; }
 
+    /// <summary>
+    /// Brings the list up to date. A new transfer only adds its row at the top (rebuilding all 500 rows each time made
+    /// the window stutter); anything else (cleared, an entry changed) rebuilds it.
+    /// </summary>
     public void Reload()
     {
-        Items.Clear();
-        foreach (var entry in _store.Entries) Items.Add(new HistoryItemViewModel(entry, _platform, _main.CopyToClipboardAsync));
+        var entries = _store.Entries;
+        // New rows at the top, and (at the 500 limit) the oldest gone at the bottom: everything else is unchanged.
+        var added = Items.Count == 0 ? entries.Count : IndexOf(entries, Items[0].Entry);
+        var kept = Math.Min(Items.Count, entries.Count - added);
+        var onlyNew = added >= 0 && Enumerable.Range(0, kept).All(i => ReferenceEquals(Items[i].Entry, entries[i + added]));
+        if (onlyNew)
+        {
+            while (Items.Count > kept) Items.RemoveAt(Items.Count - 1);
+            for (var i = added - 1; i >= 0; i--) Items.Insert(0, new HistoryItemViewModel(entries[i], _platform, _main.CopyToClipboardAsync));
+        }
+        else
+        {
+            Items.Clear();
+            foreach (var entry in entries) Items.Add(new HistoryItemViewModel(entry, _platform, _main.CopyToClipboardAsync));
+        }
+
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasItems));
         ClearCommand.RaiseCanExecuteChanged();
+    }
+
+    private static int IndexOf(IReadOnlyList<HistoryEntry> entries, HistoryEntry entry)
+    {
+        for (var i = 0; i < entries.Count; i++)
+            if (ReferenceEquals(entries[i], entry)) return i;
+        return -1;
     }
 
     private async Task ClearAsync()

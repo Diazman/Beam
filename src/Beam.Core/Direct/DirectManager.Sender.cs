@@ -1061,7 +1061,7 @@ public sealed partial class DirectManager
     private void OnTransferChanged(DirectSend send)
     {
         if (send.Transfer is not { } transfer) return;
-        if (transfer.IsFinished) _ = FinishSendAsync(send);
+        if (transfer.IsFinished) FinishSendAsync(send).Forget("Direct: finishing a send");
         if (send.Mode != ConnectionMethod.Direct) return;
         var session = send.Session;
         switch (transfer.State)

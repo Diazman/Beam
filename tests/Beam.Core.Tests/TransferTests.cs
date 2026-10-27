@@ -89,6 +89,30 @@ public class TransferTests
     }
 
     [Fact]
+    public async Task AnAddressWhereTheHandshakeBreaksIsSkippedForTheDevicesNextAddress()
+    {
+        await using var sender = new TestNode("Sender");
+        await using var receiver = new TestNode("Receiver");
+        // Something else answers at the first address and hangs up on the encrypted handshake.
+        using var other = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        other.Start();
+        var hangUp = Task.Run(async () =>
+        {
+            using var client = await other.AcceptTcpClientAsync();
+            await client.GetStream().WriteAsync("HTTP/1.1 400 Bad Request\r\n\r\n"u8.ToArray());
+        });
+        var device = receiver.AsDevice() with
+        {
+            Endpoints = new[] { (System.Net.IPEndPoint)other.LocalEndpoint }.Concat(receiver.AsDevice().Endpoints).ToList(),
+        };
+
+        await using var connection = await SecureTransport.ConnectAsync(sender.Node.Transfers.Identity,
+            sender.Node.Transfers.CreateHello(Beam.Core.Protocol.ConnectionPurpose.Probe), device.Endpoints, receiver.Node.Identity.Fingerprint, "Receiver", CancellationToken.None);
+        Assert.Equal(receiver.Node.Identity.DeviceId, connection.RemoteHello.DeviceId);
+        await hangUp;
+    }
+
+    [Fact]
     public async Task AnOfferThatFailsBeforeTheUserAnswersEndsAndTheSenderCanTryAgain()
     {
         await using var sender = new TestNode("Sender");

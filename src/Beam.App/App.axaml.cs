@@ -108,7 +108,7 @@ public partial class App : Application
 
             desktop.ShutdownRequested += (_, _) => _quitting = true; // Windows sign-out / shutdown
             desktop.Exit += (_, _) => Shutdown();
-            _ = _viewModel.InitializeAsync(StartupCommandLine);
+            _viewModel.InitializeAsync(StartupCommandLine).Forget("Starting Beam");
         }
 
         base.OnFrameworkInitializationCompleted();

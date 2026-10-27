@@ -337,4 +337,56 @@ public class FrameChannelTests
         var unknown = new MemoryStream(new byte[] { 200, 0, 0, 0, 0 });
         await Assert.ThrowsAsync<ProtocolException>(() => new FrameChannel(unknown).ReadAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task OnlyFileListsMayBeBigAndMemoryFollowsWhatArrives()
+    {
+        // Anyone can connect and send a hello: a 1 MB one is refused (it was allowed up to 32 MB).
+        var bigHello = new MemoryStream(new byte[] { (byte)FrameType.Hello, 0x00, 0x10, 0x00, 0x00 });
+        await Assert.ThrowsAsync<ProtocolException>(() => new FrameChannel(bigHello).ReadAsync(CancellationToken.None));
+
+        // A file list may be big; one that announces 32 MB and sends 10 bytes doesn't hold 32 MB while it waits.
+        var stream = new GrowingStream(FrameType.Offer, FrameChannel.MaxControlPayload, sent: 10);
+        await Assert.ThrowsAsync<EndOfStreamException>(() => new FrameChannel(stream).ReadAsync(CancellationToken.None));
+        Assert.True(stream.LargestRead <= 2 * 1024 * 1024, $"asked for {stream.LargestRead} bytes at once");
+
+        // And a real big one still arrives whole.
+        var payload = new byte[3 * 1024 * 1024 + 7];
+        Random.Shared.NextBytes(payload);
+        var whole = new MemoryStream();
+        whole.Write(new byte[] { (byte)FrameType.Offer });
+        whole.Write(new byte[] { (byte)(payload.Length >> 24), (byte)(payload.Length >> 16), (byte)(payload.Length >> 8), (byte)payload.Length });
+        whole.Write(payload);
+        whole.Position = 0;
+        var frame = await new FrameChannel(whole).ReadAsync(CancellationToken.None);
+        Assert.Equal(payload, frame.Payload.ToArray());
+    }
+
+    /// <summary>A header announcing <c>length</c> bytes, then only <c>sent</c> of them; remembers the biggest read asked for.</summary>
+    private sealed class GrowingStream(FrameType type, int length, int sent) : Stream
+    {
+        private readonly byte[] _data = new byte[] { (byte)type, (byte)(length >> 24), (byte)(length >> 16), (byte)(length >> 8), (byte)length }
+            .Concat(new byte[sent]).ToArray();
+        private int _position;
+        public int LargestRead { get; private set; }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _data.Length;
+        public override long Position { get => _position; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+        public override int Read(Span<byte> buffer)
+        {
+            LargestRead = Math.Max(LargestRead, buffer.Length);
+            var n = Math.Min(buffer.Length, _data.Length - _position);
+            _data.AsSpan(_position, n).CopyTo(buffer);
+            _position += n;
+            return n;
+        }
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => new(Read(buffer.Span));
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 }

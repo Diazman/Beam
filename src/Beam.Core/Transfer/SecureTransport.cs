@@ -214,11 +214,21 @@ internal static class SecureTransport
                 Diagnostics.Log.Warn($"{endpoint} isn't {peerName}: {ex.Error.Details}");
                 mismatch = ex;
             }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested
+                                       && ex is AuthenticationException or IOException or ProtocolException
+                                           or TransferException { Error.Kind: TransferErrorKind.ConnectFailed })
+            {
+                // The connection broke during the handshake (a half-dead network, something else on that port): the
+                // device may still answer at its next address.
+                Log.Info($"Connecting to {peerName} at {endpoint}: the handshake failed ({ex.GetType().Name}: {ex.Message})");
+                lastError = ex;
+            }
         }
 
         // Only a different device answering everywhere is a real mismatch; when the device's own address didn't
         // answer at all (it is switching networks), it is just not reachable yet and the transfer retries.
         if (mismatch != null && lastError == null) throw mismatch;
+        if (lastError is TransferException { Error.Kind: TransferErrorKind.ConnectFailed } handshake) throw handshake; // "didn't respond"
         var details = lastError?.Message;
         throw new TransferException(TransferErrorKind.ConnectFailed,
             L.T("Couldn't reach {0}. Make sure Beam is open on that computer and both computers are on the same network.", peerName),

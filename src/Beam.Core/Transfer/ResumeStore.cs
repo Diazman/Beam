@@ -62,6 +62,9 @@ public sealed class ResumeRecord
     public List<string> SavedRootPaths { get; set; } = new();
 
     public List<ResumeFile> Files { get; set; } = new();
+
+    /// <summary>Held while files change and while the record is saved, so a save is a consistent snapshot.</summary>
+    internal object Gate { get; } = new();
 }
 
 /// <summary>Stores <see cref="ResumeRecord"/>s and cleans up partial files that will never be resumed.</summary>
@@ -84,8 +87,14 @@ public sealed class ResumeStore
         {
             try
             {
-                record.UpdatedAt = DateTimeOffset.UtcNow;
-                AtomicFile.WriteAllText(PathFor(record.TransferId), JsonSerializer.Serialize(record, StorageJson.Default.ResumeRecord));
+                string json;
+                lock (record.Gate)
+                {
+                    record.UpdatedAt = DateTimeOffset.UtcNow;
+                    json = JsonSerializer.Serialize(record, StorageJson.Default.ResumeRecord);
+                }
+
+                AtomicFile.WriteAllText(PathFor(record.TransferId), json);
             }
             catch (Exception ex)
             {

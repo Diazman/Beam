@@ -81,6 +81,10 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
             await ShowDialogAsync(new ConfirmViewModel(L.T("Couldn't connect directly"),
                 message + "\n\n" + L.T("The transfer continues the way it was going."), L.T("OK"), ""));
         }
+        catch (Exception ex)
+        {
+            Log.Warn("Showing a direct connection problem failed", ex); // an async void that throws would end the app
+        }
         finally
         {
             _showingDirectProblem = false;
@@ -239,7 +243,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         }
 
         HandleCommandLine(commandLine);
-        _ = Dispatcher.UIThread.InvokeAsync(EnsureFirewallForLocalNetworkAsync);
+        Dispatcher.UIThread.InvokeAsync(EnsureFirewallForLocalNetworkAsync).Forget("Checking the firewall");
 
         // Phones: notifications are how people learn that files are coming. Asked once, with the reason first.
         if (!Node.Settings.Current.NotificationPermissionAsked && !_platform.HasPermission(AppPermission.Notifications))
@@ -770,7 +774,7 @@ public sealed class MainViewModel : ObservableObject, IIncomingTransferHandler
         if (snapshot.State == TransferState.Completed)
         {
             Node.Settings.Update(s => s.CompletedTransfers++);
-            _ = AskForRatingWhenIdleAsync();
+            AskForRatingWhenIdleAsync().Forget("Asking for a rating");
         }
 
         var title = session.Title;

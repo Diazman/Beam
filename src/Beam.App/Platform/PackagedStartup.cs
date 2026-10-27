@@ -29,6 +29,10 @@ internal static class PackagedStartup
         return false;
     }
 
+    /// <summary>
+    /// Turns the startup task on or off. Not waited for: turning it on can show Windows' own question, and the window
+    /// stayed frozen until it was answered.
+    /// </summary>
     public static void SetEnabled(bool enabled)
     {
 #if WINDOWS_WINRT
@@ -47,7 +51,7 @@ internal static class PackagedStartup
                 var state = await task.RequestEnableAsync();
                 if (state == Windows.ApplicationModel.StartupTaskState.DisabledByUser)
                     Log.Info("Start with Windows is turned off in Windows Settings > Apps > Startup");
-            }).GetAwaiter().GetResult();
+            }).Forget("Changing the startup task");
         }
         catch (Exception ex)
         {

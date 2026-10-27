@@ -176,7 +176,7 @@ public sealed class TransferService : IAsyncDisposable
         session.SetDescription(new[] { TextTransfer.Describe(text) });
         session.SetTotals(1, text.Length, 0, 0, 0);
         Register(session);
-        _ = Task.Run(() => TextTransfer.SendAsync(this, session, text, refreshTarget ?? (() => target)));
+        Task.Run(() => TextTransfer.SendAsync(this, session, text, refreshTarget ?? (() => target))).Forget("Sending text");
         return session;
     }
 
@@ -342,7 +342,7 @@ public sealed class TransferService : IAsyncDisposable
                 continue;
             }
 
-            _ = Task.Run(() => HandleConnectionAsync(socket, token));
+            Task.Run(() => HandleConnectionAsync(socket, token)).Forget("An incoming connection");
         }
     }
 

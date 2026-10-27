@@ -375,14 +375,14 @@ internal sealed class IncomingTransfer
                                 var channelToken = linked.Token;
                                 await writes.StartAsync(async () =>
                                 {
-                                    var written = await WriteSmallFileAsync(session, active).ConfigureAwait(false);
+                                    var written = await WriteSmallFileAsync(session, record, active).ConfigureAwait(false);
                                     await _connection.Channel.SendAsync(FrameType.FileResult, written, channelToken).ConfigureAwait(false);
                                 }, linked.Token).ConfigureAwait(false);
                             }
                         }
                         else
                         {
-                            var result = await FinishFileAsync(session, active, footer, retried).ConfigureAwait(false);
+                            var result = await FinishFileAsync(session, record, active, footer, retried).ConfigureAwait(false);
                             await _connection.Channel.SendAsync(FrameType.FileResult, result, linked.Token).ConfigureAwait(false);
                         }
 
@@ -508,7 +508,7 @@ internal sealed class IncomingTransfer
         }
     }
 
-    private async Task<FileResultMessage> FinishFileAsync(TransferSession session, ActiveFile active, FileFooterMessage footer, HashSet<int> retried)
+    private async Task<FileResultMessage> FinishFileAsync(TransferSession session, ResumeRecord record, ActiveFile active, FileFooterMessage footer, HashSet<int> retried)
     {
         var file = active.File;
         var hash = Convert.ToHexString(active.Hash.GetHashAndReset()).ToLowerInvariant();
@@ -531,7 +531,7 @@ internal sealed class IncomingTransfer
             return Damaged(session, file, retried);
         }
 
-        return CompleteVerifiedFile(session, file);
+        return CompleteVerifiedFile(session, record, file);
     }
 
     /// <summary>Checks a small file received into memory. Returns a result to send now if it failed, or null if it's good.</summary>
@@ -560,7 +560,7 @@ internal sealed class IncomingTransfer
     }
 
     /// <summary>Writes a verified small file to its partial file, then moves it into place (runs in the background).</summary>
-    private static async Task<FileResultMessage> WriteSmallFileAsync(TransferSession session, ActiveFile active)
+    private static async Task<FileResultMessage> WriteSmallFileAsync(TransferSession session, ResumeRecord record, ActiveFile active)
     {
         var file = active.File;
         active.Hash.Dispose();
@@ -578,20 +578,25 @@ internal sealed class IncomingTransfer
             throw new LocalFileException($"Writing {file.PartPath}", ex);
         }
 
-        return CompleteVerifiedFile(session, file);
+        return CompleteVerifiedFile(session, record, file);
     }
 
-    /// <summary>Moves a verified partial file to its final name and records the result.</summary>
-    private static FileResultMessage CompleteVerifiedFile(TransferSession session, ResumeFile file)
+    /// <summary>
+    /// Moves a verified partial file to its final name and records the result. Small files finish in the background,
+    /// several at once: the final name and "done" change together (under the record's gate), so a resume state saved
+    /// meanwhile never has one without the other.
+    /// </summary>
+    private static FileResultMessage CompleteVerifiedFile(TransferSession session, ResumeRecord record, ResumeFile file)
     {
+        string target;
         try
         {
-            file.TargetPath = MoveIntoPlace(file);
+            target = MoveIntoPlace(file);
             if (file.ModifiedUnixMs > 0)
             {
                 try
                 {
-                    File.SetLastWriteTimeUtc(file.TargetPath, DateTimeOffset.FromUnixTimeMilliseconds(file.ModifiedUnixMs).UtcDateTime);
+                    File.SetLastWriteTimeUtc(target, DateTimeOffset.FromUnixTimeMilliseconds(file.ModifiedUnixMs).UtcDateTime);
                 }
                 catch
                 {
@@ -602,7 +607,7 @@ internal sealed class IncomingTransfer
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !ErrorTranslator.IsDiskFull(ex))
         {
             FileCleanup.TryDelete(file.PartPath);
-            file.Failed = true;
+            lock (record.Gate) file.Failed = true;
             var reason = ex is UnauthorizedAccessException
                 ? L.T("Couldn't be saved: the existing file is read-only or protected.")
                 : L.T("Couldn't be saved: the existing file may be open in another program.");
@@ -611,7 +616,12 @@ internal sealed class IncomingTransfer
             return new FileResultMessage { Index = file.Index, Ok = false, Error = reason };
         }
 
-        file.Done = true;
+        lock (record.Gate)
+        {
+            file.TargetPath = target;
+            file.Done = true;
+        }
+
         session.FileCompleted();
         return new FileResultMessage { Index = file.Index, Ok = true };
     }
