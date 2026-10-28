@@ -1,37 +1,40 @@
 # Beam architecture
 
-## Technology choices
+## Projects
 
-| Decision | Choice | Why |
+| Project | What | Framework |
 |---|---|---|
-| Runtime | .NET 8 (LTS), C# | Fast streaming I/O, first-class TLS (SChannel on Windows), single-file self-contained publishing, mature tooling. |
-| UI | Avalonia 11 + Fluent theme, MVVM with compiled bindings | Modern Windows-11-style UI with per-monitor DPI; XAML binding errors fail the build; the same UI can later ship on macOS/Linux; the UI can be rendered headlessly in automated tests. |
-| Distribution | One self-contained, trimmed, ReadyToRun `Beam.exe` (~31 MB) + Inno Setup installer | No .NET install needed, fast startup, per-user install without admin rights. |
-| Dependencies | Avalonia (MIT), `System.Security.Cryptography.ProtectedData` (Microsoft) | Nothing else — MVVM helpers, JSON (source-generated), logging and protocol are in-house and small. |
+| `Beam.Core` | The engine: identity, discovery, transfers, resume, Direct mode, Bluetooth, the Phone page, settings, history. No UI. | .NET 8 |
+| `Beam.UI` | The screens shared by every app (Avalonia 11, MVVM with compiled bindings): desktop window and phone layout, dialogs, translations. | .NET 8 |
+| `Beam.App` | Windows host (also runs on Linux for development and tests): tray, toasts, firewall, Windows Wi-Fi Direct / Mobile hotspot, Bluetooth, Store integration. | .NET 8, Windows SDK |
+| `Beam.Android` | Android host: Wi-Fi Direct groups and the phone's hotspot, Bluetooth LE, notifications, the transfer foreground service, Share → Beam. | .NET 10 (android) |
+| `Beam.iOS` | iPhone/iPad host: joining a computer's direct network (NEHotspotConfiguration), notifications, the Files app folder. | .NET 10 (ios) |
 
-## Components
+Each host gives the engine its platform parts through small interfaces (`IDirectLink` for Wi-Fi links,
+`INearbyRadio` for Bluetooth, `IExternalFiles` for content URIs) and the UI through `IPlatformServices` /
+`IUiServices`. Tests replace them with fakes (`FakeDirectAir`, `FakeNearbyAir`, `FakePlatform`).
 
 ```
-Beam.App (Windows desktop, Avalonia)                    Beam.Core (no UI, cross-platform)
-┌──────────────────────────────────────┐                ┌────────────────────────────────────────────┐
-│ Views (XAML)  ←→  ViewModels         │                │ BeamNode  — composition root used by apps   │
-│   MainWindow, Home, History,         │   IIncoming-   │  ├─ DeviceIdentity  (id + TLS certificate)   │
-│   Settings, TransferCard, dialogs    │   Transfer-    │  ├─ SettingsStore / HistoryStore (JSON)      │
-│ MainViewModel implements ────────────┼── Handler ───→ │  ├─ DiscoveryService (UDP)                   │
-│   approval + conflict prompts        │                │  ├─ TransferService (TCP+TLS listener)       │
-│ Platform/ (Windows: toasts, Run key, │                │  │    ├─ OutgoingTransfer (sender)            │
-│   Explorer; generic fallback)        │                │  │    ├─ IncomingTransfer (receiver)          │
-│ Services/ (single instance, CLI)     │                │  │    └─ ResumeStore (partial-transfer state) │
-└──────────────────────────────────────┘                │  └─ Licensing/IEditionPolicy                 │
-                                                         └────────────────────────────────────────────┘
+Host app (Windows / Android / iOS)            Beam.UI                          Beam.Core
+┌───────────────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────────────────────┐
+│ Platform services: links,     │   │ Views ←→ ViewModels           │   │ BeamNode (composition root)               │
+│ radios, notifications, files  │──→│ MainViewModel answers the     │──→│  ├─ DeviceIdentity, Settings/HistoryStore │
+│                               │   │ engine's questions            │   │  ├─ DiscoveryService (UDP)                │
+└───────────────────────────────┘   │ (IIncomingTransferHandler)    │   │  ├─ TransferService (TLS listener)        │
+                                    └──────────────────────────────┘   │  │   Outgoing/Incoming/TextTransfer,       │
+                                                                       │  │   ResumeStore                           │
+                                                                       │  ├─ DirectManager (Direct sessions)       │
+                                                                       │  ├─ NearbyService (Bluetooth LE)          │
+                                                                       │  └─ PhoneLinkServer (Phone page, HTTP)    │
+                                                                       └──────────────────────────────────────────┘
 ```
 
 - **Beam.Core never references UI code.** It reports progress through `TransferSession` objects (thread-safe; the
   UI polls snapshots 4×/second and listens to state changes) and asks the user questions through
-  `IIncomingTransferHandler`. A phone app, a CLI, or an Explorer shell extension can host the same engine.
+  `IIncomingTransferHandler`.
 - **Threading:** all networking and disk I/O is async on the thread pool; the UI thread only renders and handles
-  input, so big transfers never freeze the window. Core events are marshalled to the UI thread with
-  `Dispatcher.UIThread.Post`.
+  input. Core events are marshalled to the UI thread with `Dispatcher.UIThread.Post`. Background work that isn't
+  awaited goes through `task.Forget(what)`, which logs failures.
 
 ## Discovery
 
@@ -45,7 +48,7 @@ Fallback: **Connect by address** probes the address over TCP/TLS, learns the dev
 address, and keeps polling it with unicast UDP (and TCP probes if UDP is filtered). The query carries this device's
 own info, so only one side needs to type an address.
 
-A hidden device ("Let nearby computers find this one" off) sends no announcements and anonymous queries.
+A hidden device ("Let nearby devices find this…" off) sends no announcements and anonymous queries.
 
 ## Transfer protocol
 
@@ -63,14 +66,14 @@ queue (8 chunks) lets the network keep flowing while the disk writes. Memory sta
 
 - The receiver writes to `name.<transferId>.beampart` and persists a `ResumeRecord` (destination, per-file target
   paths, conflict decisions, completion state) in `%LOCALAPPDATA%\Beam\resume`.
-- If the connection drops, the sender retries automatically with backoff (≈30 s total), re-reading the device's
-  current address from discovery. After that the card offers **Try again**.
+- If the connection drops, the sender retries automatically with backoff for up to 3 minutes after the last progress,
+  re-reading the device's current address from discovery. After that the card offers **Try again**.
 - On reconnect the sender sends the same offer with `resume: true`. If the receiver has a record for that transfer
   id *from the same certificate fingerprint* with the *same file list hash*, it auto-accepts (the user already
   did) and replies with each file's existing byte count; the sender continues from there. Both sides re-hash the
   existing prefix so the final SHA-256 still covers the whole file.
 - A file failing verification is deleted and re-sent once from byte 0; a second failure is reported per file.
-- Resume records expire after 24 h; expired partial files are deleted at startup.
+- Resume records expire 24 h after the transfer's last progress; expired partial files are deleted at startup.
 - A source file that changes size after being selected is reported as a per-file failure rather than producing a
   silently inconsistent copy.
 
@@ -86,11 +89,45 @@ queue (8 chunks) lets the network keep flowing while the disk writes. Memory sta
 - Free space is checked before accepting (and shown in the dialog); a full disk mid-transfer stops cleanly, keeps
   the partial data for resume, and tells the sender why.
 
+## Direct mode
+
+With **Send directly** on, the files go over a Wi-Fi link between the two devices instead of the shared network
+(`DirectManager`, one `DirectSession` per receiver):
+
+1. **Propose** over a control channel: Beam's TLS connection when the receiver is reachable on the network, else the
+   encrypted Bluetooth handshake (`NearbyService`).
+2. The **sender starts a network** for this session (a fresh passphrase each time): a Wi-Fi Direct group, or on a
+   Windows PC with internet its Mobile hotspot, or on an Android phone sending to a computer its own hotspot.
+3. It **offers** the network's name and passphrase; the receiver joins and reports **ready** over the new network.
+4. The sender **verifies** peer, session and route there, and only then sends — to that verified address only.
+5. **End**: the network is stopped (or shared by the next session of the same send) and the receiver leaves it.
+
+A device that can't start a network (an iPhone) asks a computer to host instead (`HostForSender`); verification is
+the same. A dropped link is set up again as a new session with a reconnect proof, and the transfer resumes. Nothing
+falls back to the shared network unless the user chooses **Send over Wi-Fi instead**. Beam 1.5.3 and older used a
+receiver-hosted protocol; its requests are refused with a message to update.
+
+## Bluetooth
+
+A device with Receive open advertises a 20-byte beacon (`NearbyBeacon`: a hash of its id, flags, the start of its
+name). A sender lists it, and resolving it runs a sealed handshake over a GATT characteristic (`NearbyHandshake`:
+keys from ECDH + HKDF, AES-256-CBC with HMAC-SHA256) that returns the receiver's pairing code (id, name, certificate fingerprint, roles; never a Wi-Fi
+passphrase). Direct session messages then travel sealed over that connection. A device seen before must present
+the same certificate.
+
+## Phone page
+
+`PhoneLinkServer` serves a small web page (`phone.html`) on the local network behind a random link, for phones
+without the app: uploads to the PC (with approval) and downloads of what the PC shares, folders as streamed ZIP
+archives (`StoredZip`, exact size up front). It stops after 30 minutes without use. These transfers are not
+encrypted by Beam (plain HTTP on the LAN).
+
 ## Security model
 
 - **Identity:** each installation creates a random device id and a self-signed ECDSA P-256 certificate (RSA-2048
-  fallback). The private key is stored DPAPI-encrypted (current user) in `%LOCALAPPDATA%\Beam\identity.json`.
-- **Transport:** TLS 1.2/1.3 via the OS (SChannel), *both* sides present certificates. Devices advertise their
+  fallback). The private key is stored in `identity.json` in Beam's data folder: DPAPI-encrypted (current user) on
+  Windows, in the app's private storage on phones.
+- **Transport:** TLS 1.2/1.3 via the OS, *both* sides present certificates. Devices advertise their
   certificate fingerprint in discovery; the sender refuses to send if the TLS peer doesn't match ("couldn't
   confirm this is really …"). The receiver sees the sender's security code (first 8 hex digits of the fingerprint),
   which the sender can read in Settings → About.
@@ -99,19 +136,9 @@ queue (8 chunks) lets the network keep flowing while the disk writes. Memory sta
 - **Integrity:** TLS (AEAD) protects data in transit; SHA-256 per file protects against bugs, disk errors and
   resume mismatches end-to-end.
 - **Exposure:** one TCP port (47821, or the next free one) and one UDP port (47820), LAN only, no admin rights. Limits:
-  16 concurrent connections, 4 pending prompts (1 per sender), 32 MB offer size, 15 s handshake timeout, 2 min
+  16 concurrent connections, 4 pending prompts (1 per sender, files and texts alike), 64 KB for any message but
+  file lists (32 MB) and text (2 MB), memory that grows with what actually arrives, 15 s handshake timeout, 2 min
   approval timeout, data never exceeding the sizes the user accepted.
-- **Not yet covered** (future work): verified pairing (QR/PIN) so a spoofed device *name* can't trick a sender,
-  per-device blocking of request spam.
-
-## Extension points (future roadmap)
-
-| Future feature | Where it plugs in |
-|---|---|
-| Phone apps | Implement the protocol (PROTOCOL.md) or host `Beam.Core` (.NET MAUI); `DeviceKinds.Phone` already exists. |
-| QR pairing / trusted pairing | `TrustedDevice` + fingerprints already exist; a QR code would encode address + fingerprint for `AddDeviceByAddressAsync`. |
-| Explorer "Send with Beam" | `Beam.exe --send "%1"` already works and forwards to the running instance; add a registry verb in the installer. |
-| Transfer queues, pause/resume | Sessions are independent objects with `Resume()`; pause = cancel-keeping-partials + resume. |
-| Internet transfers / links | Add a relay transport behind `SecureTransport.ConnectAsync`; the frame protocol is transport-agnostic. |
-| Premium edition | `IEditionPolicy` / `Feature` gate capabilities; `FreeEdition` enables everything today. |
-| Privacy-respecting analytics | A single opt-in sink would subscribe to `TransferService.SessionFinished`; nothing is collected today. |
+- **Pairing:** scanning a computer's QR code on a phone trusts its certificate; a device id claimed with another
+  certificate is refused. Direct sessions check the same certificates on the direct network before any data.
+- **Not yet covered:** per-device blocking of request spam.

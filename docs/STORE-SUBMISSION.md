@@ -20,8 +20,8 @@ lives in the package's own folder, and the firewall rule is installed by the pac
 ## Steps
 
 1. **Create a developer account** at <https://partner.microsoft.com/dashboard/registration>. Partner
-   Center shows the current registration fee for your account type. To be paid for Beam Pro, also
-   complete **Payout and tax** (bank account and tax form) in Partner Center.
+   Center shows the current registration fee for your account type. (Beam is free with no purchases, so
+   **Payout and tax** isn't needed.)
 
 2. **Reserve the app name.** Partner Center > Apps and games > New product > MSIX or PWA app, enter
    the name. If "Beam" is taken, reserve an alternative (e.g. "Beam File Transfer").
@@ -50,7 +50,7 @@ lives in the package's own folder, and the firewall rule is installed by the pac
    - **Pricing and availability:** Free (the app itself), markets of your choice.
    - **Properties:** category *Productivity* (or *Utilities & tools*); privacy policy URL (step 7).
      Under "Product declarations" Beam does not access personal information on behalf of others.
-   - **Age ratings:** answer the questionnaire — no user-generated public content, **in-app purchases: yes**,
+   - **Age ratings:** answer the questionnaire — no user-generated public content, **no in-app purchases**,
      no ads, no location → usually "3+".
    - **Packages:** upload the `.msixbundle`. Partner Center validates it. The *runFullTrust* restricted
      capability is needed by every desktop (Win32) app; in "Submission options > restricted capabilities"
@@ -61,16 +61,7 @@ lives in the package's own folder, and the firewall rule is installed by the pac
      export of the icon) where a logo is requested.
    - **Submit.** Certification usually takes a few hours to three business days.
 
-6. **Create the Beam Pro add-on** (Add-ons > Create a new add-on) exactly as described at the end of
-   `packaging/store/LISTING.md`. Its Product ID must be `BeamPro`. Submit it together with (or after) the
-   app; the Upgrade button shows "Beam Pro isn't available in the Store right now" until it is live.
-
-   After the app is published, copy its **Store ID** (Product management > Product identity, e.g.
-   `9NXXXXXXXXXX`) into the `StoreProductId` constant in
-   `src/Beam.UI/Services/ProService.cs` — so the GitHub builds' "Get Beam from the Microsoft Store" button
-   opens Beam's Store page directly instead of a Store search.
-
-7. **Privacy policy URL.** The Store requires a public web page. If this repository is public you can use
+6. **Privacy policy URL.** The Store requires a public web page. If this repository is public you can use
    `https://github.com/Diazman/<repo>/blob/main/PRIVACY.md`. If you make the repository private (recommended
    to protect the source), publish `PRIVACY.md` somewhere public instead, for example a public GitHub Gist
    or a free GitHub Pages site in a separate public repository that contains only that page.
@@ -100,21 +91,3 @@ before Microsoft does.
 
 Bump `<Version>` in `Directory.Build.props`, push to `main`, upload the new bundle from the GitHub release in a new submission.
 Store users update automatically; Beam has no built-in updater (the Store doesn't allow one).
-
-## Free and Pro editions
-
-| | Free | Pro (one-time in-app purchase) |
-|---|---|---|
-| Receiving | unlimited | unlimited |
-| Computers per send | 1 | several at once |
-| Sending speed | up to 5 MB/s | full network speed |
-| Sends per day | 10 (each computer counts as one) | unlimited |
-
-The limits live in `src/Beam.Core/Licensing/Edition.cs` (`FreeLimits`). Pro is bought and checked through
-the Microsoft Store (`src/Beam.App/Platform/WindowsStoreService.cs`); a purchase made on one PC unlocks Pro
-on every Windows PC signed in to the same Microsoft account. Builds from GitHub can't sell Pro, so they are
-always Free and point to the Store instead.
-
-Testing purchases before release: install the app from the Store (e.g. while the submission is in
-"hidden" visibility) with an account listed in Partner Center > Account settings > **Test accounts**, or use
-a promo code for the add-on (Add-ons > Beam Pro > Promo codes).

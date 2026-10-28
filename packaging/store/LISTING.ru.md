@@ -79,7 +79,3 @@ Beam — самый простой способ перекинуть файлы 
 
 ## Ключевые слова для поиска (Search terms)
 передача файлов; отправить файлы; обмен файлами; передача по wifi; с компьютера на компьютер; локальная сеть; file transfer
-
-## Надстройка: Beam Pro (Add-on: Beam Pro)
-
-Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

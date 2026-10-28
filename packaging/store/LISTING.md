@@ -106,6 +106,3 @@ Productivity (subcategory: none) — alternatively Utilities & tools.
 | System requirements | Windows 10 version 1809 or later; a local network |
 | Pricing | Free (no in-app purchases) |
 | Age rating questionnaire | No user-generated content shared publicly, no purchases (no in-app purchases or add-ons), no location, no personal data collection → typically rated 3+ / Everyone |
-
-## Beam Pro add-on
-Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

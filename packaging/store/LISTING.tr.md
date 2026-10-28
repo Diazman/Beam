@@ -80,7 +80,3 @@ Açık ve koyu tema
 
 ## Arama terimleri (Search terms)
 dosya aktarımı; dosya gönderme; dosya paylaşımı; wifi dosya aktarımı; bilgisayardan bilgisayara; yerel ağ; file transfer
-
-## Eklenti: Beam Pro (Add-on: Beam Pro)
-
-Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

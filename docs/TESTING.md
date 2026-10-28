@@ -3,13 +3,15 @@
 ## Automated tests
 
 ```bash
-dotnet test Beam.sln          # ~2 minutes; runs on Windows, Linux and macOS
+dotnet test Beam.sln          # ~3 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (102 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (231 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
+Direct mode and Bluetooth run against fakes of the radios (`FakeDirectAir`, `FakeNearbyAir`), which can drop links,
+refuse joins or turn Wi-Fi off; tests that change process-wide network state run alone.
 
-**`tests/Beam.App.Tests`** (28 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (48 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -31,9 +33,11 @@ view-model commands while a second node sends/receives, and render screenshots o
 | 12 | UI stays responsive | All I/O is async off the UI thread; UI tests keep rendering during a 400 MB transfer | ✔ |
 
 Security-specific tests: `ImpostorWithWrongFingerprintIsRejected`, `NeverWritesThroughALinkedFolder`,
-`SafePathTests` (traversal, rooted paths, reserved names), `RejectsMalformedPackets`, `RejectsOversizedAndUnknownFrames`.
+`SafePathTests` (traversal, rooted paths, reserved names), `RejectsMalformedPackets`, `RejectsOversizedAndUnknownFrames`,
+`OnlyFileListsMayBeBigAndMemoryFollowsWhatArrives`, `DirectSecurityTests` (who may make a device start or join a
+network), `AnImpostorWithADifferentCertificateIsNotTrusted` (Bluetooth).
 
-## Manual test procedure (two Windows PCs)
+## Manual test procedure (two Windows PCs, then phones)
 
 Automated tests run on any OS; these steps cover what only real Windows machines can show (firewall, toasts,
 tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./build.ps1 -Installer`.
@@ -71,8 +75,8 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 ### Interruptions
 16. During a large transfer, turn Wi-Fi off on B for ~10 s, then on. ✅ A shows "Connection lost. Reconnecting…", then
     continues from where it stopped (no new prompt on B); file verifies.
-17. During a large transfer, end Beam on B in Task Manager. ✅ A reports the problem; restart Beam on B within 30 s
-    → transfer resumes automatically; later than 30 s → click **Try again** on A → resumes without a prompt.
+17. During a large transfer, end Beam on B in Task Manager. ✅ A shows it is reconnecting; restart Beam on B within
+    3 minutes → transfer resumes automatically; later → click **Try again** on A → resumes without a prompt.
 18. Cancel on A mid-transfer. ✅ B shows "PC A cancelled the transfer."; no `.beampart` files remain.
 19. Cancel on B mid-transfer. ✅ A shows "PC B cancelled the transfer."
 20. Quit Beam on A (tray → Quit) during a transfer. ✅ Confirmation "A transfer is still in progress"; choosing
@@ -100,11 +104,28 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
     Beam icon, in the Windows language) is in the main menu, not only under *Show more options*; Beam opens (or comes
     forward) with all of them. On Windows 10 it is in the normal right-click menu.
 33. Store version: after the 3rd completed transfer, the Store's rating dialog appears once (and never again).
-34. Store version during the launch period: Settings → **Claim Beam Pro free** → Store dialog shows "Free"; afterwards
-    Settings shows *Beam Pro*. Restart: still Pro.
-35. Settings → **Language** → Türkçe / Русский / Oʻzbekcha, restart Beam. ✅ Every screen, dialog, toast, tray menu
+34. Settings → **Language** → Türkçe / Русский / Oʻzbekcha, restart Beam. ✅ Every screen, dialog, toast, tray menu
     and the on/off switches are in that language; sizes use the local decimal separator ("7,63 MB"). Open the Phone
     page on a phone set to that language: ✅ the page is translated too. Back to *Use Windows language*.
+
+### Direct mode (Settings or the Send page: *Send directly*)
+35. PC ↔ PC on no shared network (one on Ethernet, the other on Wi-Fi elsewhere, or Wi-Fi off on one). Open Receive on
+    B. ✅ A lists B over Bluetooth; Send directly → B asks once (unless paired) → B joins A's network → files arrive;
+    both are back on their own networks afterwards.
+36. A online, B a phone: ✅ A uses its Mobile hotspot (the phone stays online during the transfer).
+37. Turn Wi-Fi off on the receiver mid-transfer, then on. ✅ "Reconnecting to …", a new direct session, and the transfer resumes.
+38. Make the direct link impossible (out of range). ✅ The transfer fails with the stage that failed and offers
+    **Send over Wi-Fi instead**; nothing went over the shared network by itself.
+
+### Phones
+39. Android: install the test APK; scan a PC's code (Receive page) to pair. ✅ Each can send to the other; Share →
+    Beam from another app works; a transfer continues with the screen off (ongoing notification); Accept/Decline
+    from the notification works.
+40. Android sending to a PC with Send directly: ✅ the phone hosts (its hotspot on Android 11+ when supported), the
+    PC joins, the PC is back on its Wi-Fi afterwards.
+41. iPhone (sideloaded): ✅ iOS asks for local network access and notifications once; sending to and receiving from
+    a PC on the same Wi-Fi works; with Send directly the PC starts its network and iOS asks to join; received files
+    show in the Files app (On My iPhone → Beam).
 
 ## Performance notes
 

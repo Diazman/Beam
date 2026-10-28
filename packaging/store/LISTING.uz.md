@@ -81,7 +81,3 @@ Yorugʻ va qorongʻi mavzu
 
 ## Qidiruv soʻzlari (Search terms)
 fayl almashish; fayl yuborish; fayl uzatish; wifi orqali fayl; kompyuterdan kompyuterga; file transfer; передача файлов
-
-## Qoʻshimcha: Beam Pro (Add-on: Beam Pro)
-
-Beam Pro add-on: no longer used — Beam is free. If the add-on was published, hide it (Partner Center > Add-ons > Beam Pro > Availability: Stop acquisition) so nobody can get it.

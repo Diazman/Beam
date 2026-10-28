@@ -1,8 +1,8 @@
 # Beam
 
-**Send files directly between nearby computers.** Open Beam on two computers on the same network, pick the
-other computer, drop in files or folders, and they arrive — encrypted, verified, and with their folder
-structure intact. No cables, accounts, cloud, IP addresses, or network shares.
+**Send files directly between your nearby computers and phones.** Open Beam on both devices, pick the other one,
+drop in files or folders, and they arrive — encrypted, verified, and with their folder structure intact. No cables,
+accounts, cloud, IP addresses, or network shares. Beam runs on Windows, Android and iPhone/iPad.
 
 ![Beam main screen](docs/images/home.png)
 
@@ -30,15 +30,17 @@ structure intact. No cables, accounts, cloud, IP addresses, or network shares.
   start with Windows, single instance, light/dark theme, **Send with Beam** in the right-click menu (Store version:
   in the main Windows 11 menu via `native/BeamContextMenu`; installer version: under *Show more options*) and in the
   Windows Share dialog.
+- **Direct mode**: devices that share no Wi-Fi network (or a slow one) connect over their own Wi-Fi link. The
+  sender starts a network for that transfer, the receiver joins it, and both check who the other is before any file
+  goes. Bluetooth finds nearby devices and sets the link up. On a PC with internet, Windows' Mobile hotspot keeps the
+  phone online meanwhile.
+- **Phone apps** for Android and iPhone/iPad, with the same screens as on Windows. See
+  [docs/MOBILE-APPS.md](docs/MOBILE-APPS.md).
 - **Phones without an app**: the Phone page shows a QR code; any iPhone or Android phone that scans it gets a page to
   send files to the PC (with approval) and download files the PC shares. LAN only, secret link, auto-off after 30 minutes.
 - **Speaks your language**: English, Turkish, Russian and Uzbek (follows Windows, or pick one in Settings); the
   phone page follows the phone's language. See [docs/TRANSLATING.md](docs/TRANSLATING.md).
-- **Free launch, then Free and Pro**: while Beam is new everything is free and unlimited, and users can claim Pro at
-  no cost and keep it (`Edition.LaunchPeriodActive`). Afterwards the free edition sends to one computer at a time, up to
-  5 MB/s, 10 sends a day (receiving always unlimited).
-  **Beam Pro** — a one-time Microsoft Store in-app purchase — sends to several computers at once, at full speed,
-  without a daily limit. See [docs/STORE-SUBMISSION.md](docs/STORE-SUBMISSION.md#free-and-pro-editions).
+- **Free**, with no limits, ads or in-app purchases.
 - Friendly errors ("Connection was lost…") with technical details one click away and in a log file.
 
 ## Download and install
@@ -56,8 +58,6 @@ SmartScreen may say "Windows protected your PC": click **More info → Run anywa
 version is signed by Microsoft.) On first launch, allow Beam through Windows Firewall on private networks —
 Beam's welcome screen explains this.
 
-These downloads are the free edition; Beam Pro is bought in the Microsoft Store version.
-
 Requirements: Windows 10 (1809) or Windows 11, x64 or ARM64.
 
 ## Microsoft Store
@@ -73,8 +73,6 @@ publishes release `v<Version>` automatically (versions that already have a relea
 ```bash
 git tag v1.0.1 && git push origin v1.0.1
 ```
-
-
 
 ## Build from source
 
@@ -111,7 +109,7 @@ Run the app during development with `dotnet run --project src/Beam.App -f net8.0
 | `native/BeamContextMenu` | Small C++ handler for "Send with Beam" in the Windows 11 right-click menu (Store package). |
 | `installer/Beam.iss` | Inno Setup installer script. |
 | `packaging/` | Microsoft Store: MSIX manifest, logos, packaging script, listing text and screenshots. |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md), [phone apps](docs/MOBILE-APPS.md), [Android signing](docs/ANDROID-SIGNING.md). |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [wire protocol](docs/PROTOCOL.md), [testing & manual test plan](docs/TESTING.md), [translating](docs/TRANSLATING.md), [roadmap](docs/ROADMAP.md), [phone apps](docs/MOBILE-APPS.md), [Android signing](docs/ANDROID-SIGNING.md). |
 
 ## Troubleshooting
 
