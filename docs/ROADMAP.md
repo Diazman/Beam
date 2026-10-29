@@ -1,7 +1,7 @@
 # Beam roadmap
 
 _Replaces the October 2026 product plan and engineering plan, whose steps up to the phone apps are done. Last
-updated October 28, 2026._
+updated October 29, 2026._
 
 ## Where Beam is (1.6)
 
@@ -16,6 +16,7 @@ updated October 28, 2026._
 | Right-click "Send with Beam", Share → Beam | Done |
 | Languages: English, Turkish, Russian, Uzbek | Done |
 | Rating prompt after the 3rd successful transfer | Done (Microsoft Store) |
+| Automatic backup from an Android phone to a PC over home Wi-Fi (photos, videos, folders by file type) | Done; iPhone not yet |
 
 ## Next
 
@@ -30,7 +31,7 @@ updated October 28, 2026._
 
 | # | Idea |
 |---|---|
-| P1 | Automatic photo and video backup from a phone to a PC over home Wi-Fi |
+| P1b | Backup from iPhone (photo library, background refresh) |
 | P4 | Browse the PC's files from the phone |
 | G2 | Invite a friend |
 | — | Phone ↔ phone Direct (Android Wi-Fi Direct between two phones) |

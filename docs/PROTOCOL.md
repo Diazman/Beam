@@ -156,3 +156,16 @@ valid proof after a proven propose is refused. Session ids are single-use and th
 still follows, so a proof can't be replayed or bent towards another network. A transfer gives up after two set-ups in a row
 that moved no data (30 in all). It never continues over the shared network by itself. Older versions' receiver-hosted requests (`host`, `join`,
 `prefer`, `stop`) are still answered for compatibility; this version never sends them.
+
+## Backups (protocol 2 transfers)
+
+Setup uses connection purpose `backup`: one `BackupRequest` (frame 16, JSON `{action: "setup", token}`) answered by
+one `BackupResponse` (frame 17, `{ok, message, name}`). The token comes from the computer's code (`b` in the pairing
+code JSON); it is single-use, valid for 10 minutes and dropped after 5 wrong tries. The phone connects to the
+code's certificate fingerprint only; the computer records the phone's certificate.
+
+A backup run is an ordinary transfer whose `Offer` has `backup: true`. The receiver answers it without asking the
+user, only for a recorded partner certificate (otherwise `OfferResponse{accepted: false, reason:
+"not_backup_partner"}`), and plans each file as skip (same size and modification time within 2 s) or replace.
+Backups over a direct network are declined. Older versions ignore the `backup` field and ask the user as usual.
+

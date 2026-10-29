@@ -6,12 +6,12 @@
 dotnet test Beam.sln          # ~3 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (231 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (246 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 Direct mode and Bluetooth run against fakes of the radios (`FakeDirectAir`, `FakeNearbyAir`), which can drop links,
 refuse joins or turn Wi-Fi off; tests that change process-wide network state run alone.
 
-**`tests/Beam.App.Tests`** (48 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (52 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -35,7 +35,8 @@ view-model commands while a second node sends/receives, and render screenshots o
 Security-specific tests: `ImpostorWithWrongFingerprintIsRejected`, `NeverWritesThroughALinkedFolder`,
 `SafePathTests` (traversal, rooted paths, reserved names), `RejectsMalformedPackets`, `RejectsOversizedAndUnknownFrames`,
 `OnlyFileListsMayBeBigAndMemoryFollowsWhatArrives`, `DirectSecurityTests` (who may make a device start or join a
-network), `AnImpostorWithADifferentCertificateIsNotTrusted` (Bluetooth).
+network), `AnImpostorWithADifferentCertificateIsNotTrusted` (Bluetooth), `BackupTests` (the backup code works once, expires,
+ends after wrong guesses; strangers, removed phones and impostor computers get nothing; never over a direct link).
 
 ## Manual test procedure (two Windows PCs, then phones)
 
@@ -116,6 +117,18 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 37. Turn Wi-Fi off on the receiver mid-transfer, then on. ✅ "Reconnecting to …", a new direct session, and the transfer resumes.
 38. Make the direct link impossible (out of range). ✅ The transfer fails with the stage that failed and offers
     **Send over Wi-Fi instead**; nothing went over the shared network by itself.
+
+### Backup (a Windows PC and an Android phone on the same Wi-Fi)
+
+1. PC: Settings → Backup → Add a phone. Phone: Settings → Backup → Set up backup, scan the code. Both say who the
+   other is; the PC lists the phone.
+2. Scan the same code again with another phone: refused. Close the dialog, scan a photo of the code: refused.
+3. Phone: allow photos and videos, add a folder with "Only these types…" = pdf. Back up now: the PC's
+   Documents/Beam Backups/<phone> gets Photos, Videos and the folder's PDFs only, without any question.
+4. Back up now again: nothing is sent, no card, no history entry. Take a photo: it arrives on the next run.
+5. Leave the Wi-Fi, take photos, come back: the backup runs by itself within a few minutes (also with Beam closed).
+6. Delete a photo on the phone: it stays on the PC. Remove the phone on the PC: the next backup is refused and the
+   phone says to set it up again.
 
 ### Phones
 39. Android: install the test APK; scan a PC's code (Receive page) to pair. ✅ Each can send to the other; Share →

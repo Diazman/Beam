@@ -122,6 +122,24 @@ without the app: uploads to the PC (with approval) and downloads of what the PC 
 archives (`StoredZip`, exact size up front). It stops after 30 minutes without use. These transfers are not
 encrypted by Beam (plain HTTP on the LAN).
 
+## Backups
+
+`Backup/BackupService` (one per node) backs a phone up to a computer over the shared network.
+
+- **Setup (once):** Settings → Backup → Add a phone on the computer shows a `PairingCode` with a `BackupToken`
+  (32 random bytes, one phone, 10 minutes, dropped after 5 wrong tries, compared in fixed time). The phone connects
+  to the code's certificate only (`ConnectionPurpose.Backup`), sends `BackupRequest{setup, token}`, and on success
+  stores a `BackupPlan` pinned to that certificate. The computer stores a `BackupPartner` (the phone's certificate
+  fingerprint and its own folder under `EffectiveBackupFolder`). Setup over a direct address is refused.
+- **Runs:** the phone offers everything its sources list (`BackupManifest.Build`: the media library through
+  `IBackupSources` on Android, folders through `IExternalFiles` or the file system, filtered by type) as an ordinary
+  transfer with `OfferMessage.Backup` set. The receiver takes it without asking only from a partner's certificate,
+  into that partner's folder; same size and time (±2 s) is skipped, anything else replaced; nothing is deleted. A
+  non-partner gets `not_backup_partner`, a backup arriving over a direct address is declined.
+- **When:** the computer appearing in discovery (home again), every hour while it stays, "Back up now", and on
+  Android a `JobScheduler` job (`BackupJobService`, every 15 minutes on an unmetered network) that starts the node
+  without a screen and calls `RunDueAsync`. Runs that find nothing new leave no history entry and no card.
+
 ## Security model
 
 - **Identity:** each installation creates a random device id and a self-signed ECDSA P-256 certificate (RSA-2048
@@ -141,4 +159,7 @@ encrypted by Beam (plain HTTP on the LAN).
   approval timeout, data never exceeding the sizes the user accepted.
 - **Pairing:** scanning a computer's QR code on a phone trusts its certificate; a device id claimed with another
   certificate is refused. Direct sessions check the same certificates on the direct network before any data.
+- **Backups:** set up only with the computer's one-time code (someone who saw its screen); afterwards each side
+  insists on the other's certificate, so a guest on the same Wi-Fi can neither take a phone's backup nor back up
+  into the computer. Backups stay on the shared network (never a direct link) and land in the partner's own folder.
 - **Not yet covered:** per-device blocking of request spam.

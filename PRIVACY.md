@@ -1,6 +1,6 @@
 # Beam privacy policy
 
-_Last updated: October 27, 2026_
+_Last updated: October 29, 2026_
 
 Beam is an app for Windows, Android and iPhone/iPad that sends files directly between nearby devices. This policy explains
 what Beam does with information. In short: **Beam does not collect, sell or share any personal data, has no
@@ -57,6 +57,28 @@ internet.
   allowed for it. Beam uses that only to find the direct network it was told to join and **never reads, uses or
   stores your location**.
 
+## Backups (Android phone to a computer)
+
+If you set it up, Beam backs up the photos, videos or folders you choose from your Android phone to your own
+computer, **directly over your Wi-Fi**, never over the internet or mobile data, and never to anyone else.
+
+- **Setting it up** – the computer shows a code (Settings → Backup → Add a phone) that the phone scans. The code
+  works once, for one phone, for 10 minutes, and stops working after a few wrong tries. With it, the phone and
+  the computer exchange the fingerprints of their encryption keys: from then on, the phone sends backups only to
+  that computer, and the computer accepts backups only from that phone. Another device on your Wi-Fi can't take
+  part in, read or impersonate either side.
+- **What is sent** – the files you chose, with their names, sizes and dates, encrypted on the way and checked
+  after they arrive. Only files the computer doesn't have yet (or that changed) are sent. Nothing on the computer
+  is deleted when you delete it on the phone.
+- **What is stored** – on the phone: which computer it backs up to (its name, identifier and key fingerprint),
+  what you chose to back up, and when the last backup was. On the computer: which phones may back up (their name,
+  identifier and key fingerprint), each phone's backup folder, and when it last backed up. The backed-up files are
+  in that folder (Documents → Beam Backups unless you choose another one).
+- **In the background** – Android runs a short check about every 15 minutes while the phone is on Wi-Fi (not
+  mobile data). If the computer isn't there, nothing happens.
+- **Stopping** – "Stop backup" on the phone, or "Remove" next to the phone on the computer. What was backed up
+  stays on the computer until you delete it.
+
 ## Phones without the app (Phone page in a web browser)
 
 On Windows, "Connect with the browser" on the Phone page runs a small web page on your local network that a phone
@@ -84,6 +106,11 @@ Beam asks for each permission when you use the feature that needs it, and explai
   sent or received, so a transfer doesn't stop when you switch apps or the screen turns off. Android shows an
   ongoing notification during that time.
 - **Storage** (Android 10 and earlier only) – to save received files to the Downloads/Beam folder.
+- **Photos and videos** (only if you back up photos or videos) – to read them for the backup to your computer.
+  On Android 12 and earlier this is the storage permission. Beam asks when you set up the backup.
+- **Running at startup and in the background on Wi-Fi** (only if you set up automatic backups) – so the backup
+  check continues after the phone restarts. Folders you choose for backups are read with the access Android
+  gives for that folder only.
 
 Files you choose to send are opened only through Android's file picker or "Share" menu, for the files you select.
 
@@ -116,6 +143,7 @@ Microsoft Store, Google Play or Apple's App Store are handled by those stores un
 
 - Hide your device from others (Settings).
 - Remove trusted or paired devices (Settings).
+- Stop backups, or remove a phone that backs up to your computer (Settings → Backup).
 - Clear the transfer history (History on Windows, Transfers on Android and iPhone).
 - Deny or revoke permissions at any time in the phone's settings; Beam keeps working over Wi-Fi without them
   (without notifications or direct connections).
