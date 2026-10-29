@@ -184,8 +184,8 @@ internal static class AndroidHost
             {
                 var builder = new global::Android.Hardware.Biometrics.BiometricPrompt.Builder(activity).SetTitle(title).SetDescription(reason);
                 if (OperatingSystem.IsAndroidVersionAtLeast(30))
-                    builder.SetAllowedAuthenticators(global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.BiometricWeak
-                                                     | global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.DeviceCredential);
+                    builder.SetAllowedAuthenticators((int)(global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.BiometricWeak
+                                                           | global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.DeviceCredential));
                 else
                     builder.SetDeviceCredentialAllowed(true);
                 var prompt = builder.Build();
