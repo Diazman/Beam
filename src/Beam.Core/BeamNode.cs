@@ -38,6 +38,9 @@ public sealed class BeamNodeOptions
 
     /// <summary>The platform's Bluetooth LE, for finding devices with no shared network; null where there is none.</summary>
     public Nearby.INearbyRadio? NearbyRadio { get; init; }
+
+    /// <summary>The platform's photos, videos and chosen folders for backups (a phone's media library); null: folders by path only.</summary>
+    public Backup.IBackupSources? BackupSources { get; init; }
 }
 
 /// <summary>
@@ -85,6 +88,7 @@ public sealed class BeamNode : IAsyncDisposable
         Nearby = new Nearby.NearbyService(options.NearbyRadio, Direct, Discovery, Settings, () => Identity.DeviceId,
             CreatePairingCode, selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
             () => Transfers.Sessions.Any(s => !s.IsFinished));
+        Backup = new Backup.BackupService(Transfers, Discovery, Settings, CreatePairingCode, options.BackupSources);
         _connection = Settings.Current.Connection;
         _allowDirectSenders = Settings.Current.AllowDirectSenders;
         Settings.Changed += OnSettingsChanged;
@@ -108,6 +112,9 @@ public sealed class BeamNode : IAsyncDisposable
     /// <summary>Finding and reaching devices over Bluetooth when there's no shared network (Receive / Send).</summary>
     public Nearby.NearbyService Nearby { get; }
 
+    /// <summary>Automatic backups to a computer on the same Wi-Fi (on the phone), and taking them (on the computer).</summary>
+    public Backup.BackupService Backup { get; }
+
     /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
     public PhoneLinkServer PhoneLink { get; }
 
@@ -130,6 +137,7 @@ public sealed class BeamNode : IAsyncDisposable
         Log.Info($"Starting {AppInfo.ProductName} {AppInfo.Version} (build {AppInfo.Build}) as '{Settings.Current.DeviceName}' ({Identity.DeviceId}, {DeviceIdentity.ShortCode(Identity.Fingerprint)})");
         Transfers.Start(_options.TransferPort);
         Discovery.Start();
+        Backup.Start();
         _manualPeerTask = Task.Run(ManualPeerLoopAsync);
     }
 
@@ -295,6 +303,7 @@ public sealed class BeamNode : IAsyncDisposable
         _cts.Cancel();
         Settings.Changed -= OnSettingsChanged;
         Nearby.Stop();
+        Backup.Dispose();
         await Direct.StopAsync().ConfigureAwait(false);
         Discovery.Dispose();
         await PhoneLink.DisposeAsync().ConfigureAwait(false);
@@ -346,6 +355,7 @@ public sealed class BeamNode : IAsyncDisposable
         {
             DefaultFolder = settings.EffectiveReceiveFolder,
             TrustedFingerprints = settings.TrustedDevices.Select(t => t.Fingerprint).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            BackupPartners = settings.BackupPartners,
         };
     }
 
@@ -412,6 +422,8 @@ public sealed class BeamNode : IAsyncDisposable
     private void RecordHistory(TransferSession session)
     {
         var snapshot = session.GetSnapshot();
+        // A backup that found everything already there (most of them) isn't news; its status is on the Backup page.
+        if (session.IsBackup && snapshot.CompletedFiles == 0) return;
         var status = snapshot.State switch
         {
             TransferState.Completed => HistoryStatus.Completed,

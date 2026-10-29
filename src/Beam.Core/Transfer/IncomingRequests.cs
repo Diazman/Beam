@@ -114,4 +114,11 @@ public sealed class IncomingPolicy
 
     /// <summary>How long the user has to answer an incoming request.</summary>
     public TimeSpan ApprovalTimeout { get; init; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Devices set up to back up here (by certificate): their backups are taken without asking, into their folder.</summary>
+    public IReadOnlyList<Backup.BackupPartner> BackupPartners { get; init; } = Array.Empty<Backup.BackupPartner>();
+
+    /// <summary>The backup partner presenting <paramref name="fingerprint"/>, if any.</summary>
+    public Backup.BackupPartner? BackupPartnerFor(string fingerprint) =>
+        BackupPartners.FirstOrDefault(p => string.Equals(p.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
 }

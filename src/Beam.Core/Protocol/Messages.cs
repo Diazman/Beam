@@ -29,6 +29,11 @@ public enum FrameType : byte
     DirectRequest = 14,
 
     DirectResponse = 15,
+
+    /// <summary>Setting up a backup (connection purpose <see cref="ConnectionPurpose.Backup"/>), answered with <see cref="BackupResponse"/>.</summary>
+    BackupRequest = 16,
+
+    BackupResponse = 17,
 }
 
 public static class ConnectionPurpose
@@ -41,6 +46,9 @@ public static class ConnectionPurpose
 
     /// <summary>One <see cref="DirectRequestMessage"/>, answered with a <see cref="DirectResponseMessage"/>. Only sent to devices that announce direct support.</summary>
     public const string Direct = "direct";
+
+    /// <summary>One <see cref="BackupRequestMessage"/> (backup setup), answered with a <see cref="BackupResponseMessage"/>.</summary>
+    public const string Backup = "backup";
 }
 
 public static class DirectActions
@@ -168,6 +176,9 @@ public static class Reasons
     public const string Cancelled = "cancelled";
     public const string Protocol = "protocol";
     public const string Shutdown = "shutdown";
+
+    /// <summary>A backup from a device that isn't (or no longer is) set up to back up here.</summary>
+    public const string NotBackupPartner = "not_backup_partner";
 }
 
 public sealed class HelloMessage
@@ -190,6 +201,31 @@ public sealed class HelloMessage
 
     /// <summary>TCP port the sender itself listens on, so the receiver can show/offer it.</summary>
     public int Port { get; set; }
+}
+
+public static class BackupActions
+{
+    /// <summary>"Let me back up to you": carries the one-time token from the computer's setup code.</summary>
+    public const string Setup = "setup";
+}
+
+public sealed class BackupRequestMessage
+{
+    public string Action { get; set; } = "";
+
+    /// <summary>The one-time setup token shown in the computer's QR code (only someone who saw its screen has it).</summary>
+    public string? Token { get; set; }
+}
+
+public sealed class BackupResponseMessage
+{
+    public bool Ok { get; set; }
+
+    /// <summary>Why not (for the user).</summary>
+    public string? Message { get; set; }
+
+    /// <summary>The computer's name, as its user calls it.</summary>
+    public string? Name { get; set; }
 }
 
 public sealed class TextMessage
@@ -224,6 +260,12 @@ public sealed class OfferMessage
 
     /// <summary>True when the sender is reconnecting to continue a transfer that was already accepted.</summary>
     public bool Resume { get; set; }
+
+    /// <summary>
+    /// A backup: everything the device backs up. The receiver takes it only from a device set up to back up there
+    /// (by its certificate), into that device's backup folder, and asks only for the files it doesn't have yet.
+    /// </summary>
+    public bool Backup { get; set; }
 }
 
 public sealed class PlanItem
@@ -323,6 +365,8 @@ public sealed class CancelMessage
 [JsonSerializable(typeof(TextMessage))]
 [JsonSerializable(typeof(DirectRequestMessage))]
 [JsonSerializable(typeof(DirectResponseMessage))]
+[JsonSerializable(typeof(BackupRequestMessage))]
+[JsonSerializable(typeof(BackupResponseMessage))]
 internal sealed partial class ProtocolJson : JsonSerializerContext
 {
 }

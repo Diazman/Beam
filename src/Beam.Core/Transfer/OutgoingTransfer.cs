@@ -62,7 +62,18 @@ internal sealed class OutgoingTransfer
             if (_manifest == null)
             {
                 _session.SetState(TransferState.Preparing);
-                _manifest = await Task.Run(() => ManifestBuilder.Build(_sourcePaths, token, external: _service.ExternalFiles), token).ConfigureAwait(false);
+                _manifest = _options?.BuildBackup is { } backup
+                    ? await Task.Run(() => backup(token), token).ConfigureAwait(false)
+                    : await Task.Run(() => ManifestBuilder.Build(_sourcePaths, token, external: _service.ExternalFiles), token).ConfigureAwait(false);
+                if (_manifest.Entries.Count == 0 && _options?.BuildBackup != null)
+                {
+                    // Nothing to back up (no files chosen, or none there yet): done, without bothering the computer.
+                    _session.SetTotals(0, 0, 0, 0, 0);
+                    Volatile.Write(ref _running, 0);
+                    _session.SetState(TransferState.Completed);
+                    return;
+                }
+
                 if (_manifest.Entries.Count == 0)
                 {
                     throw new TransferException(TransferErrorKind.NothingToSend,
@@ -78,7 +89,7 @@ internal sealed class OutgoingTransfer
                     IsDirectory = e.IsDirectory,
                     Modified = e.ModifiedUtc == default ? 0 : new DateTimeOffset(e.ModifiedUtc, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 }).ToList();
-                _session.SetDescription(_manifest.RootNames);
+                if (_options?.BuildBackup == null) _session.SetDescription(_manifest.RootNames);
                 _session.SetTotals(_manifest.FileCount, _manifest.TotalBytes, 0, 0, 0);
             }
 
@@ -184,7 +195,7 @@ internal sealed class OutgoingTransfer
         }
 
         await connection.Channel.SendAsync(FrameType.Offer,
-            new OfferMessage { TransferId = _session.Id, Entries = _offer!, Resume = _accepted }, token).ConfigureAwait(false);
+            new OfferMessage { TransferId = _session.Id, Entries = _offer!, Resume = _accepted, Backup = _options?.BuildBackup != null }, token).ConfigureAwait(false);
 
         if (!_accepted) _session.SetState(TransferState.WaitingForAcceptance);
 

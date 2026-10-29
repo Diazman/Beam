@@ -46,6 +46,9 @@ public sealed class ResumeRecord
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>A backup from a backup partner: resumed only while the sender still is one.</summary>
+    public bool Backup { get; set; }
+
     /// <summary>When it was last saved (progress). Missing in records from before 1.6.</summary>
     public DateTimeOffset? UpdatedAt { get; set; }
 

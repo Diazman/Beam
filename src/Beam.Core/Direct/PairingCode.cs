@@ -37,6 +37,13 @@ public sealed class PairingCode
     [JsonPropertyName("r")]
     public string? Roles { get; set; }
 
+    /// <summary>
+    /// Only in the code a computer shows to set up a backup (Settings → Backup → Add a phone): a one-time secret,
+    /// good for a few minutes, that lets the phone that scans it back up to this computer.
+    /// </summary>
+    [JsonPropertyName("b")]
+    public string? BackupToken { get; set; }
+
     /// <summary>Appends the pairing information to a link (the Phone page's), or returns it as a "beam:" text.</summary>
     public string AppendTo(string? link)
     {
@@ -99,6 +106,7 @@ public sealed class PairingCode
         code.Name = Settings.AppSettings.NormalizeDeviceName(code.Name);
         code.Fingerprint = code.Fingerprint.ToLowerInvariant();
         code.Addresses = code.Addresses.Where(a => TryParseEndPoint(a, out _)).Take(8).ToList();
+        if (code.BackupToken is { Length: > 128 }) code.BackupToken = null;
         return code;
     }
 

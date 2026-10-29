@@ -117,6 +117,9 @@ public sealed class TransferSession
     /// <summary>For text transfers: the text itself (otherwise null).</summary>
     public string? Text { get; internal set; }
 
+    /// <summary>A backup (sent by a device's backup, or received from a backup partner): runs without asking anyone.</summary>
+    public bool IsBackup { get; internal set; }
+
     public bool IsText => Text != null;
 
     /// <summary>Receiver: full local paths of the top-level items that were saved.</summary>
@@ -365,6 +368,8 @@ public sealed class TransferSession
         RootNames = rootNames;
         Title = Files.Manifest.Describe(rootNames);
     }
+
+    internal void SetTitle(string title) => Title = title;
 
     internal void SetTotals(int totalFiles, long totalBytes, int completedFiles, long transferredBytes, int skippedFiles)
     {

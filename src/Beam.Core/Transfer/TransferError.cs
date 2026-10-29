@@ -120,6 +120,8 @@ public static class ErrorTranslator
         Reasons.Declined => new(TransferErrorKind.Declined, L.T("{0} declined the files.", peerName), detail),
         Reasons.TimedOut => new(TransferErrorKind.TimedOut, L.T("{0} didn't respond to the request in time.", peerName), detail),
         Reasons.Busy => new(TransferErrorKind.Busy, L.T("{0} is busy with another request. Try again in a moment.", peerName), detail),
+        Reasons.NotBackupPartner => new(TransferErrorKind.Declined,
+            L.T("{0} doesn't take backups from this device any more. Set up the backup again.", peerName), detail),
         Reasons.NoSpace => new(TransferErrorKind.NotEnoughSpace, L.T("{0} doesn't have enough free disk space.", peerName), detail),
         Reasons.DestinationUnavailable => new(TransferErrorKind.DestinationUnavailable,
             L.T("The folder on {0} where files are saved isn't available.", peerName), detail),

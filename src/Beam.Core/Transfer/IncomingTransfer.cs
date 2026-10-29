@@ -84,13 +84,32 @@ internal sealed partial class IncomingTransfer
 
     private async Task HandleNewOfferCoreAsync(OfferMessage offer, List<IncomingEntry> entries, string manifestHash, CancellationToken serviceToken)
     {
-        if (!_service.TryReservePrompt(Fingerprint))
+        var policy = _service.Policy();
+        // A backup: only from a device set up to back up here, recognised by its certificate (anyone can claim a name
+        // or an id). It goes into that device's own folder, and nobody is asked.
+        var partner = offer.Backup ? policy.BackupPartnerFor(Fingerprint) : null;
+        if (offer.Backup && _service.IsDirectAddress(_connection.RemoteEndPoint.Address))
+        {
+            // Backups go over the shared Wi-Fi network only, never over a direct link.
+            Log.Warn($"Refused a backup from \"{PeerName}\" over a direct link");
+            await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.Declined }, serviceToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (offer.Backup && partner == null)
+        {
+            Log.Warn($"Refused a backup from \"{PeerName}\" ({_connection.RemoteHello.DeviceId}): it isn't set up to back up here");
+            await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.NotBackupPartner }, serviceToken).ConfigureAwait(false);
+            return;
+        }
+
+        var reserved = partner == null;
+        if (reserved && !_service.TryReservePrompt(Fingerprint))
         {
             await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.Busy }, serviceToken).ConfigureAwait(false);
             return;
         }
 
-        var policy = _service.Policy();
         IncomingRequest request;
         TransferSession session;
         IncomingDecision decision;
@@ -99,8 +118,10 @@ internal sealed partial class IncomingTransfer
         {
             session = _service.CreateIncomingSession(offer.TransferId, _connection);
             _session = session;
+            session.IsBackup = partner != null;
             var rootNames = entries.Select(e => e.Segments[0]).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             session.SetDescription(rootNames);
+            if (partner != null) session.SetTitle(L.T("Backup from {0}", PeerName));
             var files = entries.Where(e => !e.IsDirectory).ToList();
             session.SetTotals(files.Count, files.Sum(f => f.Size), 0, 0, 0);
 
@@ -121,7 +142,12 @@ internal sealed partial class IncomingTransfer
             // Watch the connection while the user decides: the sender may cancel or disappear.
             pendingRead = _connection.Channel.ReadAsync(session.CancellationToken);
 
-            if (policy.TrustedFingerprints.Contains(Fingerprint))
+            if (partner != null)
+            {
+                Log.Info($"Backup from {PeerName}: {files.Count} files offered, into {partner.Folder}");
+                decision = IncomingDecision.Accept(partner.Folder);
+            }
+            else if (policy.TrustedFingerprints.Contains(Fingerprint))
             {
                 Log.Info($"Auto-accepting {session.Title} from trusted device {PeerName}");
                 decision = IncomingDecision.Accept(policy.DefaultFolder);
@@ -160,7 +186,7 @@ internal sealed partial class IncomingTransfer
         }
         finally
         {
-            _service.ReleasePrompt(Fingerprint);
+            if (reserved) _service.ReleasePrompt(Fingerprint);
         }
 
         if (!decision.Accepted)
@@ -178,6 +204,11 @@ internal sealed partial class IncomingTransfer
         if (plan.Conflicts.Count > 0)
         {
             IReadOnlyList<ConflictAction> actions;
+            if (partner != null)
+            {
+                actions = BackupActions(plan.Conflicts);
+            }
+            else
             using (var conflictCts = CancellationTokenSource.CreateLinkedTokenSource(session.CancellationToken, serviceToken))
             {
                 var conflictTask = _service.Handler.ResolveConflictsAsync(request, plan.Conflicts, conflictCts.Token);
@@ -226,6 +257,7 @@ internal sealed partial class IncomingTransfer
             SenderName = PeerName,
             DestinationFolder = destination,
             ManifestHash = manifestHash,
+            Backup = partner != null,
             SkippedCount = plan.SkippedCount,
             RootNames = session.RootNames.ToList(),
             SavedRootPaths = plan.RootPaths,
@@ -248,9 +280,19 @@ internal sealed partial class IncomingTransfer
 
     private async Task ResumeAsync(ResumeRecord record, CancellationToken serviceToken)
     {
+        if (record.Backup && _service.Policy().BackupPartnerFor(Fingerprint) == null)
+        {
+            // Removed as a backup partner while its backup was interrupted: it doesn't get to finish it.
+            Log.Warn($"Refused to resume a backup from \"{PeerName}\": it isn't set up to back up here any more");
+            await RespondAsync(new OfferResponseMessage { Accepted = false, Reason = Reasons.NotBackupPartner }, serviceToken).ConfigureAwait(false);
+            return;
+        }
+
         var session = _service.CreateIncomingSession(record.TransferId, _connection, reuseInterrupted: true);
         _session = session;
+        session.IsBackup = record.Backup;
         session.SetDescription(record.RootNames);
+        if (record.Backup) session.SetTitle(L.T("Backup from {0}", PeerName));
         session.DestinationFolder = record.DestinationFolder;
         session.SavedRootPaths = record.SavedRootPaths;
 

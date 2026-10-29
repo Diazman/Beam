@@ -170,6 +170,17 @@ internal sealed partial class IncomingTransfer
         return plan;
     }
 
+    /// <summary>
+    /// A backup's files that are here already: the same size and time is the same file, backed up before (skipped,
+    /// so only what's new goes over the network); otherwise the phone's newer version replaces it. Nothing here is
+    /// ever deleted because it is no longer on the phone.
+    /// </summary>
+    private static IReadOnlyList<ConflictAction> BackupActions(IReadOnlyList<FileConflict> conflicts) =>
+        conflicts.Select(c => c.ExistingSize == c.IncomingSize
+                              && (c.IncomingModifiedUtc == default || (c.ExistingModifiedUtc - c.IncomingModifiedUtc).Duration() <= TimeSpan.FromSeconds(2))
+            ? ConflictAction.Skip
+            : ConflictAction.Replace).ToList();
+
     private static bool IsLink(string path)
     {
         try

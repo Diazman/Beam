@@ -25,6 +25,9 @@ internal sealed class SendOptions
 
     /// <summary>The local address each connection leaves from (this device's address on the direct network).</summary>
     public Func<IPEndPoint, IPAddress?>? LocalAddressFor { get; init; }
+
+    /// <summary>A backup: the list of files comes from here (not from paths), and the offer says it is a backup.</summary>
+    public Func<CancellationToken, Manifest>? BuildBackup { get; init; }
 }
 
 /// <summary>
@@ -90,6 +93,9 @@ public sealed class TransferService : IAsyncDisposable
 
     /// <summary>Handles <see cref="ConnectionPurpose.Direct"/> connections (null: such connections are closed).</summary>
     internal Func<PeerConnection, CancellationToken, Task>? DirectHandler { get; set; }
+
+    /// <summary>Handles <see cref="ConnectionPurpose.Backup"/> connections (backup setup; null: such connections are closed).</summary>
+    internal Func<PeerConnection, CancellationToken, Task>? BackupHandler { get; set; }
 
     /// <summary>Whether an address is reached over a direct Wi-Fi link (replaced in tests).</summary>
     public Func<IPAddress, bool> IsDirectAddress { get; set; } = Direct.DirectAddresses.IsDirect;
@@ -162,6 +168,26 @@ public sealed class TransferService : IAsyncDisposable
         ExternalFiles != null && ExternalFiles.TryGetFolderName(path, out var folder) ? folder
         : ExternalFiles != null && ExternalFiles.TryGet(path, out var file) ? file.Name
         : Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+
+    /// <summary>
+    /// Starts a backup to <paramref name="target"/> (pinned to its certificate): the receiver takes what it doesn't
+    /// have yet without asking. <paramref name="buildManifest"/> lists everything the backup covers.
+    /// </summary>
+    internal TransferSession SendBackup(DeviceInfo target, Func<DeviceInfo> refreshTarget, Func<CancellationToken, Manifest> buildManifest, string title)
+    {
+        var session = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, target.Id, target.Name, target.Fingerprint)
+        {
+            IsBackup = true,
+        };
+        session.SetDescription(new[] { title });
+        Register(session);
+        new OutgoingTransfer(this, session, Array.Empty<string>(), refreshTarget, new SendOptions
+        {
+            BuildBackup = buildManifest,
+            BeforeConnect = (_, _) => Task.CompletedTask, // never a direct link
+        }).Start();
+        return session;
+    }
 
     /// <summary>Sends a piece of text or a link to a device. The other side shows it (or copies it, if it trusts this device).</summary>
     public TransferSession SendText(DeviceInfo target, string text, Func<DeviceInfo>? refreshTarget = null)
@@ -380,6 +406,13 @@ public sealed class TransferService : IAsyncDisposable
             if (hello.Purpose == ConnectionPurpose.Direct)
             {
                 if (DirectHandler != null) await DirectHandler(connection, token).ConfigureAwait(false);
+                return;
+            }
+
+            if (hello.Purpose == ConnectionPurpose.Backup)
+            {
+                // Setup only over the shared network: a direct link is not where a backup is set up.
+                if (BackupHandler != null && !(socket.RemoteEndPoint is IPEndPoint ip && IsDirectAddress(ip.Address))) await BackupHandler(connection, token).ConfigureAwait(false);
                 return;
             }
 

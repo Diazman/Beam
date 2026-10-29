@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Beam.Core.Backup;
 using Beam.Core.Storage;
 
 namespace Beam.Core.Settings;
@@ -104,6 +105,20 @@ public sealed class AppSettings
 
     public List<TrustedDevice> TrustedDevices { get; set; } = new();
 
+    /// <summary>This device's backups to computers (a phone; one per computer).</summary>
+    public List<BackupPlan> Backups { get; set; } = new();
+
+    /// <summary>Devices allowed to back up to this computer, each into its own folder.</summary>
+    public List<BackupPartner> BackupPartners { get; set; } = new();
+
+    /// <summary>Where new backup partners' folders go; empty: Documents/Beam Backups.</summary>
+    public string? BackupFolder { get; set; }
+
+    [JsonIgnore]
+    public string EffectiveBackupFolder => string.IsNullOrWhiteSpace(BackupFolder)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Beam Backups")
+        : BackupFolder!;
+
     /// <summary>Addresses the user added by hand because automatic discovery could not find them.</summary>
     public List<string> ManualAddresses { get; set; } = new();
 
@@ -129,6 +144,17 @@ public sealed class AppSettings
         DeviceName = NormalizeDeviceName(DeviceName);
         TrustedDevices ??= new();
         ManualAddresses ??= new();
+        Backups = (Backups ?? new())
+            .Where(b => !string.IsNullOrWhiteSpace(b.TargetId) && !string.IsNullOrWhiteSpace(b.TargetFingerprint))
+            .GroupBy(b => b.TargetId)
+            .Select(g => g.Last())
+            .ToList();
+        foreach (var plan in Backups) plan.Sources ??= new();
+        BackupPartners = (BackupPartners ?? new())
+            .Where(p => !string.IsNullOrWhiteSpace(p.Fingerprint) && !string.IsNullOrWhiteSpace(p.Folder))
+            .GroupBy(p => p.Fingerprint, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Last())
+            .ToList();
         KnownDirectNetworks = (KnownDirectNetworks ?? new())
             .Where(k => !string.IsNullOrWhiteSpace(k.DeviceId) && !string.IsNullOrWhiteSpace(k.Fingerprint))
             .GroupBy(k => k.DeviceId)
