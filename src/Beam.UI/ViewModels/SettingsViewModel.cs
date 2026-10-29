@@ -72,6 +72,7 @@ public sealed class SettingsViewModel : ObservableObject
         _ui = ui;
         _main = main;
         _deviceName = node.Settings.Current.DeviceName;
+        Backup = new BackupViewModel(node, platform, ui, main);
 
         SaveNameCommand = new RelayCommand(SaveName);
         ChangeFolderCommand = new AsyncCommand(ChangeFolderAsync);
@@ -109,6 +110,9 @@ public sealed class SettingsViewModel : ObservableObject
             if (SetProperty(ref _deviceName, value)) NameStatus = "";
         }
     }
+
+    /// <summary>Settings → Backup.</summary>
+    public BackupViewModel Backup { get; }
 
     public int MaxNameLength => AppSettings.MaxDeviceNameLength;
 

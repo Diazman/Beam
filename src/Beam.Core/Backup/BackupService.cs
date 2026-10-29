@@ -257,14 +257,22 @@ public sealed class BackupService : IDisposable
         return plan;
     }
 
-    /// <summary>Saves what is backed up (and whether automatically); a changed plan is checked right away.</summary>
+    /// <summary>
+    /// Saves what is backed up and whether automatically (the rest of <paramref name="plan"/>, such as how the last
+    /// backup went, stays as recorded); a changed plan is checked right away.
+    /// </summary>
     public void Save(BackupPlan plan)
     {
         _settings.Update(s =>
         {
-            var index = s.Backups.FindIndex(b => b.TargetId == plan.TargetId);
-            if (index >= 0) s.Backups[index] = plan;
+            if (s.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) is not { } stored) return;
+            stored.Sources = plan.Sources.Select(c => new BackupSource
+            {
+                Kind = c.Kind, Address = c.Address, Name = c.Name, FileTypes = c.FileTypes, Extensions = c.Extensions,
+            }).ToList();
+            stored.Automatic = plan.Automatic;
         });
+        plan = _settings.Current.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) ?? plan;
         _lastStarted.TryRemove(plan.TargetId, out _);
         Changed?.Invoke();
         if (plan.Automatic && Reachable(plan) is { } device) TryStart(plan, device, automatic: true);

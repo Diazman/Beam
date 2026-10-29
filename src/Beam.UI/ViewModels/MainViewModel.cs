@@ -264,6 +264,8 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         {
             AppPermission.Notifications => (L.T("Get notified about incoming files"),
                 L.T("Beam shows a notification when someone sends you files, so you can accept them even when Beam isn't open. The phone will ask you to allow notifications.")),
+            AppPermission.MediaLibrary => (L.T("Allow Beam to back up your photos and videos"),
+                L.T("To back up your photos and videos to your computer, Beam needs to read them. They go only to the computer you set up, over your Wi-Fi, encrypted. The phone will ask you to allow it.")),
             _ when _platform.NearbyDevicesIsLocation => (L.T("Allow direct connections"),
                 L.T("To connect to a computer directly, even without Wi-Fi, Android needs Beam to have the Location permission. Beam doesn't use or keep your location.")),
             _ => (L.T("Allow direct connections"),
@@ -561,6 +563,22 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
     private void AddTransfer(TransferSession session)
     {
         if (Transfers.Any(t => t.Session == session)) return;
+        if (session.IsBackup && !ShowsBackup(session))
+        {
+            // A backup gets a card only once it has files to send: the hourly checks that find everything already
+            // backed up stay out of sight (their status is in Settings → Backup).
+            void OnChanged(TransferSession s)
+            {
+                if (!ShowsBackup(s) && !s.IsFinished) return;
+                s.StateChanged -= OnChanged;
+                if (ShowsBackup(s)) Dispatcher.UIThread.Post(() => AddTransfer(s));
+            }
+
+            session.StateChanged += OnChanged;
+            OnChanged(session); // it may have got there already
+            return;
+        }
+
         var vm = new TransferViewModel(session, _platform, Dismiss, _ui.CopyToClipboardAsync, Node.Direct, Node.Discovery.Find, SendOverNetworkInsteadAsync);
         session.DirectChanged += _ => Dispatcher.UIThread.Post(vm.Refresh);
         Transfers.Insert(0, vm);
@@ -570,6 +588,9 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         OnTransfersChanged();
         _progressTimer.Start();
     }
+
+    private static bool ShowsBackup(TransferSession session) =>
+        session.State is TransferState.Transferring or TransferState.Reconnecting && session.GetSnapshot().TotalFiles > 0;
 
     private void OnSessionStateChanged(TransferViewModel vm)
     {
@@ -634,7 +655,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         vm.Announced = true;
         var session = vm.Session;
         var snapshot = session.GetSnapshot();
-        if (snapshot.State == TransferState.Completed)
+        if (snapshot.State == TransferState.Completed && !session.IsBackup) // a backup runs by itself: no rating prompt for it
         {
             Node.Settings.Update(s => s.CompletedTransfers++);
             AskForRatingWhenIdleAsync().Forget("Asking for a rating");

@@ -150,6 +150,13 @@ public sealed class FakePlatform : IPlatformServices
         if (GrantWhenAsked) Granted.Add(permission);
         return Task.FromResult(GrantWhenAsked);
     }
+
+    public bool SupportsBackup { get; set; }
+
+    /// <summary>Whether background backups are scheduled (the last call).</summary>
+    public bool? BackupsScheduled { get; private set; }
+
+    public void ScheduleBackups(bool any) => BackupsScheduled = any;
 }
 
 /// <summary>Stands in for the Microsoft Store.</summary>

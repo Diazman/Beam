@@ -25,6 +25,7 @@ public sealed class ViewLocator : IDataTemplate
         [typeof(SendTextViewModel)] = () => new SendTextView(),
         [typeof(IncomingTextViewModel)] = () => new IncomingTextView(),
         [typeof(ConnectionHelpViewModel)] = () => new ConnectionHelpView(),
+        [typeof(BackupCodeViewModel)] = () => new BackupCodeView(),
     };
 
     public Control? Build(object? param) => param != null && Views.TryGetValue(param.GetType(), out var create) ? create() : null;

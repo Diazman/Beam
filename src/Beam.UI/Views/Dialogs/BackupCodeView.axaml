@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.BackupCodeView"
+             x:DataType="dlg:BackupCodeViewModel"
+             Classes="dialogBody w460">
+  <StackPanel Spacing="16">
+    <StackPanel Spacing="10">
+      <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
+        <PathIcon Data="{StaticResource IconShield}" Width="22" Height="22" />
+      </Border>
+      <TextBlock Classes="dialogTitle" Text="{l:T 'Back up a phone to this computer'}" />
+      <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding ShowsCode}"
+                 Text="{l:T 'On the phone, open Beam → Settings → Backup → Set up backup, and scan this code. The phone must be on the same Wi-Fi as this computer.'}" />
+    </StackPanel>
+
+    <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
+    <Border Background="White" CornerRadius="12" Padding="16" HorizontalAlignment="Center" IsVisible="{Binding ShowsCode}">
+      <Path Data="{Binding Code}" Fill="Black" Stretch="Uniform" Width="220" Height="220"
+            AutomationProperties.Name="{l:T 'Backup code. Scan it with Beam on your phone.'}" />
+    </Border>
+
+    <Border Classes="details" IsVisible="{Binding ShowsCode}">
+      <TextBlock Classes="caption" TextWrapping="Wrap"
+                 Text="{l:T 'The code works once, for one phone, for 10 minutes. Only a phone that scans it can back up here; anyone else on your Wi-Fi is refused. Backups are encrypted on the way.'}" />
+    </Border>
+
+    <StackPanel Spacing="8" IsVisible="{Binding IsExpired}">
+      <TextBlock TextWrapping="Wrap" Text="{l:T 'The code expired. Show a new one when the phone is ready.'}" />
+      <Button Content="{l:T 'Show a new code'}" Command="{Binding NewCodeCommand}" />
+    </StackPanel>
+
+    <Border Classes="notice" IsVisible="{Binding IsAdded}">
+      <TextBlock Text="{Binding AddedText}" TextWrapping="Wrap" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Classes="accent" Content="{Binding CloseText}" MinWidth="96" Command="{Binding CloseCommand}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -14,6 +14,9 @@ public enum AppPermission
 
     /// <summary>Direct connections and finding paired computers without Wi-Fi (Android: Nearby devices, or Location before 13).</summary>
     NearbyDevices,
+
+    /// <summary>Backups: reading the phone's photos and videos (Android: Photos and videos).</summary>
+    MediaLibrary,
 }
 
 /// <summary>Operating-system integration. Everything OS-specific in the app goes through here.</summary>
@@ -89,6 +92,20 @@ public interface IPlatformServices
     /// for administrator permission).
     /// </summary>
     Task<bool> AllowDirectThroughFirewallAsync() => Task.FromResult(true);
+
+    /// <summary>This device can back up its photos, videos and folders to a computer (Android).</summary>
+    bool SupportsBackup => false;
+
+    /// <summary>
+    /// A folder chosen for backups: keeps Beam's access to it after a restart (Android: a lasting permission to read
+    /// it). Returns the address to keep, or null when it can't be read later.
+    /// </summary>
+    string? KeepFolderAccess(string picked) => picked;
+
+    /// <summary>The automatic backups changed: the system runs them in the background on Wi-Fi when there are any (Android).</summary>
+    void ScheduleBackups(bool any)
+    {
+    }
 
     /// <summary>Lets the user pass Beam's log on, for troubleshooting (desktop: opens the log folder).</summary>
     void ShareLog(string logDirectory) => OpenFolder(logDirectory);

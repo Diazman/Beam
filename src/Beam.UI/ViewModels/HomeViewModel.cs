@@ -693,6 +693,15 @@ public sealed class HomeViewModel : ObservableObject
             return;
         }
 
+        if (code.BackupToken != null)
+        {
+            // A computer's backup code (Settings → Backup → Add a phone): sets up the backup, doesn't pair.
+            await _main.Settings.Backup.SetUpFromCodeAsync(code);
+            if (_main.Settings.Backup.HasMessage)
+                await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Backup isn't set up"), _main.Settings.Backup.Message, L.T("OK"), ""));
+            return;
+        }
+
         var device = _node.Pair(code);
         Log.Info($"Paired with {device.Name} by scanning its code");
         // Pairing only: nothing is joined. A direct link is set up when files are sent with Direct chosen.

@@ -39,6 +39,125 @@
         </Border>
       </StackPanel>
 
+      <!-- Backup -->
+      <StackPanel Spacing="10" IsVisible="{Binding Backup.IsAvailable}">
+        <TextBlock Classes="h2" Text="{l:T 'Backup'}" />
+
+        <!-- The computer: phones that back up here -->
+        <Border Classes="card" IsVisible="{Binding Backup.IsComputer}">
+          <StackPanel Spacing="16">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h3" Text="{l:T 'Back up phones to this computer'}" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'A phone you add backs up its photos, videos or folders here by itself whenever it is on the same Wi-Fi. Only phones you add can back up here.'}" />
+              <Button Classes="accent" Content="{l:T 'Add a phone…'}" Command="{Binding Backup.AddPhoneCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+            </StackPanel>
+            <StackPanel Spacing="8" IsVisible="{Binding Backup.HasPartners}">
+              <Separator />
+              <ItemsControl ItemsSource="{Binding Backup.Partners}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BackupPartnerViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                      <PathIcon Data="{StaticResource IconShield}" Width="16" Height="16" Foreground="{DynamicResource SuccessBrush}" />
+                      <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" />
+                        <TextBlock Classes="caption" Text="{Binding Details}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Details}" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Content="{l:T 'Open folder'}" Command="{Binding OpenCommand}" />
+                        <Button Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <Separator />
+            <StackPanel Spacing="6">
+              <TextBlock Classes="h3" Text="{l:T 'Save backups to'}" />
+              <Grid ColumnDefinitions="Auto,*">
+                <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource TextSecondaryBrush}" />
+                <TextBlock Grid.Column="1" Text="{Binding Backup.BackupFolder}" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding Backup.BackupFolder}" VerticalAlignment="Center" />
+              </Grid>
+              <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Button Content="{l:T 'Change…'}" Command="{Binding Backup.ChangeFolderCommand}" Margin="0,0,8,6" />
+                <Button Content="{l:T 'Open folder'}" Command="{Binding Backup.OpenFolderCommand}" Margin="0,0,8,6" />
+              </WrapPanel>
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Each phone gets its own folder here. Nothing is deleted here when it is deleted on the phone.'}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- The phone: not set up yet -->
+        <Border Classes="card" IsVisible="{Binding Backup.IsPhone}">
+          <StackPanel Spacing="12">
+            <StackPanel Spacing="8" IsVisible="{Binding Backup.HasNoPlan}">
+              <TextBlock Classes="h3" Text="{l:T 'Back up this phone to your computer'}" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Your photos, videos or folders are backed up to your computer by themselves whenever both are on the same Wi-Fi. On the computer, open Beam → Settings → Backup → Add a phone, then scan the code shown there.'}" />
+              <Button Classes="accent" Content="{l:T 'Set up backup'}" Command="{Binding Backup.SetUpCommand}" HorizontalAlignment="Left" />
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding Backup.IsBusy}" />
+            </StackPanel>
+
+            <!-- Set up: what is backed up, and how it went -->
+            <StackPanel Spacing="12" IsVisible="{Binding Backup.HasPlan}">
+              <StackPanel Spacing="2">
+                <TextBlock Classes="h3" Text="{Binding Backup.TargetText}" />
+                <TextBlock Classes="caption" TextWrapping="Wrap" Text="{Binding Backup.StatusText}" />
+              </StackPanel>
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding Backup.IsRunning}" />
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Classes="h3" Text="{l:T 'Back up automatically'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap"
+                             Text="{l:T 'Whenever this phone and the computer are on the same Wi-Fi. Mobile data is never used.'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.Automatic}" Margin="16,0,0,0" />
+              </Grid>
+              <Separator />
+              <TextBlock Classes="h3" Text="{l:T 'What is backed up'}" />
+              <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'Nothing yet. Add photos, videos or a folder.'}" IsVisible="{Binding !Backup.HasSources}" />
+              <ItemsControl ItemsSource="{Binding Backup.Sources}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BackupSourceViewModel">
+                    <StackPanel Spacing="6" Margin="0,4">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Title}" />
+                          <TextBlock Classes="caption" Text="{Binding Details}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+                      </Grid>
+                      <ComboBox ItemsSource="{Binding FileTypeOptions}" SelectedItem="{Binding SelectedFileType}" IsVisible="{Binding IsFolder}"
+                                HorizontalAlignment="Stretch" />
+                      <TextBox Text="{Binding Extensions}" IsVisible="{Binding IsCustom}" Watermark="{l:T 'For example: pdf, docx, epub'}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <WrapPanel Orientation="Horizontal">
+                <Button Content="{l:T 'Add photos'}" Command="{Binding Backup.AddPhotosCommand}" Margin="0,0,8,6" />
+                <Button Content="{l:T 'Add videos'}" Command="{Binding Backup.AddVideosCommand}" Margin="0,0,8,6" />
+                <Button Content="{l:T 'Add a folder…'}" Command="{Binding Backup.AddFolderCommand}" Margin="0,0,8,6" />
+              </WrapPanel>
+              <Separator />
+              <WrapPanel Orientation="Horizontal">
+                <Button Classes="accent" Content="{l:T 'Back up now'}" Command="{Binding Backup.BackUpNowCommand}" Margin="0,0,8,6" />
+                <Button Content="{l:T 'Stop backup'}" Command="{Binding Backup.StopCommand}" Margin="0,0,8,6" />
+              </WrapPanel>
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Files go only to this computer, encrypted, over your Wi-Fi. Nothing is deleted on the computer when you delete it here.'}" />
+            </StackPanel>
+
+            <Border Classes="notice error" IsVisible="{Binding Backup.HasMessage}">
+              <TextBlock Text="{Binding Backup.Message}" TextWrapping="Wrap" FontSize="13" />
+            </Border>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
       <!-- Receiving -->
       <StackPanel Spacing="10">
         <TextBlock Classes="h2" Text="{l:T 'Receiving files'}" />
