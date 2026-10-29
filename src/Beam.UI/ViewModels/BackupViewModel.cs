@@ -118,6 +118,7 @@ public sealed class BackupViewModel : ObservableObject
     private readonly DispatcherTimer _saveTimer;
     private readonly DispatcherTimer _statusTimer;
     private BackupPlan? _plan;
+    private DateTime _ownerConfirmedAt = DateTime.MinValue;
     private string _message = "";
     private bool _isBusy;
 
@@ -147,11 +148,11 @@ public sealed class BackupViewModel : ObservableObject
         AddPhotosCommand = new AsyncCommand(() => AddMediaAsync(BackupSourceKinds.Photos), () => !Has(BackupSourceKinds.Photos));
         AddVideosCommand = new AsyncCommand(() => AddMediaAsync(BackupSourceKinds.Videos), () => !Has(BackupSourceKinds.Videos));
         AddFolderCommand = new AsyncCommand(AddFolderAsync);
-        BackUpNowCommand = new RelayCommand(BackUpNow, () => _plan is { Sources.Count: > 0 } && !IsRunning);
+        BackUpNowCommand = new AsyncCommand(BackUpNowAsync, () => _plan is { Sources.Count: > 0 } && !IsRunning);
         StopCommand = new AsyncCommand(StopAsync);
 
         // Typing file types: saved once the typing stops (each save checks the backup again).
-        _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) => SaveNow());
+        _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) => SaveAsync().Forget("Saving the backup choices"));
         _statusTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshStatus());
 
         node.Backup.Changed += () => Dispatcher.UIThread.Post(Reload);
@@ -160,6 +161,9 @@ public sealed class BackupViewModel : ObservableObject
         node.Discovery.DeviceLost += (_, _) => Dispatcher.UIThread.Post(RefreshStatus);
         Reload();
     }
+
+    /// <summary>After the owner confirmed it's them, further changes don't ask again for this long.</summary>
+    internal static TimeSpan OwnerGrace { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>The backup section is there: computers take backups, phones that can back up make them.</summary>
     public bool IsAvailable => IsComputer || _platform.SupportsBackup;
@@ -205,7 +209,7 @@ public sealed class BackupViewModel : ObservableObject
         {
             if (_plan == null || _plan.Automatic == value) return;
             _plan.Automatic = value;
-            SaveNow();
+            SaveAsync().Forget("Saving the backup choices");
         }
     }
 
@@ -265,7 +269,7 @@ public sealed class BackupViewModel : ObservableObject
 
     public AsyncCommand AddFolderCommand { get; }
 
-    public RelayCommand BackUpNowCommand { get; }
+    public AsyncCommand BackUpNowCommand { get; }
 
     public AsyncCommand StopCommand { get; }
 
@@ -281,6 +285,9 @@ public sealed class BackupViewModel : ObservableObject
             return;
         }
 
+        // Whoever holds this phone must prove it's theirs: otherwise anyone handed the phone for a minute could send
+        // its files to their own computer.
+        if (!await EnsureOwnerAsync(L.T("Confirm it's you to back up this phone to {0}.", code.Name))) return;
         IsBusy = true;
         Message = "";
         var previous = _node.Settings.Current.Backups.FirstOrDefault(b => b.TargetId != code.DeviceId);
@@ -353,7 +360,7 @@ public sealed class BackupViewModel : ObservableObject
         if (_plan == null || Has(kind)) return;
         if (!await _main.EnsurePermissionAsync(AppPermission.MediaLibrary)) return;
         _plan.Sources.Add(new BackupSource { Kind = kind, Name = kind == BackupSourceKinds.Photos ? L.T("Photos") : L.T("Videos") });
-        SaveNow();
+        await SaveAsync();
     }
 
     private async Task AddFolderAsync()
@@ -378,13 +385,14 @@ public sealed class BackupViewModel : ObservableObject
             Address = address,
             Name = string.IsNullOrWhiteSpace(name) ? L.T("Folder") : name,
         });
-        SaveNow();
+        await SaveAsync();
     }
 
-    private void BackUpNow()
+    private async Task BackUpNowAsync()
     {
         if (_plan == null) return;
-        SaveNow();
+        await SaveAsync();
+        if (_plan == null) return;
         try
         {
             _node.Backup.BackUpNow(_plan.TargetId);
@@ -415,19 +423,69 @@ public sealed class BackupViewModel : ObservableObject
         _saveTimer.Start();
     }
 
-    private void SaveNow()
+    /// <summary>
+    /// Saves the choices. Anything that backs up more than before (a new source, other file types, automatic backups
+    /// switched on) needs the owner's fingerprint, face or screen lock first; refused, the edits are dropped.
+    /// </summary>
+    private async Task SaveAsync()
     {
         _saveTimer.Stop();
-        if (_plan == null) return;
-        _node.Backup.Save(_plan);
+        if (_plan is not { } plan) return;
+        var stored = _node.Settings.Current.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId);
+        if (stored == null) return;
+        if (Widens(stored, plan) && !await EnsureOwnerAsync(L.T("Confirm it's you to change what this phone backs up.")))
+        {
+            _plan = null; // back to what is saved
+            Reload();
+            return;
+        }
+
+        _node.Backup.Save(plan);
         Reload();
+    }
+
+    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.FileTypes}|{s.Extensions}";
+
+    private static bool Widens(BackupPlan stored, BackupPlan plan)
+    {
+        if (plan.Automatic && !stored.Automatic) return true;
+        var before = stored.Sources.Select(SourceKey).ToHashSet();
+        return plan.Sources.Any(s => !before.Contains(SourceKey(s)));
+    }
+
+    /// <summary>
+    /// The phone's owner confirms with the phone's own lock. Not asked again for a short while (setting up and then
+    /// choosing what to back up is one confirmation).
+    /// </summary>
+    private async Task<bool> EnsureOwnerAsync(string reason)
+    {
+        if (DateTime.UtcNow - _ownerConfirmedAt < OwnerGrace) return true;
+        switch (await _platform.ConfirmOwnerAsync(L.T("Confirm it's you"), reason))
+        {
+            case OwnerCheck.Confirmed:
+                break;
+            case OwnerCheck.NoScreenLock:
+                if (await _main.ShowDialogAsync(new ConfirmViewModel(L.T("This phone has no screen lock"),
+                        L.T("Anyone who picks up this phone could back up its files to their own computer. To prevent that, set a screen lock (PIN, pattern, fingerprint or face) in the phone's settings."),
+                        L.T("Continue anyway"), L.T("Cancel"))) is not true)
+                    return false;
+                break;
+            default:
+                Log.Info("Backup: the owner check was cancelled or failed; nothing changed");
+                Message = L.T("Nothing was changed. Confirm with your fingerprint, face or screen lock to change this phone's backup.");
+                return false;
+        }
+
+        _ownerConfirmedAt = DateTime.UtcNow;
+        Message = "";
+        return true;
     }
 
     private void RemoveSource(BackupSourceViewModel source)
     {
         if (_plan == null) return;
-        _plan.Sources.Remove(source.Source);
-        SaveNow();
+        _plan.Sources.Remove(source.Source); // backing up less never needs a confirmation
+        SaveAsync().Forget("Saving the backup choices");
     }
 
     private async Task AddPhoneAsync()
@@ -493,7 +551,6 @@ public sealed class BackupViewModel : ObservableObject
         var stored = settings.Backups.FirstOrDefault();
         if (_saveTimer.IsEnabled && stored?.TargetId == _plan?.TargetId) return; // typing: the edits win until saved
         _plan = stored;
-        static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.FileTypes}|{s.Extensions}";
         var sources = _plan?.Sources ?? new List<BackupSource>();
         if (!Sources.Select(s => SourceKey(s.Source)).SequenceEqual(sources.Select(SourceKey)))
         {

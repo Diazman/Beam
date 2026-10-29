@@ -712,5 +712,20 @@
     "Копирование: {1} из {0} нового файла…",
     "Копирование: {1} из {0} новых файлов…",
     "Копирование: {1} из {0} новых файлов…"
+  ],
+  "Confirm it's you to back up this phone to {0}.": "Подтвердите, что это вы, чтобы копировать этот телефон на {0}.",
+  "Confirm it's you to change what this phone backs up.": "Подтвердите, что это вы, чтобы изменить, что копирует этот телефон.",
+  "Confirm it's you": "Подтвердите, что это вы",
+  "This phone has no screen lock": "На этом телефоне нет блокировки экрана",
+  "Anyone who picks up this phone could back up its files to their own computer. To prevent that, set a screen lock (PIN, pattern, fingerprint or face) in the phone's settings.": "Любой, кто возьмёт этот телефон, сможет скопировать его файлы на свой компьютер. Чтобы этого не случилось, включите блокировку экрана (PIN-код, графический ключ, отпечаток пальца или лицо) в настройках телефона.",
+  "Continue anyway": "Всё равно продолжить",
+  "Nothing was changed. Confirm with your fingerprint, face or screen lock to change this phone's backup.": "Ничего не изменено. Чтобы изменить резервное копирование этого телефона, подтвердите отпечатком пальца, лицом или блокировкой экрана.",
+  "This phone now backs up to {0}": "Теперь этот телефон копирует файлы на {0}",
+  "Its chosen files go to {0} by themselves whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Выбранные файлы сами отправляются на {0}, когда оба устройства в одной сети Wi-Fi. Если вы этого не настраивали, нажмите «Остановить копирование».",
+  "This phone backs up to {0} whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Этот телефон копирует файлы на {0}, когда оба устройства в одной сети Wi-Fi. Если вы этого не настраивали, нажмите «Остановить копирование».",
+  "{0} files backed up to {1}": [
+    "{0} файл скопирован на {1}",
+    "{0} файла скопировано на {1}",
+    "{0} файлов скопировано на {1}"
   ]
 }

@@ -80,6 +80,9 @@ public sealed class BackupService : IDisposable
     /// <summary>On the computer: a phone used the setup code and may back up here now.</summary>
     public event Action<BackupPartner>? PartnerAdded;
 
+    /// <summary>On the phone: a backup to a computer was set up (raised on any thread), so the phone can say so where it can't be missed.</summary>
+    public event Action<BackupPlan>? SetUp;
+
     internal void Start()
     {
         // The computer's last known addresses: found even on a network that drops Beam's announcements.
@@ -253,6 +256,7 @@ public sealed class BackupService : IDisposable
         });
         foreach (var endpoint in endpoints) _discovery.AddUnicastTarget(endpoint.Address);
         Log.Info($"Backup: set up to {plan!.TargetName} ({plan.TargetId}, {DeviceShort(plan.TargetFingerprint)})");
+        SetUp?.Invoke(plan);
         Changed?.Invoke();
         return plan;
     }

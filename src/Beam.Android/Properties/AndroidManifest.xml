@@ -33,6 +33,8 @@
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
   <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
   <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+  <!-- Backups: the owner confirms with fingerprint, face or screen lock before a backup is set up or widened (granted at install, nothing is asked). -->
+  <uses-permission android:name="android.permission.USE_BIOMETRIC" />
   <!-- Backups keep checking in the background after the phone restarts. -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

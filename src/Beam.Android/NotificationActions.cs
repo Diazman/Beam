@@ -14,6 +14,9 @@ internal static class NotificationActions
     public const string Extra = "beam.notification.action";
     public const string TagExtra = "beam.notification.tag";
 
+    /// <summary>"Stop backup" on a backup notification: the computer's id (works after Beam was closed, too).</summary>
+    public const string BackupStopExtra = "beam.backup.stop";
+
     /// <summary>On the intent sent when a notification is swiped away: its actions are forgotten.</summary>
     public const string ForgetExtra = "beam.notification.forget";
 
@@ -69,6 +72,14 @@ public sealed class NotificationActionReceiver : BroadcastReceiver
 
         if (intent?.GetStringExtra(NotificationActions.TagExtra) is { } tag)
             ((NotificationManager?)context?.GetSystemService(Context.NotificationService))?.Cancel(tag, 1);
+        if (intent?.GetStringExtra(NotificationActions.BackupStopExtra) is { } target)
+        {
+            // Only Beam can send this (the receiver isn't exported); stopping a backup never needs the owner's check.
+            Log.Info("Backup: stopped from its notification");
+            AndroidHost.EnsureNode(start: false, create: false)?.Backup.Remove(target);
+            return;
+        }
+
         NotificationActions.Run(intent);
     }
 }

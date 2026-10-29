@@ -157,6 +157,19 @@ public sealed class FakePlatform : IPlatformServices
     public bool? BackupsScheduled { get; private set; }
 
     public void ScheduleBackups(bool any) => BackupsScheduled = any;
+
+    /// <summary>What the "owner" does at the fingerprint / screen lock prompt.</summary>
+    public OwnerCheck OwnerAnswer { get; set; } = OwnerCheck.Confirmed;
+
+    /// <summary>How often the owner was asked to confirm.</summary>
+    public int OwnerChecks { get; private set; }
+
+    public Task<OwnerCheck> ConfirmOwnerAsync(string title, string reason)
+    {
+        OwnerChecks++;
+        Calls.Add("owner:" + reason);
+        return Task.FromResult(OwnerAnswer);
+    }
 }
 
 /// <summary>Stands in for the Microsoft Store.</summary>

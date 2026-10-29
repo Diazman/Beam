@@ -159,7 +159,10 @@ encrypted by Beam (plain HTTP on the LAN).
   approval timeout, data never exceeding the sizes the user accepted.
 - **Pairing:** scanning a computer's QR code on a phone trusts its certificate; a device id claimed with another
   certificate is refused. Direct sessions check the same certificates on the direct network before any data.
-- **Backups:** set up only with the computer's one-time code (someone who saw its screen); afterwards each side
+- **Backups:** set up only with the computer's one-time code (someone who saw its screen) and the phone owner's
+  fingerprint, face or screen lock (`IPlatformServices.ConfirmOwnerAsync`, Android's BiometricPrompt; also for adding
+  sources, other file types or switching automatic backups on; 2 minutes' grace). `BackupNotices` announces each
+  setup and each backup that sent files, with a Stop button that works after the app was closed; afterwards each side
   insists on the other's certificate, so a guest on the same Wi-Fi can neither take a phone's backup nor back up
   into the computer. Backups stay on the shared network (never a direct link) and land in the partner's own folder.
 - **Not yet covered:** per-device blocking of request spam.

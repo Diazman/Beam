@@ -15,6 +15,7 @@ using Beam.Core.Discovery;
 using Beam.Core.Storage;
 using Beam.Core.Transfer;
 using AndroidEnvironment = Android.OS.Environment;
+using OwnerCheck = Beam.App.Platform.OwnerCheck;
 
 namespace Beam.Droid;
 
@@ -45,21 +46,21 @@ internal static class AndroidHost
     private static readonly object NodeGate = new();
 
     /// <summary>
-    /// The app's Beam node, created on first use: by the screen, or by a background backup with no screen (then
-    /// started only when Beam was set up on this phone before). Null when a background job finds Beam never opened.
+    /// The app's Beam node, created on first use: by the screen, or in the background (a backup check, a notification
+    /// button). <paramref name="create"/> false: null when Beam was never opened on this phone. <paramref name="start"/>:
+    /// discovery and transfers run (only once Beam was set up on this phone), so a backup can reach the computer.
     /// </summary>
-    public static BeamNode? EnsureNode(bool forScreen = false)
+    public static BeamNode? EnsureNode(bool start, bool create)
     {
         lock (NodeGate)
         {
             if (_node == null)
             {
-                if (!forScreen && !File.Exists(Paths.SettingsFile)) return null;
+                if (!create && !File.Exists(Paths.SettingsFile)) return null;
                 CreateNode();
             }
 
-            // In the background: discovery and transfers run so the backup can reach the computer.
-            if (!forScreen && _node!.Settings.Current.FirstRunCompleted) _node.Start();
+            if (start && _node!.Settings.Current.FirstRunCompleted) _node.Start();
             return _node;
         }
     }
@@ -95,6 +96,7 @@ internal static class AndroidHost
         }
 
         _node.Transfers.SessionFinished += AddToMediaLibrary;
+        BackupNotices.Attach(_node, new AndroidPlatformServices()); // also when there is no screen
         _keepAlive = new TransferKeepAlive(Context, _node.Transfers, _directLink);
         AcquireMulticastLock();
     }
@@ -104,7 +106,7 @@ internal static class AndroidHost
         _view = view;
         if (_viewModel != null) return _viewModel;
 
-        var node = EnsureNode(forScreen: true)!;
+        var node = EnsureNode(start: false, create: true)!; // the screen starts it after the first-run explanation
         _viewModel = new MainViewModel(node, new AndroidPlatformServices(), view, new UnavailableStoreService());
         var share = Interlocked.Exchange(ref _pendingShare, null);
         _ = _viewModel.InitializeAsync(ToCommandLine(share));
@@ -159,6 +161,72 @@ internal static class AndroidHost
         var code = Interlocked.Increment(ref _permissionRequest);
         activity.RunOnUiThread(() => activity.RequestPermissions(missing, code));
         return waiting.Task;
+    }
+
+    private static TaskCompletionSource<bool>? _confirmation;
+    private const int ConfirmCredentialRequest = 90;
+
+    /// <summary>
+    /// The phone's own lock confirms the owner is holding it: fingerprint, face, PIN, pattern or password (Android's
+    /// prompt, as banking apps use). Android 9 and older show the lock screen's "confirm your PIN" page instead.
+    /// </summary>
+    public static async Task<OwnerCheck> ConfirmOwnerAsync(string title, string reason)
+    {
+        var keyguard = (KeyguardManager?)Context.GetSystemService(Context.KeyguardService);
+        if (keyguard is not { IsDeviceSecure: true }) return OwnerCheck.NoScreenLock;
+        var activity = CurrentActivity;
+        if (activity == null) return OwnerCheck.Refused;
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref _confirmation, done)?.TrySetResult(false);
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(29))
+            {
+                var builder = new global::Android.Hardware.Biometrics.BiometricPrompt.Builder(activity).SetTitle(title).SetDescription(reason);
+                if (OperatingSystem.IsAndroidVersionAtLeast(30))
+                    builder.SetAllowedAuthenticators(global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.BiometricWeak
+                                                     | global::Android.Hardware.Biometrics.BiometricManagerAuthenticators.DeviceCredential);
+                else
+                    builder.SetDeviceCredentialAllowed(true);
+                var prompt = builder.Build();
+                activity.RunOnUiThread(() => prompt.Authenticate(new CancellationSignal(), activity.MainExecutor!, new OwnerCallback(done)));
+            }
+            else
+            {
+                var intent = keyguard.CreateConfirmDeviceCredentialIntent(title, reason);
+                if (intent == null) return OwnerCheck.NoScreenLock;
+                activity.RunOnUiThread(() => activity.StartActivityForResult(intent, ConfirmCredentialRequest));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Backup: couldn't ask for the screen lock", ex);
+            return OwnerCheck.Refused;
+        }
+
+        var confirmed = await done.Task;
+        Log.Info(confirmed ? "Backup: the owner confirmed with the screen lock" : "Backup: the screen lock check was cancelled or failed");
+        return confirmed ? OwnerCheck.Confirmed : OwnerCheck.Refused;
+    }
+
+    /// <summary>The lock screen's answer on Android 9 and older.</summary>
+    public static void OnActivityResult(int requestCode, Result resultCode)
+    {
+        if (requestCode == ConfirmCredentialRequest) Interlocked.Exchange(ref _confirmation, null)?.TrySetResult(resultCode == Result.Ok);
+    }
+
+    private sealed class OwnerCallback : global::Android.Hardware.Biometrics.BiometricPrompt.AuthenticationCallback
+    {
+        private readonly TaskCompletionSource<bool> _done;
+
+        public OwnerCallback(TaskCompletionSource<bool> done) => _done = done;
+
+        public override void OnAuthenticationSucceeded(global::Android.Hardware.Biometrics.BiometricPrompt.AuthenticationResult? result) =>
+            _done.TrySetResult(true);
+
+        // Cancelled, too many tries, no way to check: not confirmed. (A single wrong finger lets the person try again.)
+        public override void OnAuthenticationError(global::Android.Hardware.Biometrics.BiometricErrorCode errorCode, Java.Lang.ICharSequence? errString) =>
+            _done.TrySetResult(false);
     }
 
     /// <summary>The activity on screen, for things that need one (the code scanner).</summary>

@@ -620,5 +620,16 @@
   "The code works once, for one phone, for 10 minutes. Only a phone that scans it can back up here; anyone else on your Wi-Fi is refused. Backups are encrypted on the way.": "Kod bir marta, bitta telefon uchun, 10 daqiqa amal qiladi. Bu yerga faqat uni skanerlagan telefon zaxiralay oladi; Wi-Fi tarmog‘ingizdagi boshqalar rad etiladi. Zaxira nusxalari yo‘lda shifrlanadi.",
   "The code expired. Show a new one when the phone is ready.": "Kodning muddati tugadi. Telefon tayyor bo‘lganda yangisini ko‘rsating.",
   "Show a new code": "Yangi kodni ko‘rsatish",
-  "Backing up: {1} of {0} new files…": "Zaxiralanmoqda: {0} ta yangi fayldan {1} tasi…"
+  "Backing up: {1} of {0} new files…": "Zaxiralanmoqda: {0} ta yangi fayldan {1} tasi…",
+  "Confirm it's you to back up this phone to {0}.": "Bu telefonni {0} ga zaxiralash uchun bu siz ekaningizni tasdiqlang.",
+  "Confirm it's you to change what this phone backs up.": "Bu telefon nimani zaxiralashini o‘zgartirish uchun bu siz ekaningizni tasdiqlang.",
+  "Confirm it's you": "Bu siz ekaningizni tasdiqlang",
+  "This phone has no screen lock": "Bu telefonda ekran qulfi yo‘q",
+  "Anyone who picks up this phone could back up its files to their own computer. To prevent that, set a screen lock (PIN, pattern, fingerprint or face) in the phone's settings.": "Bu telefonni qo‘liga olgan har kim uning fayllarini o‘z kompyuteriga zaxiralashi mumkin. Buning oldini olish uchun telefon sozlamalarida ekran qulfini (PIN, chizma, barmoq izi yoki yuz) o‘rnating.",
+  "Continue anyway": "Baribir davom etish",
+  "Nothing was changed. Confirm with your fingerprint, face or screen lock to change this phone's backup.": "Hech narsa o‘zgartirilmadi. Bu telefonning zaxiralashini o‘zgartirish uchun barmoq izi, yuz yoki ekran qulfi bilan tasdiqlang.",
+  "This phone now backs up to {0}": "Endi bu telefon {0} ga zaxiralanadi",
+  "Its chosen files go to {0} by themselves whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Tanlangan fayllar ikkalasi bitta Wi-Fi tarmog‘ida bo‘lganda {0} ga o‘zi yuboriladi. Buni siz sozlamagan bo‘lsangiz, «Zaxiralashni to‘xtatish» tugmasini bosing.",
+  "This phone backs up to {0} whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Bu telefon ikkalasi bitta Wi-Fi tarmog‘ida bo‘lganda {0} ga zaxiralanadi. Buni siz sozlamagan bo‘lsangiz, «Zaxiralashni to‘xtatish» tugmasini bosing.",
+  "{0} files backed up to {1}": "{0} ta fayl {1} ga zaxiralandi"
 }

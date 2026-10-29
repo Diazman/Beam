@@ -51,6 +51,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         _ui = ui;
         Rating = new RatingService(node, store ?? new UnavailableStoreService());
         node.IncomingHandler = this;
+        BackupNotices.Attach(node, platform);
 
         Home = new HomeViewModel(node, ui, this);
         Phone = new PhoneViewModel(node, ui, this);
@@ -660,6 +661,8 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
             Node.Settings.Update(s => s.CompletedTransfers++);
             AskForRatingWhenIdleAsync().Forget("Asking for a rating");
         }
+
+        if (session.IsBackup && session.Direction == TransferDirection.Send) return; // BackupNotices says it, always
 
         var title = session.Title;
         switch (snapshot.State)

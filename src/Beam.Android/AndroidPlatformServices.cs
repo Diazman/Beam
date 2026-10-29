@@ -110,6 +110,18 @@ internal sealed class AndroidPlatformServices : IPlatformServices
 
     public bool SupportsBackup => true;
 
+    public Task<OwnerCheck> ConfirmOwnerAsync(string title, string reason) => AndroidHost.ConfirmOwnerAsync(title, reason);
+
+    /// <summary>
+    /// Its "Stop backup" button is carried by Android itself (the computer's id in the intent), so it works even when
+    /// Beam was closed in between, unlike other notification buttons.
+    /// </summary>
+    public void ShowBackupNotification(string tag, string title, string message, string targetId, Action stop) =>
+        Post(tag, title, message, onActivated: null, Array.Empty<NotificationButton>(), global::Android.Resource.Drawable.StatSysUpload,
+            (L.T("Stop backup"), new Intent(Context, typeof(NotificationActionReceiver))
+                .PutExtra(NotificationActions.BackupStopExtra, targetId)
+                .PutExtra(NotificationActions.TagExtra, tag)));
+
     /// <summary>A folder picked for backups: keeps reading it after Beam or the phone restarts (Android forgets otherwise).</summary>
     public string? KeepFolderAccess(string picked)
     {
@@ -145,7 +157,8 @@ internal sealed class AndroidPlatformServices : IPlatformServices
     /// Posts a notification. Tapping it opens Beam and runs <paramref name="onActivated"/> there (Android lets only the
     /// app on screen open other apps, e.g. to show a received file); buttons run their action without opening Beam.
     /// </summary>
-    private static void Post(string? tag, string title, string message, Action? onActivated, IReadOnlyList<NotificationButton> buttons, int icon)
+    private static void Post(string? tag, string title, string message, Action? onActivated, IReadOnlyList<NotificationButton> buttons, int icon,
+        (string Label, Intent Click)? lastingButton = null)
     {
         try
         {
@@ -179,6 +192,14 @@ internal sealed class AndroidPlatformServices : IPlatformServices
                 var action = PendingIntent.GetBroadcast(Context, NotificationActions.NextRequestCode(), click, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
                 builder.AddAction(new Notification.Action.Builder(
                     global::Android.Graphics.Drawables.Icon.CreateWithResource(Context, global::Android.Resource.Drawable.IcMenuSend), button.Label, action).Build());
+            }
+
+            if (lastingButton is { } lasting)
+            {
+                var action = PendingIntent.GetBroadcast(Context, NotificationActions.NextRequestCode(), lasting.Click,
+                    PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
+                builder.AddAction(new Notification.Action.Builder(
+                    global::Android.Graphics.Drawables.Icon.CreateWithResource(Context, global::Android.Resource.Drawable.IcMenuCloseClearCancel), lasting.Label, action).Build());
             }
 
             if (tag != null) manager.Notify(tag, 1, builder.Build());

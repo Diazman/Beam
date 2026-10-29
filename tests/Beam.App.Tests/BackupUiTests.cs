@@ -1,7 +1,9 @@
 using Avalonia.Headless.XUnit;
 using Beam.App.Platform;
 using Beam.App.ViewModels.Dialogs;
+using Beam.App.Services;
 using Beam.Core.Backup;
+using Beam.Core.Tests;
 
 namespace Beam.App.Tests;
 
@@ -43,6 +45,8 @@ public class BackupUiTests
         await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Backup is set up" }, "set up");
         ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
         Assert.Contains("permission:MediaLibrary", phone.Platform.Calls);
+        Assert.Equal(1, phone.Platform.OwnerChecks); // setting up and the first choices: one fingerprint
+        Assert.Contains(phone.Platform.Calls, c => c.StartsWith("question:This phone now backs up to Diaz's PC|"));
 
         // Both sides say who: the computer names the phone, the phone the computer.
         await UiHarness.WaitForAsync(() => dialog.IsAdded, "the computer saw the phone");
@@ -133,6 +137,165 @@ public class BackupUiTests
         phone.ViewModel.IsSettingsPage = true;
         await UiHarness.PumpAsync(100);
         Assert.DoesNotContain("Backup", phone.VisibleTexts());
+    }
+
+    /// <summary>A phone and a computer with the computer's backup code on screen; the phone scans it.</summary>
+    private static async Task<(UiHarness Pc, UiHarness Phone)> ScanTheCodeAsync()
+    {
+        var pc = new UiHarness("Diaz's PC");
+        var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        phone.Platform.SupportsBackup = true;
+        await pc.InitializeAsync();
+        await phone.InitializeAsync();
+        var code = pc.Node.Backup.CreateSetupCode();
+        code.Addresses = new List<string> { $"127.0.0.1:{pc.Node.Transfers.Port}" };
+        phone.Platform.ScannedCode = code.AppendTo(null);
+        return (pc, phone);
+    }
+
+    [AvaloniaFact]
+    public async Task SomeoneWithoutTheScreenLockCantSetUpABackup()
+    {
+        var (pc, phone) = await ScanTheCodeAsync();
+        await using var _ = pc;
+        await using var __ = phone;
+
+        // Handed the unlocked phone, someone scans their own computer's code: the phone's lock is asked, and fails.
+        phone.Platform.OwnerAnswer = OwnerCheck.Refused;
+        phone.ViewModel.Settings.Backup.SetUpCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Settings.Backup.HasMessage, "refused");
+        Assert.Equal(1, phone.Platform.OwnerChecks);
+        Assert.Contains("Nothing was changed", phone.ViewModel.Settings.Backup.Message);
+        await UiHarness.PumpAsync(200);
+        Assert.Empty(phone.Node.Settings.Current.Backups);
+        Assert.Empty(pc.Node.Settings.Current.BackupPartners); // the computer never even heard from the phone
+        Assert.DoesNotContain(phone.Platform.Calls, c => c.StartsWith("permission:"));
+
+        // The owner, with their fingerprint, can.
+        phone.Platform.OwnerAnswer = OwnerCheck.Confirmed;
+        phone.ViewModel.Settings.Backup.SetUpCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel, "a question");
+        while (phone.ViewModel.Dialog is ConfirmViewModel question)
+        {
+            question.PrimaryCommand.Execute(null);
+            await UiHarness.PumpAsync(100);
+        }
+
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Count == 1, "set up");
+        Assert.Single(pc.Node.Settings.Current.BackupPartners);
+    }
+
+    [AvaloniaFact]
+    public async Task APhoneWithoutAScreenLockWarnsFirst()
+    {
+        var (pc, phone) = await ScanTheCodeAsync();
+        await using var _ = pc;
+        await using var __ = phone;
+        phone.Platform.OwnerAnswer = OwnerCheck.NoScreenLock;
+        phone.ViewModel.Settings.Backup.SetUpCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "This phone has no screen lock" }, "the warning");
+        ((ConfirmViewModel)phone.ViewModel.Dialog!).SecondaryCommand.Execute(null);
+        await UiHarness.PumpAsync(200);
+        Assert.Empty(phone.Node.Settings.Current.Backups);
+        Assert.Empty(pc.Node.Settings.Current.BackupPartners);
+    }
+
+    [AvaloniaFact]
+    public async Task BackingUpMoreAsksTheOwnerAgain()
+    {
+        var grace = Beam.App.ViewModels.BackupViewModel.OwnerGrace;
+        Beam.App.ViewModels.BackupViewModel.OwnerGrace = TimeSpan.Zero; // every change asks (normally not for 2 minutes)
+        try
+        {
+            var (pc, phone) = await ScanTheCodeAsync();
+            await using var _ = pc;
+            await using var __ = phone;
+            phone.Platform.Granted.Add(AppPermission.MediaLibrary);
+            var backup = phone.ViewModel.Settings.Backup;
+            backup.SetUpCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Backup is set up" }, "set up");
+            ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
+            var checks = phone.Platform.OwnerChecks;
+
+            // Someone else adds a folder, or switches automatic backups back on: refused without the owner's lock.
+            phone.Platform.OwnerAnswer = OwnerCheck.Refused;
+            phone.Ui.FolderToPick = Path.Combine(phone.Root, "Private");
+            Directory.CreateDirectory(phone.Ui.FolderToPick);
+            backup.AddFolderCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == checks + 1, "asked");
+            await UiHarness.PumpAsync(100);
+            Assert.Equal(2, phone.Node.Settings.Current.Backups.Single().Sources.Count);
+            Assert.Equal(2, backup.Sources.Count);
+            Assert.True(backup.HasMessage);
+
+            backup.Automatic = false; // backing up less never asks
+            await UiHarness.WaitForAsync(() => !phone.Node.Settings.Current.Backups.Single().Automatic, "turned off");
+            Assert.Equal(checks + 1, phone.Platform.OwnerChecks);
+            backup.Automatic = true;
+            await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == checks + 2, "asked again");
+            await UiHarness.PumpAsync(100);
+            Assert.False(phone.Node.Settings.Current.Backups.Single().Automatic);
+            Assert.False(backup.Automatic);
+
+            backup.Sources[0].RemoveCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 1, "removed");
+            Assert.Equal(checks + 2, phone.Platform.OwnerChecks);
+
+            // The owner can.
+            phone.Platform.OwnerAnswer = OwnerCheck.Confirmed;
+            backup.AddFolderCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 2, "folder added");
+        }
+        finally
+        {
+            Beam.App.ViewModels.BackupViewModel.OwnerGrace = grace;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task EveryBackupThatSendsFilesIsAnnouncedWithStop()
+    {
+        // As in the background on Android: no screen, only the notices.
+        await using var pc = new TestNode("Anna's laptop", startDiscovery: true);
+        await using var phone = new TestNode("Diaz's Galaxy", startDiscovery: true, kind: Beam.Core.Discovery.DeviceKinds.Phone);
+        pc.Node.Settings.Update(s => s.BackupFolder = Path.Combine(pc.Root, "backups"));
+        var platform = new FakePlatform { IsPhone = true, SupportsBackup = true };
+        BackupNotices.Attach(phone.Node, platform);
+        BackupNotices.Attach(phone.Node, platform); // once is enough
+
+        var code = pc.Node.Backup.CreateSetupCode();
+        code.Addresses = new List<string> { $"127.0.0.1:{pc.Node.Transfers.Port}" };
+        var plan = await phone.Node.Backup.SetUpAsync(code, CancellationToken.None);
+        var tag = "backup-" + pc.Node.Identity.DeviceId;
+        Assert.Single(platform.Calls, c => c.StartsWith("question:This phone now backs up to Anna's laptop|"));
+        Assert.Equal("Stop backup", Assert.Single(platform.Questions[tag]).Label);
+
+        var source = Path.Combine(phone.Root, "photos");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "a.jpg"), "a");
+        File.WriteAllText(Path.Combine(source, "b.jpg"), "b");
+        plan.Sources.Add(new BackupSource { Kind = BackupSourceKinds.Folder, Address = source, Name = "Photos" });
+        plan.Automatic = false;
+        phone.Node.Backup.Save(plan);
+        phone.Node.Discovery.AddUnicastTarget(System.Net.IPAddress.Loopback, pc.Node.Discovery.LocalPort);
+        pc.Node.Discovery.AddUnicastTarget(System.Net.IPAddress.Loopback, phone.Node.Discovery.LocalPort);
+        await Wait.UntilAsync(() => phone.Node.Backup.IsReachable(plan));
+
+        var session = phone.Node.Backup.BackUpNow(plan.TargetId);
+        await Wait.ForFinishAsync(session);
+        await Wait.UntilAsync(() => platform.Calls.Any(c => c.StartsWith("question:2 files backed up to Anna's laptop|")));
+
+        // Nothing new: no notice.
+        var count = platform.Calls.Count;
+        await Wait.UntilAsync(() => phone.Node.Backup.Running(plan.TargetId) == null);
+        session = phone.Node.Backup.BackUpNow(plan.TargetId);
+        await Wait.ForFinishAsync(session);
+        await Task.Delay(200);
+        Assert.Equal(count, platform.Calls.Count);
+
+        // "Stop backup" on the notice: no more backups to that computer.
+        platform.Questions[tag].Single().OnClick();
+        Assert.Empty(phone.Node.Settings.Current.Backups);
     }
 
     private static IEnumerable<string> Buttons(UiHarness h) =>

@@ -24,7 +24,7 @@ public sealed class BackupJobService : JobService
         {
             try
             {
-                var node = AndroidHost.EnsureNode();
+                var node = AndroidHost.EnsureNode(start: true, create: false);
                 if (node == null) return; // Beam hasn't been opened yet
                 await node.Backup.RunDueAsync(TimeSpan.FromSeconds(20), token);
             }

@@ -53,6 +53,12 @@ public class MainActivity : AvaloniaMainActivity<App>
         AndroidHost.OnPermissionResult(requestCode, grantResults);
     }
 
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        AndroidHost.OnActivityResult(requestCode, resultCode);
+    }
+
     /// <summary>Shared again while Beam is already open (the activity is single-task).</summary>
     protected override void OnNewIntent(Intent? intent)
     {

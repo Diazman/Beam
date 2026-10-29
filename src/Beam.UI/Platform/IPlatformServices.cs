@@ -1,3 +1,5 @@
+using Beam.Core.Localization;
+
 namespace Beam.App.Platform;
 
 /// <summary>A folder the user picked for received files: the local path to use, or why it can't be used.</summary>
@@ -17,6 +19,19 @@ public enum AppPermission
 
     /// <summary>Backups: reading the phone's photos and videos (Android: Photos and videos).</summary>
     MediaLibrary,
+}
+
+/// <summary>How the check that the phone's owner is holding it went.</summary>
+public enum OwnerCheck
+{
+    /// <summary>Fingerprint, face, PIN, pattern or password accepted.</summary>
+    Confirmed,
+
+    /// <summary>Cancelled, or not recognised.</summary>
+    Refused,
+
+    /// <summary>The phone has no screen lock: there is nothing to check against.</summary>
+    NoScreenLock,
 }
 
 /// <summary>Operating-system integration. Everything OS-specific in the app goes through here.</summary>
@@ -101,6 +116,19 @@ public interface IPlatformServices
     /// it). Returns the address to keep, or null when it can't be read later.
     /// </summary>
     string? KeepFolderAccess(string picked) => picked;
+
+    /// <summary>
+    /// Asks the person holding the phone to prove they are its owner with the phone's own lock (fingerprint, face, PIN,
+    /// pattern or password), as banking apps do. Desktops and test fakes answer <see cref="OwnerCheck.Confirmed"/>.
+    /// </summary>
+    Task<OwnerCheck> ConfirmOwnerAsync(string title, string reason) => Task.FromResult(OwnerCheck.Confirmed);
+
+    /// <summary>
+    /// A notice about this phone's backups with a "Stop backup" button that works even after Beam was closed
+    /// (<paramref name="stop"/> runs where the app is still open).
+    /// </summary>
+    void ShowBackupNotification(string tag, string title, string message, string targetId, Action stop) =>
+        ShowQuestionNotification(tag, title, message, () => { }, new[] { new NotificationButton(L.T("Stop backup"), stop) });
 
     /// <summary>The automatic backups changed: the system runs them in the background on Wi-Fi when there are any (Android).</summary>
     void ScheduleBackups(bool any)

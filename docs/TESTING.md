@@ -11,7 +11,7 @@ transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) 
 Direct mode and Bluetooth run against fakes of the radios (`FakeDirectAir`, `FakeNearbyAir`), which can drop links,
 refuse joins or turn Wi-Fi off; tests that change process-wide network state run alone.
 
-**`tests/Beam.App.Tests`** (52 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (56 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -127,7 +127,10 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
    Documents/Beam Backups/<phone> gets Photos, Videos and the folder's PDFs only, without any question.
 4. Back up now again: nothing is sent, no card, no history entry. Take a photo: it arrives on the next run.
 5. Leave the Wi-Fi, take photos, come back: the backup runs by itself within a few minutes (also with Beam closed).
-6. Delete a photo on the phone: it stays on the PC. Remove the phone on the PC: the next backup is refused and the
+6. Hand the unlocked phone to someone else: setting up a backup (or adding a folder to it) asks for the fingerprint,
+   face or PIN; cancelling changes nothing. The notification "This phone now backs up to …" appears after setup, and
+   "N files backed up to …" after each backup that sent files; its Stop backup button works with Beam closed.
+7. Delete a photo on the phone: it stays on the PC. Remove the phone on the PC: the next backup is refused and the
    phone says to set it up again.
 
 ### Phones

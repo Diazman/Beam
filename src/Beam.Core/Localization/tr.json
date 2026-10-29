@@ -620,5 +620,16 @@
   "The code works once, for one phone, for 10 minutes. Only a phone that scans it can back up here; anyone else on your Wi-Fi is refused. Backups are encrypted on the way.": "Kod bir kez, tek bir telefon için, 10 dakika geçerlidir. Buraya yalnızca onu tarayan telefon yedekleme yapabilir; Wi-Fi ağınızdaki diğer herkes reddedilir. Yedekler aktarım sırasında şifrelenir.",
   "The code expired. Show a new one when the phone is ready.": "Kodun süresi doldu. Telefon hazır olduğunda yenisini gösterin.",
   "Show a new code": "Yeni kod göster",
-  "Backing up: {1} of {0} new files…": "Yedekleniyor: {0} yeni dosyadan {1} tanesi…"
+  "Backing up: {1} of {0} new files…": "Yedekleniyor: {0} yeni dosyadan {1} tanesi…",
+  "Confirm it's you to back up this phone to {0}.": "Bu telefonu {0} cihazına yedeklemek için siz olduğunuzu doğrulayın.",
+  "Confirm it's you to change what this phone backs up.": "Bu telefonun neyi yedeklediğini değiştirmek için siz olduğunuzu doğrulayın.",
+  "Confirm it's you": "Siz olduğunuzu doğrulayın",
+  "This phone has no screen lock": "Bu telefonda ekran kilidi yok",
+  "Anyone who picks up this phone could back up its files to their own computer. To prevent that, set a screen lock (PIN, pattern, fingerprint or face) in the phone's settings.": "Bu telefonu eline alan herkes dosyalarını kendi bilgisayarına yedekleyebilir. Bunu önlemek için telefonun ayarlarından bir ekran kilidi (PIN, desen, parmak izi veya yüz) ayarlayın.",
+  "Continue anyway": "Yine de devam et",
+  "Nothing was changed. Confirm with your fingerprint, face or screen lock to change this phone's backup.": "Hiçbir şey değiştirilmedi. Bu telefonun yedeklemesini değiştirmek için parmak iziniz, yüzünüz veya ekran kilidinizle doğrulayın.",
+  "This phone now backs up to {0}": "Bu telefon artık {0} cihazına yedekleniyor",
+  "Its chosen files go to {0} by themselves whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Seçilen dosyalar, ikisi aynı Wi-Fi ağında olduğunda kendiliğinden {0} cihazına gider. Bunu siz kurmadıysanız Yedeklemeyi durdur'a dokunun.",
+  "This phone backs up to {0} whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.": "Bu telefon, ikisi aynı Wi-Fi ağında olduğunda {0} cihazına yedeklenir. Bunu siz kurmadıysanız Yedeklemeyi durdur'a dokunun.",
+  "{0} files backed up to {1}": "{0} dosya {1} cihazına yedeklendi"
 }
