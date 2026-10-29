@@ -29,7 +29,12 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <!-- Saving received files to Downloads/Beam: only needed up to Android 10; newer versions allow it without a permission. -->
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+  <!-- Backups: reading photos and videos (Android 13+), or all shared storage before; asked when backups are set up. -->
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+  <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+  <!-- Backups keep checking in the background after the phone restarts. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
   <application
     android:label="Beam"

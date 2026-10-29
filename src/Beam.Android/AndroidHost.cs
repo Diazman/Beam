@@ -31,6 +31,7 @@ internal static class AndroidHost
     private static TaskCompletionSource<bool>? _permission;
     private static int _permissionRequest = 100;
     private static TransferKeepAlive? _keepAlive; // held for the life of the app
+    private static AndroidDirectLink? _directLink;
 
     private static Context Context => global::Android.App.Application.Context;
 
@@ -41,18 +42,38 @@ internal static class AndroidHost
     public static string ReceiveFolder =>
         Path.Combine(AndroidEnvironment.GetExternalStoragePublicDirectory(AndroidEnvironment.DirectoryDownloads)!.AbsolutePath, "Beam");
 
-    public static MainViewModel CreateViewModel(MobileView view)
-    {
-        _view = view;
-        if (_viewModel != null) return _viewModel;
+    private static readonly object NodeGate = new();
 
-        var directLink = new AndroidDirectLink(Context, () => _node?.Settings.Current.DeviceName ?? "Phone");
+    /// <summary>
+    /// The app's Beam node, created on first use: by the screen, or by a background backup with no screen (then
+    /// started only when Beam was set up on this phone before). Null when a background job finds Beam never opened.
+    /// </summary>
+    public static BeamNode? EnsureNode(bool forScreen = false)
+    {
+        lock (NodeGate)
+        {
+            if (_node == null)
+            {
+                if (!forScreen && !File.Exists(Paths.SettingsFile)) return null;
+                CreateNode();
+            }
+
+            // In the background: discovery and transfers run so the backup can reach the computer.
+            if (!forScreen && _node!.Settings.Current.FirstRunCompleted) _node.Start();
+            return _node;
+        }
+    }
+
+    private static void CreateNode()
+    {
+        _directLink = new AndroidDirectLink(Context, () => _node?.Settings.Current.DeviceName ?? "Phone");
         _node = BeamNode.Create(new BeamNodeOptions
         {
             Paths = Paths,
             ExternalFiles = new ContentFiles(Context.ContentResolver!),
+            BackupSources = new AndroidBackupSources(Context.ContentResolver!),
             DeviceKind = DeviceKinds.Phone,
-            DirectLink = directLink,
+            DirectLink = _directLink,
             NearbyRadio = new AndroidNearbyRadio(Context),
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
@@ -74,9 +95,17 @@ internal static class AndroidHost
         }
 
         _node.Transfers.SessionFinished += AddToMediaLibrary;
-        _keepAlive = new TransferKeepAlive(Context, _node.Transfers, directLink);
+        _keepAlive = new TransferKeepAlive(Context, _node.Transfers, _directLink);
         AcquireMulticastLock();
-        _viewModel = new MainViewModel(_node, new AndroidPlatformServices(), view, new UnavailableStoreService());
+    }
+
+    public static MainViewModel CreateViewModel(MobileView view)
+    {
+        _view = view;
+        if (_viewModel != null) return _viewModel;
+
+        var node = EnsureNode(forScreen: true)!;
+        _viewModel = new MainViewModel(node, new AndroidPlatformServices(), view, new UnavailableStoreService());
         var share = Interlocked.Exchange(ref _pendingShare, null);
         _ = _viewModel.InitializeAsync(ToCommandLine(share));
         return _viewModel;

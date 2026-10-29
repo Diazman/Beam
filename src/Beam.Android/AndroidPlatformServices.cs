@@ -104,7 +104,29 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         AndroidPermissionFor(permission) is not { } name || Context.CheckSelfPermission(name) == global::Android.Content.PM.Permission.Granted;
 
     public Task<bool> RequestPermissionAsync(AppPermission permission) =>
-        AndroidPermissionFor(permission) is { } name ? AndroidHost.RequestPermissionAsync(name) : Task.FromResult(true);
+        permission == AppPermission.MediaLibrary && OperatingSystem.IsAndroidVersionAtLeast(33)
+            ? AndroidHost.RequestPermissionsAsync(global::Android.Manifest.Permission.ReadMediaImages, global::Android.Manifest.Permission.ReadMediaVideo)
+            : AndroidPermissionFor(permission) is { } name ? AndroidHost.RequestPermissionAsync(name) : Task.FromResult(true);
+
+    public bool SupportsBackup => true;
+
+    /// <summary>A folder picked for backups: keeps reading it after Beam or the phone restarts (Android forgets otherwise).</summary>
+    public string? KeepFolderAccess(string picked)
+    {
+        if (!picked.StartsWith("content://", StringComparison.OrdinalIgnoreCase)) return picked;
+        try
+        {
+            Context.ContentResolver!.TakePersistableUriPermission(AndroidUri.Parse(picked)!, ActivityFlags.GrantReadUriPermission);
+            return picked;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Backup: can't keep access to {picked}", ex);
+            return null;
+        }
+    }
+
+    public void ScheduleBackups(bool any) => BackupJobService.Schedule(Context, any);
 
     public bool NearbyDevicesIsLocation => !OperatingSystem.IsAndroidVersionAtLeast(33);
 
@@ -113,6 +135,9 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         AppPermission.Notifications => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.PostNotifications : null,
         AppPermission.NearbyDevices => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.NearbyWifiDevices
             : OperatingSystem.IsAndroidVersionAtLeast(29) ? global::Android.Manifest.Permission.AccessFineLocation : null,
+        // Android 13+ asks for photos and videos separately (both in one prompt, see RequestPermissionAsync).
+        AppPermission.MediaLibrary => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.ReadMediaImages
+            : global::Android.Manifest.Permission.ReadExternalStorage,
         _ => null,
     };
 
