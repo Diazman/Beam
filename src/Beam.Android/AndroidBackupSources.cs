@@ -29,11 +29,11 @@ internal sealed class AndroidBackupSources : IBackupSources
     {
         var withFolders = OperatingSystem.IsAndroidVersionAtLeast(29);
         string[] columns = withFolders
-            ? new[] { IBaseColumns.Id, IMediaColumns.DisplayName, IMediaColumns.Size, IMediaColumns.DateModified, IMediaColumns.RelativePath }
-            : new[] { IBaseColumns.Id, IMediaColumns.DisplayName, IMediaColumns.Size, IMediaColumns.DateModified, IMediaColumns.Data };
+            ? new[] { IBaseColumns.Id, MediaStore.IMediaColumns.DisplayName, MediaStore.IMediaColumns.Size, MediaStore.IMediaColumns.DateModified, MediaStore.IMediaColumns.RelativePath }
+            : new[] { IBaseColumns.Id, MediaStore.IMediaColumns.DisplayName, MediaStore.IMediaColumns.Size, MediaStore.IMediaColumns.DateModified, MediaStore.IMediaColumns.Data };
         var items = new List<BackupItem>();
         // Files still being written (a video being recorded) are left for the next backup.
-        var selection = withFolders ? IMediaColumns.IsPending + " = 0" : null;
+        var selection = withFolders ? MediaStore.IMediaColumns.IsPending + " = 0" : null;
         using ICursor? cursor = _resolver.Query(collection, columns, selection, null, null);
         if (cursor == null)
         {
