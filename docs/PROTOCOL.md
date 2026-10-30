@@ -166,6 +166,7 @@ code's certificate fingerprint only; the computer records the phone's certificat
 
 A backup run is an ordinary transfer whose `Offer` has `backup: true`. The receiver answers it without asking the
 user, only for a recorded partner certificate (otherwise `OfferResponse{accepted: false, reason:
-"not_backup_partner"}`), and plans each file as skip (same size and modification time within 2 s) or replace.
+"not_backup_partner"}`), and plans each file as skip (same size and modification time within 2 s) or replace (the copy there is moved
+aside as "name (before date).ext" once the new one is complete).
 Backups over a direct network are declined. Older versions ignore the `backup` field and ask the user as usual.
 

@@ -74,8 +74,10 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 - **You are told** – a notification says when a backup to a computer is set up, and each time files were backed up,
   naming the computer, with a **Stop backup** button.
 - **What is sent** – the files you chose, with their names, sizes and dates, encrypted on the way and checked
-  after they arrive. Only files the computer doesn't have yet (or that changed) are sent. Nothing on the computer
-  is deleted when you delete it on the phone.
+  after they arrive. For folders you tick the kinds of files (photos, videos, PDF, Word, Excel, PowerPoint, text,
+  e-books, music, archives, other). Only files the computer doesn't have yet (or that changed) are sent. Nothing on
+  the computer is deleted when you delete it on the phone, and a changed file's earlier copy is kept beside the new
+  one.
 - **What is stored** – on the phone: which computer it backs up to (its name, identifier and key fingerprint),
   what you chose to back up, and when the last backup was. On the computer: which phones may back up (their name,
   identifier and key fingerprint), each phone's backup folder, and when it last backed up. The backed-up files are

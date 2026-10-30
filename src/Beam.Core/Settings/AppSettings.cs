@@ -149,7 +149,18 @@ public sealed class AppSettings
             .GroupBy(b => b.TargetId)
             .Select(g => g.Last())
             .ToList();
-        foreach (var plan in Backups) plan.Sources ??= new();
+        foreach (var plan in Backups)
+        {
+            plan.Sources ??= new();
+            foreach (var source in plan.Sources.Where(s => s.Kind == BackupSourceKinds.Folder && s.Types == null))
+            {
+                // Saved before the checkboxes: the one choice becomes its kinds.
+                source.Types = BackupFileTypes.FromLegacy(source.FileTypes, source.Extensions).ToList();
+                source.FileTypes = null;
+                source.Extensions = null;
+            }
+        }
+
         BackupPartners = (BackupPartners ?? new())
             .Where(p => !string.IsNullOrWhiteSpace(p.Fingerprint) && !string.IsNullOrWhiteSpace(p.Folder))
             .GroupBy(p => p.Fingerprint, StringComparer.OrdinalIgnoreCase)

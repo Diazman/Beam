@@ -13,46 +13,76 @@ public static class BackupSourceKinds
     public const string Folder = "folder";
 }
 
-/// <summary>Which files of a folder are backed up.</summary>
+/// <summary>
+/// The kinds of files a folder backup can take, one checkbox each: photos, videos, the documents (PDF, Word, Excel,
+/// PowerPoint, text, e-books), music, archives, and <see cref="Other"/> for every file none of them covers.
+/// </summary>
 public static class BackupFileTypes
 {
-    public const string All = "all";
     public const string Photos = "photos";
     public const string Videos = "videos";
-    public const string Documents = "documents";
+    public const string Pdf = "pdf";
+    public const string Word = "word";
+    public const string Excel = "excel";
+    public const string PowerPoint = "powerpoint";
+    public const string Text = "text";
+    public const string Ebooks = "ebooks";
+    public const string Music = "music";
+    public const string Archives = "archives";
 
-    /// <summary>The extensions in <see cref="BackupSource.Extensions"/> ("pdf, epub").</summary>
-    public const string Custom = "custom";
+    /// <summary>Everything not in the other kinds.</summary>
+    public const string Other = "other";
 
-    private static readonly string[] PhotoExtensions =
-        { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".dng", ".raw", ".cr2", ".nef", ".arw" };
+    // Before the checkboxes: one choice per folder (kept to read plans saved then).
+    private const string LegacyAll = "all";
+    private const string LegacyDocuments = "documents";
+    private const string LegacyCustom = "custom";
 
-    private static readonly string[] VideoExtensions =
-        { ".mp4", ".mov", ".m4v", ".mkv", ".3gp", ".webm", ".avi", ".wmv", ".mts" };
+    /// <summary>A kind: its id, its extensions, and whether it is one of the documents.</summary>
+    public sealed record Kind(string Id, string[] Extensions, bool IsDocument);
 
-    private static readonly string[] DocumentExtensions =
-        { ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".txt", ".csv", ".md", ".epub", ".pages", ".numbers", ".key" };
-
-    /// <summary>Whether a file named <paramref name="name"/> is included by <paramref name="source"/>'s file types.</summary>
-    public static bool Includes(BackupSource source, string name)
+    public static IReadOnlyList<Kind> Kinds { get; } = new Kind[]
     {
-        var extension = Path.GetExtension(name).ToLowerInvariant();
-        return source.FileTypes switch
-        {
-            Photos => PhotoExtensions.Contains(extension),
-            Videos => VideoExtensions.Contains(extension),
-            Documents => DocumentExtensions.Contains(extension),
-            Custom => ParseExtensions(source.Extensions).Contains(extension),
-            _ => true,
-        };
-    }
+        new(Photos, new[] { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".dng", ".raw", ".cr2", ".nef", ".arw" }, false),
+        new(Videos, new[] { ".mp4", ".mov", ".m4v", ".mkv", ".3gp", ".webm", ".avi", ".wmv", ".mts" }, false),
+        new(Pdf, new[] { ".pdf" }, true),
+        new(Word, new[] { ".doc", ".docx", ".odt", ".rtf", ".pages" }, true),
+        new(Excel, new[] { ".xls", ".xlsx", ".ods", ".csv", ".numbers" }, true),
+        new(PowerPoint, new[] { ".ppt", ".pptx", ".odp", ".key" }, true),
+        new(Text, new[] { ".txt", ".md" }, true),
+        new(Ebooks, new[] { ".epub", ".mobi", ".fb2", ".djvu" }, true),
+        new(Music, new[] { ".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".amr", ".wma" }, false),
+        new(Archives, new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }, false),
+        new(Other, Array.Empty<string>(), false),
+    };
 
-    /// <summary>"pdf, .EPUB docx" → ".pdf", ".epub", ".docx".</summary>
-    public static IReadOnlySet<string> ParseExtensions(string? text) =>
-        (text ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Select(e => "." + e.TrimStart('.', '*').ToLowerInvariant())
-        .Where(e => e.Length > 1)
-        .ToHashSet();
+    /// <summary>Every kind (a new folder backs up everything).</summary>
+    public static IReadOnlyList<string> All { get; } = Kinds.Select(k => k.Id).ToArray();
+
+    /// <summary>The documents' kinds (the "Documents" checkbox ticks them all).</summary>
+    public static IReadOnlyList<string> Documents { get; } = Kinds.Where(k => k.IsDocument).Select(k => k.Id).ToArray();
+
+    private static readonly Dictionary<string, string> KindOfExtension =
+        Kinds.SelectMany(k => k.Extensions.Select(e => (e, k.Id))).ToDictionary(p => p.e, p => p.Id);
+
+    /// <summary>The kind of a file, by its extension; <see cref="Other"/> when no kind covers it.</summary>
+    public static string KindOf(string name) =>
+        KindOfExtension.TryGetValue(Path.GetExtension(name).ToLowerInvariant(), out var kind) ? kind : Other;
+
+    /// <summary>Whether a file named <paramref name="name"/> is included by <paramref name="source"/>'s ticked kinds.</summary>
+    public static bool Includes(BackupSource source, string name) => source.EffectiveTypes().Contains(KindOf(name));
+
+    /// <summary>The kinds an older plan's single choice meant ("documents" → the document kinds; "pdf, epub" → those).</summary>
+    internal static IReadOnlyList<string> FromLegacy(string? fileTypes, string? extensions) => fileTypes switch
+    {
+        null or LegacyAll => All,
+        Photos => new[] { Photos },
+        Videos => new[] { Videos },
+        LegacyDocuments => Documents,
+        LegacyCustom => (extensions ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => KindOf("x." + e.TrimStart('.', '*'))).Distinct().ToArray(),
+        _ => All,
+    };
 }
 
 /// <summary>One thing to back up: the photos, the videos, or a folder (with the kinds of files to take from it).</summary>
@@ -63,14 +93,30 @@ public sealed class BackupSource
     /// <summary>The folder (for <see cref="BackupSourceKinds.Folder"/>).</summary>
     public string? Address { get; set; }
 
-    /// <summary>Its name in the backup ("Photos", "Documents"): the folder its files go into on the computer.</summary>
+    /// <summary>Its name ("Camera", "Documents"): the folder its files go into when folder names are kept.</summary>
     public string Name { get; set; } = "";
 
-    /// <summary>For folders: <see cref="BackupFileTypes"/>.</summary>
-    public string FileTypes { get; set; } = BackupFileTypes.All;
+    /// <summary>For folders: the ticked <see cref="BackupFileTypes"/> kinds (null in plans saved before the checkboxes).</summary>
+    public List<string>? Types { get; set; }
 
-    /// <summary>For <see cref="BackupFileTypes.Custom"/>: "pdf, epub".</summary>
+    /// <summary>Before the checkboxes: one choice ("all", "photos", "documents", "custom"); read once, then <see cref="Types"/>.</summary>
+    public string? FileTypes { get; set; }
+
+    /// <summary>Before the checkboxes: the extensions of "custom".</summary>
     public string? Extensions { get; set; }
+
+    public BackupSource Copy() => new()
+    {
+        Kind = Kind, Address = Address, Name = Name, Types = EffectiveTypes().ToList(),
+    };
+
+    /// <summary>The ticked kinds (for photos and videos: that kind).</summary>
+    public IReadOnlyList<string> EffectiveTypes() => Kind switch
+    {
+        BackupSourceKinds.Photos => new[] { BackupFileTypes.Photos },
+        BackupSourceKinds.Videos => new[] { BackupFileTypes.Videos },
+        _ => Types ?? BackupFileTypes.FromLegacy(FileTypes, Extensions),
+    };
 }
 
 /// <summary>
@@ -90,6 +136,12 @@ public sealed class BackupPlan
 
     /// <summary>The computer's last known addresses, asked directly too (networks that drop Beam's announcements).</summary>
     public List<string> Addresses { get; set; } = new();
+
+    /// <summary>
+    /// On the computer, keep the folders the files are in on the phone ("Camera/IMG_1.jpg"); off (the default), files
+    /// are sorted into one folder per kind: Photos, Videos, Documents, Music, Archives, Other.
+    /// </summary>
+    public bool KeepFolderNames { get; set; }
 
     /// <summary>Back up by itself whenever the computer is on the same Wi-Fi (otherwise only with "Back up now").</summary>
     public bool Automatic { get; set; } = true;

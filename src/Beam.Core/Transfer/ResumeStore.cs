@@ -24,6 +24,9 @@ public sealed class ResumeFile
     /// <summary>User chose "Replace" for an existing file at <see cref="TargetPath"/>.</summary>
     public bool Replace { get; set; }
 
+    /// <summary>Backups: the file being replaced is kept under a dated name (nothing backed up before is ever lost).</summary>
+    public bool KeepPrevious { get; set; }
+
     public bool Done { get; set; }
 
     public bool Failed { get; set; }

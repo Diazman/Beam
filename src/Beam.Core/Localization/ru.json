@@ -649,11 +649,6 @@
   "All photos on this phone": "Все фото на этом телефоне",
   "All videos on this phone": "Все видео на этом телефоне",
   "Folder": "Папка",
-  "All files": "Все файлы",
-  "Photos only": "Только фото",
-  "Videos only": "Только видео",
-  "Documents only (PDF, Word, Excel…)": "Только документы (PDF, Word, Excel…)",
-  "Only these types…": "Только эти типы…",
   "Backing up to {0}": "Резервное копирование на {0}",
   "Checking what's new…": "Проверка новых файлов…",
   "Choose what to back up.": "Выберите, что копировать.",
@@ -694,7 +689,6 @@
   "Whenever this phone and the computer are on the same Wi-Fi. Mobile data is never used.": "Когда телефон и компьютер в одной сети Wi-Fi. Мобильный интернет не используется.",
   "What is backed up": "Что копируется",
   "Nothing yet. Add photos, videos or a folder.": "Пока ничего. Добавьте фото, видео или папку.",
-  "For example: pdf, docx, epub": "Например: pdf, docx, epub",
   "Add photos": "Добавить фото",
   "Add videos": "Добавить видео",
   "Add a folder…": "Добавить папку…",
@@ -727,5 +721,15 @@
     "{0} файл скопирован на {1}",
     "{0} файла скопировано на {1}",
     "{0} файлов скопировано на {1}"
-  ]
+  ],
+  "Music": "Музыка",
+  "Archives": "Архивы",
+  "Other files": "Другие файлы",
+  "Documents": "Документы",
+  "E-books": "Электронные книги",
+  "Other": "Другое",
+  "Every other kind of file": "Все остальные типы файлов",
+  "Nothing is backed up from this folder. Tick at least one kind of file.": "Из этой папки ничего не копируется. Отметьте хотя бы один тип файлов.",
+  "Keep the phone's folder names": "Сохранять имена папок телефона",
+  "Off: files are sorted on the computer into Photos, Videos, Documents and other folders by kind. On: they keep the folders they are in on this phone.": "Выключено: на компьютере файлы раскладываются по типу в папки «Фото», «Видео», «Документы» и другие. Включено: файлы сохраняют папки, в которых лежат на телефоне."
 }

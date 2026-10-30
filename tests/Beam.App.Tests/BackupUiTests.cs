@@ -62,21 +62,35 @@ public class BackupUiTests
         Assert.True(backup.Automatic);
         Assert.True(phone.Platform.BackupsScheduled);
 
-        // A folder with only PDFs.
-        phone.Ui.FolderToPick = Path.Combine(phone.Root, "Documents");
+        // A folder: every kind ticked to start with; keep only PDF, Word and PowerPoint.
+        phone.Ui.FolderToPick = Path.Combine(phone.Root, "Download");
         Directory.CreateDirectory(phone.Ui.FolderToPick);
         backup.AddFolderCommand.Execute(null);
         await UiHarness.WaitForAsync(() => backup.Sources.Count == 3, "folder added");
-        var folder = backup.Sources[2];
-        folder.SelectedFileType = folder.FileTypeOptions.Single(o => o.Value == BackupFileTypes.Custom);
-        await UiHarness.PumpAsync(50);
-        backup.Sources[2].Extensions = "pdf";
-        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.ElementAtOrDefault(2)?.Extensions == "pdf", "saved", 5000);
-        Assert.Equal(BackupFileTypes.Custom, phone.Node.Settings.Current.Backups.Single().Sources[2].FileTypes);
+        var kinds = backup.Sources[2].FileKinds;
+        Assert.Equal(new[] { "Photos", "Videos", "Documents", "PDF", "Word", "Excel", "PowerPoint", "Text", "E-books", "Music", "Archives", "Other" },
+            kinds.Select(k => k.Label));
+        Assert.All(kinds, k => Assert.True(k.IsChecked));
+        KindViewModel(kinds, "Documents").IsChecked = false; // clears all documents
+        Assert.All(kinds.Where(k => k.IsChild), k => Assert.False(k.IsChecked));
+        foreach (var label in new[] { "Photos", "Videos", "Music", "Archives", "Other" }) KindViewModel(kinds, label).IsChecked = false;
+        Assert.True(backup.Sources[2].HasNoKinds);
+        foreach (var label in new[] { "PDF", "Word", "PowerPoint" }) KindViewModel(kinds, label).IsChecked = true;
+        Assert.Null(KindViewModel(kinds, "Documents").IsChecked); // some documents
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.ElementAtOrDefault(2)?.Types?.Count == 3, "saved", 5000);
+        Assert.Equal(new[] { BackupFileTypes.Pdf, BackupFileTypes.Word, BackupFileTypes.PowerPoint },
+            phone.Node.Settings.Current.Backups.Single().Sources[2].Types);
+
+        // The computer sorts files into Photos, Videos, Documents… unless the phone's folder names are kept.
+        var checks = phone.Platform.OwnerChecks;
+        Assert.False(backup.KeepFolderNames);
+        backup.KeepFolderNames = true;
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().KeepFolderNames, "saved");
+        Assert.Equal(checks, phone.Platform.OwnerChecks); // the same files: nothing to confirm
         await UiHarness.PumpAsync(100);
         Assert.Empty(phone.TextOutsideWindow());
         var heading = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(phone.Window).OfType<Avalonia.Controls.TextBlock>()
-            .First(t => t.Text == "What is backed up");
+            .First(t => t.Text == "Download");
         Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -200, 10, 700));
         await UiHarness.PumpAsync(100);
         phone.Screenshot("backup-phone");
@@ -297,6 +311,9 @@ public class BackupUiTests
         platform.Questions[tag].Single().OnClick();
         Assert.Empty(phone.Node.Settings.Current.Backups);
     }
+
+    private static Beam.App.ViewModels.FileKindViewModel KindViewModel(IEnumerable<Beam.App.ViewModels.FileKindViewModel> kinds, string label) =>
+        kinds.Single(k => k.Label == label);
 
     private static IEnumerable<string> Buttons(UiHarness h) =>
         Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(h.Window).OfType<Avalonia.Controls.Button>()

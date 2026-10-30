@@ -234,6 +234,9 @@ internal sealed partial class IncomingTransfer
             }
 
             ApplyConflictActions(plan, actions);
+            if (partner != null)
+                foreach (var file in plan.Files.Where(f => f.Replace))
+                    file.KeepPrevious = true;
         }
 
         var required = plan.Files.Sum(f => f.Size);
@@ -674,7 +677,28 @@ internal sealed partial class IncomingTransfer
     private static string MoveIntoPlace(ResumeFile file)
     {
         var target = file.TargetPath;
-        if (file.Replace && File.Exists(target))
+        var replace = file.Replace;
+        if (replace && file.KeepPrevious && File.Exists(target))
+        {
+            // A backup's changed file (or another phone file with that name): the copy here moves aside first, so
+            // a backup never loses what it held. Only once the new version is complete.
+            var directory = Path.GetDirectoryName(target)!;
+            var stamp = File.GetLastWriteTime(target).ToString("yyyy-MM-dd HHmm", System.Globalization.CultureInfo.InvariantCulture);
+            var aside = Path.GetFileNameWithoutExtension(target) + $" (before {stamp})" + Path.GetExtension(target);
+            aside = FileNaming.MakeUnique(aside, n => FileNaming.Exists(Path.Combine(directory, n)));
+            try
+            {
+                MoveFile(target, Path.Combine(directory, aside), false);
+                Log.Info($"Backup: kept the previous version of {Path.GetFileName(target)} as {aside}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"Couldn't keep the previous version of {target} ({ex.Message}); saving the new one under a new name");
+                replace = false;
+            }
+        }
+
+        if (replace && File.Exists(target))
         {
             try
             {

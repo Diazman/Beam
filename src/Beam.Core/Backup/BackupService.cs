@@ -270,11 +270,9 @@ public sealed class BackupService : IDisposable
         _settings.Update(s =>
         {
             if (s.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) is not { } stored) return;
-            stored.Sources = plan.Sources.Select(c => new BackupSource
-            {
-                Kind = c.Kind, Address = c.Address, Name = c.Name, FileTypes = c.FileTypes, Extensions = c.Extensions,
-            }).ToList();
+            stored.Sources = plan.Sources.Select(c => c.Copy()).ToList();
             stored.Automatic = plan.Automatic;
+            stored.KeepFolderNames = plan.KeepFolderNames;
         });
         plan = _settings.Current.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) ?? plan;
         _lastStarted.TryRemove(plan.TargetId, out _);

@@ -40,6 +40,10 @@
   <Style Selector="TextBlock.warning">
     <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
   </Style>
+  <!-- A kind of document, indented under its "Documents" checkbox (backup choices). -->
+  <Style Selector="CheckBox.child">
+    <Setter Property="Margin" Value="24,0,0,0" />
+  </Style>
   <Style Selector="TextBlock.error">
     <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
   </Style>

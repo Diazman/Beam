@@ -1,5 +1,6 @@
 using Beam.Core.Diagnostics;
 using Beam.Core.Files;
+using Beam.Core.Localization;
 
 namespace Beam.Core.Backup;
 
@@ -20,8 +21,7 @@ internal static class BackupManifest
 {
     public static Manifest Build(BackupPlan plan, IBackupSources? platform, IExternalFiles? external, CancellationToken cancellationToken)
     {
-        var entries = new List<ManifestEntry>();
-        var roots = new List<string>();
+        var found = new List<(string[] Path, BackupItem Item, string Origin)>();
         var warnings = new List<string>();
         var usedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in plan.Sources)
@@ -42,31 +42,70 @@ internal static class BackupManifest
                 continue;
             }
 
-            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var types = source.EffectiveTypes();
             var count = 0;
             foreach (var item in items)
             {
-                if (source.Kind == BackupSourceKinds.Folder && !BackupFileTypes.Includes(source, item.RelativePath)) continue;
-                var segments = item.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(SafePath.SanitizeSegment).ToList();
-                if (segments.Count == 0) continue;
-                var relative = root + "/" + string.Join('/', segments);
-                if (!paths.Add(relative)) continue; // the same name twice (two storage volumes): the first one
+                var kind = BackupFileTypes.KindOf(item.RelativePath);
+                if (source.Kind == BackupSourceKinds.Folder && !types.Contains(kind)) continue;
+                var segments = item.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(SafePath.SanitizeSegment).ToArray();
+                if (segments.Length == 0) continue;
+                // Folder names kept: "Camera/DCIM/IMG_1.jpg" under the source's name. Otherwise one folder per kind.
+                var path = plan.KeepFolderNames
+                    ? segments.Prepend(root).ToArray()
+                    : new[] { KindFolder(source.Kind switch { BackupSourceKinds.Photos => BackupFileTypes.Photos, BackupSourceKinds.Videos => BackupFileTypes.Videos, _ => kind }), segments[^1] };
+                found.Add((path, item, root + "/" + string.Join('/', segments)));
+                count++;
+            }
+
+            Log.Info($"Backup: {source.Name} ({source.Kind}, {string.Join(" ", types)}) has {count} files");
+        }
+
+        var entries = new List<ManifestEntry>();
+        foreach (var group in found.GroupBy(f => string.Join('/', f.Path), StringComparer.OrdinalIgnoreCase))
+        {
+            // The same name twice: one file listed twice (a photo in the media library and in a chosen folder) is sent
+            // once; different files keep their name apart by where they are on the phone, the same way every time.
+            var distinct = group.OrderBy(f => f.Origin, StringComparer.Ordinal)
+                .DistinctBy(f => (f.Item.Size, Seconds(f.Item.ModifiedUtc)))
+                .ToList();
+            for (var n = 0; n < distinct.Count; n++)
+            {
+                var (path, item, origin) = distinct[n];
+                if (n > 0) path = path[..^1].Append(WithTag(path[^1], origin)).ToArray();
                 entries.Add(new ManifestEntry
                 {
-                    RelativePath = relative,
+                    RelativePath = string.Join('/', path),
                     SourcePath = item.Address,
                     OpenExternal = item.OpenRead,
                     Size = item.Size,
                     ModifiedUtc = item.ModifiedUtc,
                 });
-                count++;
             }
-
-            if (count > 0) roots.Add(root);
-            Log.Info($"Backup: {source.Name} ({source.Kind}, {source.FileTypes}) has {count} files");
         }
 
+        var roots = entries.Select(e => e.RelativePath[..e.RelativePath.IndexOf('/')]).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return new Manifest { Entries = entries, RootNames = roots, Warnings = warnings };
+    }
+
+    /// <summary>Where a kind goes on the computer when folder names aren't kept.</summary>
+    internal static string KindFolder(string kind) => kind switch
+    {
+        BackupFileTypes.Photos => L.T("Photos"),
+        BackupFileTypes.Videos => L.T("Videos"),
+        BackupFileTypes.Music => L.T("Music"),
+        BackupFileTypes.Archives => L.T("Archives"),
+        BackupFileTypes.Other => L.T("Other files"),
+        _ => L.T("Documents"),
+    };
+
+    private static long Seconds(DateTime time) => time.Ticks / TimeSpan.TicksPerSecond;
+
+    /// <summary>"IMG_1.jpg" from "Camera/IMG_1.jpg" → "IMG_1 (3fa2c1).jpg": the same tag for that file on every backup.</summary>
+    private static string WithTag(string name, string origin)
+    {
+        var tag = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(origin)))[..6].ToLowerInvariant();
+        return Path.GetFileNameWithoutExtension(name) + $" ({tag})" + Path.GetExtension(name);
     }
 
     /// <summary>A folder by path (desktops, tests) or by address (an Android folder the user chose).</summary>

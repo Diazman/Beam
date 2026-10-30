@@ -130,13 +130,34 @@
                         </StackPanel>
                         <Button Grid.Column="1" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
                       </Grid>
-                      <ComboBox ItemsSource="{Binding FileTypeOptions}" SelectedItem="{Binding SelectedFileType}" IsVisible="{Binding IsFolder}"
-                                HorizontalAlignment="Stretch" />
-                      <TextBox Text="{Binding Extensions}" IsVisible="{Binding IsCustom}" Watermark="{l:T 'For example: pdf, docx, epub'}" />
+                      <!-- A folder: which kinds of its files (a checkbox each, the documents under "Documents", "Other" last) -->
+                      <ItemsControl ItemsSource="{Binding FileKinds}" IsVisible="{Binding IsFolder}" Margin="4,0,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:FileKindViewModel">
+                            <CheckBox IsChecked="{Binding IsChecked}" Classes.child="{Binding IsChild}" MinHeight="32">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                <TextBlock Classes="caption" Text="{Binding Details}" IsVisible="{Binding HasDetails}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                              </StackPanel>
+                            </CheckBox>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Classes="caption error" TextWrapping="Wrap" IsVisible="{Binding HasNoKinds}"
+                                 Text="{l:T 'Nothing is backed up from this folder. Tick at least one kind of file.'}" />
                     </StackPanel>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Classes="h3" Text="{l:T 'Keep the phone\'s folder names'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap"
+                             Text="{l:T 'Off: files are sorted on the computer into Photos, Videos, Documents and other folders by kind. On: they keep the folders they are in on this phone.'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.KeepFolderNames}" Margin="16,0,0,0" />
+              </Grid>
               <WrapPanel Orientation="Horizontal">
                 <Button Content="{l:T 'Add photos'}" Command="{Binding Backup.AddPhotosCommand}" Margin="0,0,8,6" />
                 <Button Content="{l:T 'Add videos'}" Command="{Binding Backup.AddVideosCommand}" Margin="0,0,8,6" />

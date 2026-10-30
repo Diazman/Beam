@@ -34,10 +34,15 @@ public class BackupTests
         b.Node.Discovery.AddUnicastTarget(IPAddress.Loopback, a.Node.Discovery.LocalPort);
     }
 
-    private static async Task<BackupPlan> SetUpAsync(TestNode phone, TestNode pc, string folder, string fileTypes = BackupFileTypes.All)
+    private static async Task<BackupPlan> SetUpAsync(TestNode phone, TestNode pc, string folder, IReadOnlyList<string>? types = null,
+        bool keepFolderNames = true)
     {
         var plan = await phone.Node.Backup.SetUpAsync(Scan(pc, pc.Node.Backup.CreateSetupCode()), CancellationToken.None);
-        plan.Sources.Add(new BackupSource { Kind = BackupSourceKinds.Folder, Address = folder, Name = "Documents", FileTypes = fileTypes });
+        plan.Sources.Add(new BackupSource
+        {
+            Kind = BackupSourceKinds.Folder, Address = folder, Name = "Documents", Types = (types ?? BackupFileTypes.All).ToList(),
+        });
+        plan.KeepFolderNames = keepFolderNames;
         plan.Automatic = false;
         phone.Node.Backup.Save(plan);
         return plan;
@@ -199,7 +204,8 @@ public class BackupTests
         Assert.Equal(2, second.GetSnapshot().SkippedFiles);
         Assert.Equal(historyBefore, phone.Node.History.Entries.Count);
 
-        // A changed file replaces the old copy; a new file is added; one deleted on the phone stays on the computer.
+        // A changed file is backed up again, the old copy kept beside it; a new file is added; one deleted on the phone
+        // stays on the computer.
         File.WriteAllText(Path.Combine(source, "a.pdf"), "changed!");
         File.SetLastWriteTimeUtc(Path.Combine(source, "a.pdf"), DateTime.UtcNow.AddMinutes(1));
         File.WriteAllText(Path.Combine(source, "c.docx"), "third");
@@ -209,7 +215,9 @@ public class BackupTests
         Assert.Equal("changed!", File.ReadAllText(Path.Combine(target, "a.pdf")));
         Assert.Equal("third", File.ReadAllText(Path.Combine(target, "c.docx")));
         Assert.Equal("second", File.ReadAllText(Path.Combine(target, "Work", "b.txt")));
-        Assert.Single(Directory.GetFiles(target, "a*")); // replaced, not "a (1).pdf"
+        var previous = Assert.Single(Directory.GetFiles(target, "a (before *).pdf"));
+        Assert.Equal("first", File.ReadAllText(previous));
+        Assert.Equal(2, Directory.GetFiles(target, "a*").Length);
 
         var plan = phone.Node.Settings.Current.Backups.Single();
         Assert.NotNull(plan.LastCompletedAt);
@@ -228,9 +236,7 @@ public class BackupTests
         Directory.CreateDirectory(source);
         foreach (var name in new[] { "report.pdf", "Book.EPUB", "photo.jpg", "clip.mp4", "notes.txt" })
             File.WriteAllText(Path.Combine(source, name), name);
-        var plan = await SetUpAsync(phone, pc, source, BackupFileTypes.Custom);
-        plan.Sources[0].Extensions = "pdf, .epub";
-        phone.Node.Backup.Save(plan);
+        await SetUpAsync(phone, pc, source, new[] { BackupFileTypes.Pdf, BackupFileTypes.Ebooks });
 
         await BackUpAsync(phone, pc);
 
@@ -241,15 +247,98 @@ public class BackupTests
     [Fact]
     public void FileTypeFilters()
     {
-        BackupSource Of(string types) => new() { FileTypes = types };
+        BackupSource Of(params string[] types) => new() { Types = types.ToList() };
         Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Photos), "IMG_1.HEIC"));
         Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Photos), "clip.mp4"));
         Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Videos), "clip.MOV"));
-        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Documents), "contract.pdf"));
-        Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Documents), "song.mp3"));
-        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.All), "anything.bin"));
-        Assert.Equal(new HashSet<string> { ".pdf", ".epub", ".docx" }, BackupFileTypes.ParseExtensions("pdf, .EPUB *.docx ;"));
-        Assert.False(BackupFileTypes.Includes(new BackupSource { FileTypes = BackupFileTypes.Custom, Extensions = "" }, "a.pdf"));
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Documents.ToArray()), "contract.pdf"));
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Documents.ToArray()), "slides.PPTX"));
+        Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Documents.ToArray()), "song.mp3"));
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Word), "letter.docx"));
+        Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Word), "letter.pdf"));
+
+        // "Other": every file none of the listed kinds covers, and only those.
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Other), "backup.bin"));
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.Other), "README"));
+        Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Other), "a.pdf"));
+        Assert.False(BackupFileTypes.Includes(Of(BackupFileTypes.Other), "a.jpg"));
+        Assert.True(BackupFileTypes.Includes(Of(BackupFileTypes.All.ToArray()), "anything.xyz"));
+        Assert.False(BackupFileTypes.Includes(Of(), "a.pdf"));
+        Assert.Equal(BackupFileTypes.Other, BackupFileTypes.Kinds[^1].Id);
+    }
+
+    [Fact]
+    public void PlansSavedBeforeTheCheckboxesKeepTheirChoice()
+    {
+        var settings = new Settings.AppSettings
+        {
+            Backups =
+            {
+                new BackupPlan
+                {
+                    TargetId = "pc",
+                    TargetFingerprint = "ab12",
+                    Sources =
+                    {
+                        new BackupSource { Address = "/a", FileTypes = "documents" },
+                        new BackupSource { Address = "/b", FileTypes = "custom", Extensions = "pdf, .EPUB, xyz" },
+                        new BackupSource { Address = "/c" },
+                        new BackupSource { Kind = BackupSourceKinds.Photos },
+                    },
+                },
+            },
+        };
+        settings.Normalize();
+        var sources = settings.Backups[0].Sources;
+        Assert.Equal(BackupFileTypes.Documents, sources[0].Types);
+        Assert.Equal(new[] { BackupFileTypes.Pdf, BackupFileTypes.Ebooks, BackupFileTypes.Other }, sources[1].Types);
+        Assert.Equal(BackupFileTypes.All, sources[2].Types);
+        Assert.Null(sources[0].FileTypes);
+        Assert.Equal(new[] { BackupFileTypes.Photos }, sources[3].EffectiveTypes());
+    }
+
+    [Fact]
+    public void WithoutFolderNamesFilesAreSortedByKind()
+    {
+        using var dir = new TempDir();
+        var folder = dir.Combine("Download");
+        foreach (var file in new[] { "Work/report.pdf", "Work/2026/slides.pptx", "Trip/IMG_9.jpg", "song.mp3", "app.apk", "Trip/clip.mp4", "x/report.pdf" })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(folder, file))!);
+            File.WriteAllText(Path.Combine(folder, file), file); // the two report.pdf differ
+        }
+
+        var now = DateTime.UtcNow;
+        var camera = new BackupItem("DCIM/Camera/IMG_1.jpg", 5, now, "content://1", () => new MemoryStream(new byte[5]));
+        var plan = new BackupPlan
+        {
+            Sources =
+            {
+                new BackupSource { Kind = BackupSourceKinds.Photos, Name = "Photos" },
+                new BackupSource { Kind = BackupSourceKinds.Folder, Address = folder, Name = "Download", Types = BackupFileTypes.All.ToList() },
+            },
+        };
+        var platform = new FakeSources(camera, new BackupItem("Screenshots/IMG_1.jpg", 7, now, "content://2", () => new MemoryStream(new byte[7])),
+            new BackupItem("DCIM/Copy/IMG_1.jpg", 5, now, "content://3", () => new MemoryStream(new byte[5]))); // the same photo again
+
+        var manifest = BackupManifest.Build(plan, platform, null, CancellationToken.None);
+        var paths = manifest.Entries.Select(e => e.RelativePath).OrderBy(p => p, StringComparer.Ordinal).ToList();
+
+        // One folder per kind, no folders from the phone; two different files with one name both kept, apart.
+        Assert.Equal(new[] { "Documents", "Music", "Other files", "Photos", "Videos" }, manifest.RootNames.OrderBy(r => r, StringComparer.Ordinal));
+        Assert.All(paths, p => Assert.Equal(2, p.Split('/').Length));
+        Assert.Contains("Documents/report.pdf", paths);
+        Assert.Single(paths, p => p.StartsWith("Documents/report (", StringComparison.Ordinal));
+        Assert.Contains("Documents/slides.pptx", paths);
+        Assert.Contains("Music/song.mp3", paths);
+        Assert.Contains("Other files/app.apk", paths);
+        Assert.Contains("Videos/clip.mp4", paths);
+        Assert.Equal(3, paths.Count(p => p.StartsWith("Photos/IMG_", StringComparison.Ordinal))); // IMG_1 twice (different), IMG_9
+        Assert.Contains("Photos/IMG_1.jpg", paths);
+
+        // The same names every time (a second backup finds them all there).
+        var again = BackupManifest.Build(plan, platform, null, CancellationToken.None).Entries.Select(e => e.RelativePath).OrderBy(p => p, StringComparer.Ordinal);
+        Assert.Equal(paths, again);
     }
 
     [Fact]
@@ -375,6 +464,7 @@ public class BackupTests
         using var dir = new TempDir();
         var plan = new BackupPlan
         {
+            KeepFolderNames = true,
             Sources =
             {
                 new BackupSource { Kind = BackupSourceKinds.Photos, Name = "Photos" },

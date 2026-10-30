@@ -132,9 +132,13 @@ encrypted by Beam (plain HTTP on the LAN).
   stores a `BackupPlan` pinned to that certificate. The computer stores a `BackupPartner` (the phone's certificate
   fingerprint and its own folder under `EffectiveBackupFolder`). Setup over a direct address is refused.
 - **Runs:** the phone offers everything its sources list (`BackupManifest.Build`: the media library through
-  `IBackupSources` on Android, folders through `IExternalFiles` or the file system, filtered by type) as an ordinary
-  transfer with `OfferMessage.Backup` set. The receiver takes it without asking only from a partner's certificate,
-  into that partner's folder; same size and time (±2 s) is skipped, anything else replaced; nothing is deleted. A
+  `IBackupSources` on Android, folders through `IExternalFiles` or the file system, filtered by the ticked
+  `BackupFileTypes` kinds, "other" being everything no kind covers). Paths keep the phone's folders under the source's
+  name with `BackupPlan.KeepFolderNames`; otherwise (the default) each file goes into its kind's folder (Photos,
+  Videos, Documents, Music, Archives, Other files), different files with one name kept apart by a tag from their phone
+  path, the same on every run. It goes as an ordinary transfer with `OfferMessage.Backup` set. The receiver takes it
+  without asking only from a partner's certificate, into that partner's folder; same size and time (±2 s) is skipped,
+  anything else replaces the copy there after moving it aside as "name (before date).ext"; nothing is deleted. A
   non-partner gets `not_backup_partner`, a backup arriving over a direct address is declined.
 - **When:** the computer appearing in discovery (home again), every hour while it stays, "Back up now", and on
   Android a `JobScheduler` job (`BackupJobService`, every 15 minutes on an unmetered network) that starts the node

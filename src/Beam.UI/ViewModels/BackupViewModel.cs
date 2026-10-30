@@ -13,10 +13,121 @@ using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels;
 
-/// <summary>A choice of which files of a folder are backed up.</summary>
-public sealed record FileTypeOption(string Value, string Label)
+/// <summary>One kind of file a folder backup can take (a checkbox); "Documents" ticks or clears all of its kinds.</summary>
+public sealed class FileKindViewModel : ObservableObject
 {
-    public override string ToString() => Label;
+    private readonly BackupSourceViewModel _owner;
+    private readonly IReadOnlyList<string> _kinds;
+
+    public FileKindViewModel(BackupSourceViewModel owner, string label, string details, IReadOnlyList<string> kinds, bool isGroup = false, bool isChild = false)
+    {
+        _owner = owner;
+        Label = label;
+        Details = details;
+        _kinds = kinds;
+        IsGroup = isGroup;
+        IsChild = isChild;
+    }
+
+    public string Label { get; }
+
+    /// <summary>Its usual extensions ("DOC, DOCX, ODT…").</summary>
+    public string Details { get; }
+
+    public bool HasDetails => Details.Length > 0;
+
+    public bool IsGroup { get; }
+
+    /// <summary>One of the documents' kinds: shown indented under "Documents".</summary>
+    public bool IsChild { get; }
+
+    /// <summary>Ticked; for "Documents", null when only some of its kinds are.</summary>
+    public bool? IsChecked
+    {
+        get
+        {
+            var ticked = _kinds.Count(_owner.Has);
+            return ticked == _kinds.Count ? true : ticked == 0 ? false : null;
+        }
+        set => _owner.Set(_kinds, value == true);
+    }
+
+    internal void Refresh() => OnPropertyChanged(nameof(IsChecked));
+}
+
+/// <summary>On the phone: one thing that is backed up (the photos, the videos, or a folder and its kinds of files).</summary>
+public sealed class BackupSourceViewModel : ObservableObject
+{
+    private readonly Action _changed;
+
+    public BackupSourceViewModel(BackupSource source, Action changed, Action<BackupSourceViewModel> remove)
+    {
+        Source = source;
+        _changed = changed;
+        RemoveCommand = new RelayCommand(() => remove(this));
+        if (!IsFolder) return;
+        Source.Types ??= Source.EffectiveTypes().ToList();
+        string Of(string id) => Examples(BackupFileTypes.Kinds.First(k => k.Id == id).Extensions);
+        FileKinds = new[]
+        {
+            new FileKindViewModel(this, L.T("Photos"), Of(BackupFileTypes.Photos), new[] { BackupFileTypes.Photos }),
+            new FileKindViewModel(this, L.T("Videos"), Of(BackupFileTypes.Videos), new[] { BackupFileTypes.Videos }),
+            new FileKindViewModel(this, L.T("Documents"), "", BackupFileTypes.Documents, isGroup: true),
+            new FileKindViewModel(this, "PDF", "", new[] { BackupFileTypes.Pdf }, isChild: true),
+            new FileKindViewModel(this, "Word", Of(BackupFileTypes.Word), new[] { BackupFileTypes.Word }, isChild: true),
+            new FileKindViewModel(this, "Excel", Of(BackupFileTypes.Excel), new[] { BackupFileTypes.Excel }, isChild: true),
+            new FileKindViewModel(this, "PowerPoint", Of(BackupFileTypes.PowerPoint), new[] { BackupFileTypes.PowerPoint }, isChild: true),
+            new FileKindViewModel(this, L.T("Text"), Of(BackupFileTypes.Text), new[] { BackupFileTypes.Text }, isChild: true),
+            new FileKindViewModel(this, L.T("E-books"), Of(BackupFileTypes.Ebooks), new[] { BackupFileTypes.Ebooks }, isChild: true),
+            new FileKindViewModel(this, L.T("Music"), Of(BackupFileTypes.Music), new[] { BackupFileTypes.Music }),
+            new FileKindViewModel(this, L.T("Archives"), Of(BackupFileTypes.Archives), new[] { BackupFileTypes.Archives }),
+            new FileKindViewModel(this, L.T("Other"), L.T("Every other kind of file"), new[] { BackupFileTypes.Other }),
+        };
+    }
+
+    public BackupSource Source { get; }
+
+    public string Title => Source.Kind switch
+    {
+        BackupSourceKinds.Photos => L.T("Photos"),
+        BackupSourceKinds.Videos => L.T("Videos"),
+        _ => Source.Name,
+    };
+
+    public string Details => Source.Kind switch
+    {
+        BackupSourceKinds.Photos => L.T("All photos on this phone"),
+        BackupSourceKinds.Videos => L.T("All videos on this phone"),
+        _ => L.T("Folder"),
+    };
+
+    public bool IsFolder => Source.Kind == BackupSourceKinds.Folder;
+
+    /// <summary>For a folder: a checkbox per kind of file, "Other" last.</summary>
+    public IReadOnlyList<FileKindViewModel> FileKinds { get; } = Array.Empty<FileKindViewModel>();
+
+    /// <summary>A folder with nothing ticked: nothing of it is backed up.</summary>
+    public bool HasNoKinds => IsFolder && Source.Types is { Count: 0 };
+
+    public RelayCommand RemoveCommand { get; }
+
+    internal bool Has(string kind) => Source.Types?.Contains(kind) == true;
+
+    internal void Set(IReadOnlyList<string> kinds, bool ticked)
+    {
+        var types = Source.Types ??= new List<string>();
+        var before = types.Count;
+        types.RemoveAll(kinds.Contains);
+        if (ticked) types.AddRange(kinds);
+        // Kept in the list's order, so the same choice always looks the same when saved.
+        Source.Types = BackupFileTypes.All.Where(types.Contains).ToList();
+        foreach (var kind in FileKinds) kind.Refresh();
+        OnPropertyChanged(nameof(HasNoKinds));
+        _changed();
+    }
+
+    private static string Examples(string[] extensions) =>
+        string.Join(", ", extensions.Take(4).Select(e => e.TrimStart('.').ToUpperInvariant())) + (extensions.Length > 4 ? "…" : "");
 }
 
 /// <summary>On the computer: a phone that backs up here.</summary>
@@ -38,69 +149,6 @@ public sealed class BackupPartnerViewModel
         : L.T("No backup yet · into {0}", Partner.Folder);
 
     public RelayCommand OpenCommand { get; }
-
-    public RelayCommand RemoveCommand { get; }
-}
-
-/// <summary>On the phone: one thing that is backed up (the photos, the videos, or a folder and its kinds of files).</summary>
-public sealed class BackupSourceViewModel : ObservableObject
-{
-    private readonly Action _changed;
-
-    public BackupSourceViewModel(BackupSource source, IReadOnlyList<FileTypeOption> fileTypes, Action changed, Action<BackupSourceViewModel> remove)
-    {
-        Source = source;
-        FileTypeOptions = fileTypes;
-        _changed = changed;
-        RemoveCommand = new RelayCommand(() => remove(this));
-    }
-
-    public BackupSource Source { get; }
-
-    public string Title => Source.Kind switch
-    {
-        BackupSourceKinds.Photos => L.T("Photos"),
-        BackupSourceKinds.Videos => L.T("Videos"),
-        _ => Source.Name,
-    };
-
-    public string Details => Source.Kind switch
-    {
-        BackupSourceKinds.Photos => L.T("All photos on this phone"),
-        BackupSourceKinds.Videos => L.T("All videos on this phone"),
-        _ => L.T("Folder"),
-    };
-
-    public bool IsFolder => Source.Kind == BackupSourceKinds.Folder;
-
-    public IReadOnlyList<FileTypeOption> FileTypeOptions { get; }
-
-    public FileTypeOption SelectedFileType
-    {
-        get => FileTypeOptions.FirstOrDefault(o => o.Value == Source.FileTypes) ?? FileTypeOptions[0];
-        set
-        {
-            if (value == null || value.Value == Source.FileTypes) return;
-            Source.FileTypes = value.Value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsCustom));
-            _changed();
-        }
-    }
-
-    public bool IsCustom => IsFolder && Source.FileTypes == BackupFileTypes.Custom;
-
-    public string Extensions
-    {
-        get => Source.Extensions ?? "";
-        set
-        {
-            if (value == Source.Extensions) return;
-            Source.Extensions = value;
-            OnPropertyChanged();
-            _changed();
-        }
-    }
 
     public RelayCommand RemoveCommand { get; }
 }
@@ -128,14 +176,6 @@ public sealed class BackupViewModel : ObservableObject
         _platform = platform;
         _ui = ui;
         _main = main;
-        FileTypeOptions = new[]
-        {
-            new FileTypeOption(BackupFileTypes.All, L.T("All files")),
-            new FileTypeOption(BackupFileTypes.Photos, L.T("Photos only")),
-            new FileTypeOption(BackupFileTypes.Videos, L.T("Videos only")),
-            new FileTypeOption(BackupFileTypes.Documents, L.T("Documents only (PDF, Word, Excel…)")),
-            new FileTypeOption(BackupFileTypes.Custom, L.T("Only these types…")),
-        };
 
         AddPhoneCommand = new AsyncCommand(AddPhoneAsync);
         ChangeFolderCommand = new AsyncCommand(ChangeFolderAsync);
@@ -172,8 +212,6 @@ public sealed class BackupViewModel : ObservableObject
 
     public bool IsPhone => _platform.IsPhone && _platform.SupportsBackup;
 
-    public IReadOnlyList<FileTypeOption> FileTypeOptions { get; }
-
     // ------------------------------------------------------------ the computer
 
     public ObservableCollection<BackupPartnerViewModel> Partners { get; } = new();
@@ -209,6 +247,18 @@ public sealed class BackupViewModel : ObservableObject
         {
             if (_plan == null || _plan.Automatic == value) return;
             _plan.Automatic = value;
+            SaveAsync().Forget("Saving the backup choices");
+        }
+    }
+
+    /// <summary>On the computer: the phone's folders kept; off, one folder per kind of file (Photos, Videos, Documents…).</summary>
+    public bool KeepFolderNames
+    {
+        get => _plan?.KeepFolderNames ?? false;
+        set
+        {
+            if (_plan == null || _plan.KeepFolderNames == value) return;
+            _plan.KeepFolderNames = value;
             SaveAsync().Forget("Saving the backup choices");
         }
     }
@@ -444,13 +494,19 @@ public sealed class BackupViewModel : ObservableObject
         Reload();
     }
 
-    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.FileTypes}|{s.Extensions}";
+    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{string.Join(",", s.EffectiveTypes())}";
 
+    /// <summary>Backs up more than before: a new source, a newly ticked kind, or automatic backups switched on.</summary>
     private static bool Widens(BackupPlan stored, BackupPlan plan)
     {
         if (plan.Automatic && !stored.Automatic) return true;
-        var before = stored.Sources.Select(SourceKey).ToHashSet();
-        return plan.Sources.Any(s => !before.Contains(SourceKey(s)));
+        foreach (var source in plan.Sources)
+        {
+            var before = stored.Sources.FirstOrDefault(s => s.Kind == source.Kind && s.Address == source.Address);
+            if (before == null || source.EffectiveTypes().Except(before.EffectiveTypes()).Any()) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -555,7 +611,7 @@ public sealed class BackupViewModel : ObservableObject
         if (!Sources.Select(s => SourceKey(s.Source)).SequenceEqual(sources.Select(SourceKey)))
         {
             Sources.Clear();
-            foreach (var source in sources) Sources.Add(new BackupSourceViewModel(source, FileTypeOptions, OnSourcesEdited, RemoveSource));
+            foreach (var source in sources) Sources.Add(new BackupSourceViewModel(source, OnSourcesEdited, RemoveSource));
             OnPropertyChanged(nameof(HasSources));
         }
         else
@@ -563,10 +619,10 @@ public sealed class BackupViewModel : ObservableObject
             // Same choices: keep the rows (and the text being typed), pointing at the fresh copy.
             for (var i = 0; i < Sources.Count; i++)
                 if (!ReferenceEquals(Sources[i].Source, sources[i]))
-                    Sources[i] = new BackupSourceViewModel(sources[i], FileTypeOptions, OnSourcesEdited, RemoveSource);
+                    Sources[i] = new BackupSourceViewModel(sources[i], OnSourcesEdited, RemoveSource);
         }
 
-        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic) })
+        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) })
             OnPropertyChanged(name);
         AddPhotosCommand.RaiseCanExecuteChanged();
         AddVideosCommand.RaiseCanExecuteChanged();
