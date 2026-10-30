@@ -68,6 +68,15 @@ public class BackupUiTests
         backup.AddFolderCommand.Execute(null);
         await UiHarness.WaitForAsync(() => backup.Sources.Count == 3, "folder added");
         var kinds = backup.Sources[2].FileKinds;
+        Assert.False(backup.Sources[2].ShowsKinds); // closed: a summary and a button
+        Assert.Equal("All file types", backup.Sources[2].KindsSummary);
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Choose file types", Buttons(phone));
+        Assert.DoesNotContain("E-books", phone.VisibleTexts());
+        backup.Sources[2].ToggleKindsCommand.Execute(null);
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("E-books", phone.VisibleTexts());
+        Assert.Contains("Hide file types", Buttons(phone));
         Assert.Equal(new[] { "Photos", "Videos", "Documents", "PDF", "Word", "Excel", "PowerPoint", "Text", "E-books", "Music", "Archives", "Other" },
             kinds.Select(k => k.Label));
         Assert.All(kinds, k => Assert.True(k.IsChecked));
@@ -77,6 +86,7 @@ public class BackupUiTests
         Assert.True(backup.Sources[2].HasNoKinds);
         foreach (var label in new[] { "PDF", "Word", "PowerPoint" }) KindViewModel(kinds, label).IsChecked = true;
         Assert.Null(KindViewModel(kinds, "Documents").IsChecked); // some documents
+        Assert.Equal("File types: PDF, Word, PowerPoint", backup.Sources[2].KindsSummary);
         await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.ElementAtOrDefault(2)?.Types?.Count == 3, "saved", 5000);
         Assert.Equal(new[] { BackupFileTypes.Pdf, BackupFileTypes.Word, BackupFileTypes.PowerPoint },
             phone.Node.Settings.Current.Backups.Single().Sources[2].Types);
@@ -94,6 +104,11 @@ public class BackupUiTests
         Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -200, 10, 700));
         await UiHarness.PumpAsync(100);
         phone.Screenshot("backup-phone");
+        backup.Sources[2].ToggleKindsCommand.Execute(null); // closed again: the summary
+        await UiHarness.PumpAsync(100);
+        Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -200, 10, 700));
+        await UiHarness.PumpAsync(100);
+        phone.Screenshot("backup-phone-closed");
 
         // Stopping asks first, and keeps the computer's copy.
         backup.StopCommand.Execute(null);

@@ -130,8 +130,14 @@
                         </StackPanel>
                         <Button Grid.Column="1" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
                       </Grid>
-                      <!-- A folder: which kinds of its files (a checkbox each, the documents under "Documents", "Other" last) -->
-                      <ItemsControl ItemsSource="{Binding FileKinds}" IsVisible="{Binding IsFolder}" Margin="4,0,0,0">
+                      <!-- A folder: which kinds of its files. Closed: what is chosen, and a button to change it. Open: a
+                           checkbox each (the documents under "Documents", "Other" last), indented under the folder. -->
+                      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsFolder}" Margin="16,0,0,0">
+                        <TextBlock Classes="caption" Text="{Binding KindsSummary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="link" Content="{Binding KindsButtonText}" Command="{Binding ToggleKindsCommand}"
+                                VerticalAlignment="Center" Margin="12,0,0,0" />
+                      </Grid>
+                      <ItemsControl ItemsSource="{Binding FileKinds}" IsVisible="{Binding ShowsKinds}" Margin="16,0,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:FileKindViewModel">
                             <CheckBox IsChecked="{Binding IsChecked}" Classes.child="{Binding IsChild}" MinHeight="32">
@@ -144,7 +150,7 @@
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
-                      <TextBlock Classes="caption error" TextWrapping="Wrap" IsVisible="{Binding HasNoKinds}"
+                      <TextBlock Classes="caption error" TextWrapping="Wrap" IsVisible="{Binding HasNoKinds}" Margin="16,0,0,0"
                                  Text="{l:T 'Nothing is backed up from this folder. Tick at least one kind of file.'}" />
                     </StackPanel>
                   </DataTemplate>

@@ -83,10 +83,9 @@ public sealed partial class DirectManager
 
     /// <summary>
     /// What this device announces: its roles, that it speaks sender-hosted sessions, and (computers) whether joining it
-    /// keeps internet. None when senders may not connect to it directly.
+    /// keeps internet. None when it can't make direct links.
     /// </summary>
-    public DirectRoles AnnouncedRoles =>
-        Roles == DirectRoles.None || !_settings.Current.AllowDirectSenders ? DirectRoles.None : Roles | DirectRoles.SenderHosted | Traits();
+    public DirectRoles AnnouncedRoles => Roles == DirectRoles.None ? DirectRoles.None : Roles | DirectRoles.SenderHosted | Traits();
 
     /// <summary>This device's address on the network it hosts (replaceable in tests).</summary>
     internal Func<IPAddress?> OwnHostedAddress { get; set; } = DirectAddresses.OwnHostedAddress;
@@ -142,9 +141,6 @@ public sealed partial class DirectManager
         return _discovery.Find(code.DeviceId) ?? device;
     }
 
-    /// <summary>"Let senders connect directly" was turned off: this device leaves what it joined or hosts for others.</summary>
-    internal void OnDirectSendersNotAllowed() =>
-        EndIncomingSessions(L.T("{0} no longer lets senders connect directly.", _settings.Current.DeviceName));
     private DirectLinkException NotAllowed() =>
         new(L.T("{0} doesn't let senders connect directly.", _settings.Current.DeviceName), declined: true);
 

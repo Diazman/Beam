@@ -7,9 +7,9 @@
   <ScrollViewer>
     <StackPanel Classes="page" Spacing="24" MaxWidth="860" HorizontalAlignment="Left">
       <StackPanel Spacing="4">
-        <TextBlock Classes="h1" Text="{l:T 'Phone'}" />
+        <TextBlock Classes="h1" Text="{l:T 'Browser'}" />
         <TextBlock Classes="secondary" TextWrapping="Wrap"
-                   Text="{l:T 'Send files between this computer and any phone\'s web browser. No app needed.'}" />
+                   Text="{l:T 'Send files between this computer and any phone, tablet or computer through its web browser. No app needed.'}" />
       </StackPanel>
 
       <Border Classes="notice error" IsVisible="{Binding HasProblem}">

@@ -28,8 +28,8 @@
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Receive'}"
                        Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Phone'}"
-                       Tag="{StaticResource IconPhone}" IsChecked="{Binding IsPhonePage}" />
+          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Browser'}"
+                       Tag="{StaticResource IconGlobe}" IsChecked="{Binding IsPhonePage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'History'}"
                        Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
           <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Settings'}"

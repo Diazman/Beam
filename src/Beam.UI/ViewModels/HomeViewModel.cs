@@ -689,7 +689,7 @@ public sealed class HomeViewModel : ObservableObject
         if (Beam.Core.Direct.PairingCode.TryParse(scanned) is not { } code)
         {
             await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("That's not a Beam code"),
-                L.T("On the computer, open Beam and go to Phone, then scan the code shown there."), L.T("OK"), ""));
+                L.T("On the computer, open Beam and go to Receive, choose “Can't find each other? Show a code”, then scan the code shown there."), L.T("OK"), ""));
             return;
         }
 

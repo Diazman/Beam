@@ -36,7 +36,7 @@ accounts, cloud, IP addresses, or network shares. Beam runs on Windows, Android 
   phone online meanwhile.
 - **Phone apps** for Android and iPhone/iPad, with the same screens as on Windows. See
   [docs/MOBILE-APPS.md](docs/MOBILE-APPS.md).
-- **Phones without an app**: the Phone page shows a QR code; any iPhone or Android phone that scans it gets a page to
+- **Phones without an app**: the Browser page shows a QR code; any iPhone or Android phone that scans it gets a page to
   send files to the PC (with approval) and download files the PC shares. LAN only, secret link, auto-off after 30 minutes.
 - **Speaks your language**: English, Turkish, Russian and Uzbek (follows Windows, or pick one in Settings); the
   phone page follows the phone's language. See [docs/TRANSLATING.md](docs/TRANSLATING.md).

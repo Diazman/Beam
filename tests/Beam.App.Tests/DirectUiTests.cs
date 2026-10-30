@@ -147,15 +147,17 @@ public class DirectUiTests
         await app.InitializeAsync();
         var receive = app.ViewModel.Receive;
 
-        // Receive open with "Let senders connect directly": visible, and nothing started.
+        // Receive open: visible, and nothing started. Direct senders are always welcome (unpaired ones still need a yes).
         app.ViewModel.IsReceivePage = true;
         await UiHarness.PumpAsync(500);
         Assert.True(app.Node.Nearby.IsReceiving);
-        Assert.True(receive.AllowDirect);
         Assert.False(receive.NetworkOn);
         Assert.Equal(0, air.Hosted);
         Assert.Contains("Ready to receive", app.VisibleTexts());
-        Assert.Contains("Let senders connect directly", app.VisibleTexts());
+        Assert.DoesNotContain("Let senders connect directly", app.VisibleTexts());
+        Assert.Contains("Not showing up on the other device?", app.VisibleTexts());
+        Assert.Contains(receive.LocalAddresses, app.VisibleTexts());
+        Assert.NotEqual(DirectRoles.None, app.Node.Direct.AnnouncedRoles);
         Assert.Contains("Devices nearby can find it over Bluetooth, even without a shared Wi-Fi.", app.VisibleTexts());
         Assert.Contains("Senders that send directly start their own Wi-Fi when they send, and this device joins it.", app.VisibleTexts());
         Assert.DoesNotContain("Sending from a phone? On the phone, forget saved Wi-Fi networks nearby that have internet.", app.VisibleTexts());
@@ -165,12 +167,6 @@ public class DirectUiTests
         receive.ToggleCodeCommand.Execute(null);
         await UiHarness.PumpAsync(100);
         Assert.NotNull(receive.Code);
-
-        // Turned off: senders aren't offered a direct connection.
-        receive.AllowDirect = false;
-        await UiHarness.PumpAsync(100);
-        Assert.Equal(DirectRoles.None, app.Node.Direct.AnnouncedRoles);
-        Assert.Contains("Senders connect over the shared Wi-Fi.", app.VisibleTexts());
         Assert.Equal(0, air.Hosted);
     }
 

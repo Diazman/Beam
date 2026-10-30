@@ -171,7 +171,6 @@ public sealed partial class DirectManager
         if (_endedSessions.ContainsKey(sessionId!))
             return Refuse($"a proposal from {senderName} for session {Short(sessionId)}, which already ended (replayed?)", L.T("This direct session has already ended."));
         if (_link == null || !CanJoinAny) throw new DirectLinkException(L.T("This device can't connect directly."));
-        if (!_settings.Current.AllowDirectSenders) throw NotAllowed();
 
         // The same sender setting a lost link up again on this device's network: its old session there gives way (it
         // may not have heard that the link dropped). Only for a certificate proven over TLS, not one claimed over Bluetooth.

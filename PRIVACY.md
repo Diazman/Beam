@@ -87,9 +87,9 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 - **Stopping** – "Stop backup" on the phone, or "Remove" next to the phone on the computer. What was backed up
   stays on the computer until you delete it.
 
-## Phones without the app (Phone page in a web browser)
+## Devices without the app (Browser page)
 
-On Windows, "Connect with the browser" on the Phone page runs a small web page on your local network that a phone
+On Windows, "Connect with the browser" on the Browser page runs a small web page on your local network that a phone
 can open by scanning the code Beam shows. The link contains a random secret that changes every time, and the page
 stops after 30 minutes without use. Files a phone sends are saved only if you accept them. Beam sees the phone's
 local network address and the type of phone (from its browser) to show who is connecting; neither is stored or

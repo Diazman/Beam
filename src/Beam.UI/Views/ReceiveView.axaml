@@ -50,16 +50,14 @@
         </Grid>
       </StackPanel>
 
-      <!-- Let senders connect directly -->
-      <Border Classes="card" Padding="20" IsVisible="{Binding CanConnectDirectly}">
-        <Grid ColumnDefinitions="*,Auto">
-          <StackPanel Spacing="4">
-            <TextBlock Classes="h3" Text="{l:T 'Let senders connect directly'}" TextWrapping="Wrap" />
-            <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'A sender that sends directly starts its own Wi-Fi when it sends, and this device joins it for the transfer (a phone may ask you to tap Connect). Opening Receive starts nothing. Faster, and no router needed.'}" />
-          </StackPanel>
-          <ToggleSwitch Grid.Column="1" IsChecked="{Binding AllowDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
-        </Grid>
+      <!-- When the sender's Beam can't find this device on the same Wi-Fi -->
+      <Border Classes="card" Padding="20">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="h3" Text="{l:T 'Not showing up on the other device?'}" TextWrapping="Wrap" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="{l:T 'On the other device, choose “Connect by address” on Send and type this address:'}" />
+          <SelectableTextBlock Text="{Binding LocalAddresses}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0" />
+        </StackPanel>
       </Border>
 
       <!-- A phone on a network without internet may switch away from it -->

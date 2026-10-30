@@ -15,9 +15,9 @@ namespace Beam.App.ViewModels;
 
 /// <summary>
 /// The Receive page. While it is open this device is ready to receive: senders on the same Wi-Fi see it as usual and
-/// senders without a shared network find it over Bluetooth. Opening it starts no network: with "Let senders connect
-/// directly", a sender that sends directly starts its own network when it sends, and this device joins it (with this
-/// device's approval when the sender isn't paired).
+/// senders without a shared network find it over Bluetooth. Opening it starts no network: a sender that sends directly
+/// starts its own network when it sends, and this device joins it (with this device's approval when the sender isn't
+/// paired).
 /// </summary>
 public sealed class ReceiveViewModel : ObservableObject
 {
@@ -52,25 +52,19 @@ public sealed class ReceiveViewModel : ObservableObject
         ? L.T("Open Send in Beam on the other device and pick this phone.")
         : L.T("Open Send in Beam on the other device and pick this computer.");
 
-    /// <summary>Let senders connect directly: this device joins a sender's direct network when it sends.</summary>
-    public bool AllowDirect
-    {
-        get => _node.Settings.Current.AllowDirectSenders;
-        set => SetAllowDirectAsync(value).Forget("Changing direct connections");
-    }
-
     public bool CanConnectDirectly => _node.Direct.IsSupported;
 
-    private async Task SetAllowDirectAsync(bool value)
+    /// <summary>
+    /// This device's address on the Wi-Fi: when the sender's Beam can't find it, the sender types it there ("Connect by
+    /// address" on Send).
+    /// </summary>
+    public string LocalAddresses
     {
-        if (value && _main.IsPhone && !await _main.EnsurePermissionAsync(AppPermission.NearbyDevices))
+        get
         {
-            OnPropertyChanged(nameof(AllowDirect));
-            return;
+            var addresses = _node.GetLocalAddresses();
+            return addresses.Count == 0 ? L.T("Not connected to a network") : string.Join(", ", addresses);
         }
-
-        _node.Settings.Update(s => s.AllowDirectSenders = value);
-        Refresh();
     }
 
     // ---- Bluetooth ----
@@ -103,9 +97,7 @@ public sealed class ReceiveViewModel : ObservableObject
         get
         {
             if (!CanConnectDirectly) return L.T("This device can't connect directly: senders need the same Wi-Fi.");
-            return AllowDirect
-                ? L.T("Senders that send directly start their own Wi-Fi when they send, and this device joins it.")
-                : L.T("Senders connect over the shared Wi-Fi.");
+            return L.T("Senders that send directly start their own Wi-Fi when they send, and this device joins it.");
         }
     }
 
@@ -155,7 +147,7 @@ public sealed class ReceiveViewModel : ObservableObject
         if (_shown && _showsCode) Code = QrCode.Create(_node.CreatePairingCode().AppendTo(null)).Geometry;
         foreach (var name in new[]
                  {
-                     nameof(DeviceName), nameof(VerificationCode), nameof(AllowDirect), nameof(CanConnectDirectly),
+                     nameof(DeviceName), nameof(VerificationCode), nameof(LocalAddresses), nameof(CanConnectDirectly),
                      nameof(BluetoothNeedsPermission), nameof(BluetoothText), nameof(NetworkOn), nameof(NetworkText), nameof(ShowsPhoneWarning),
                      nameof(ShowsCode), nameof(CodeButtonText),
                  })

@@ -4,7 +4,7 @@
 
 | Project | What | Framework |
 |---|---|---|
-| `Beam.Core` | The engine: identity, discovery, transfers, resume, Direct mode, Bluetooth, the Phone page, settings, history. No UI. | .NET 8 |
+| `Beam.Core` | The engine: identity, discovery, transfers, resume, Direct mode, Bluetooth, the Browser page, settings, history. No UI. | .NET 8 |
 | `Beam.UI` | The screens shared by every app (Avalonia 11, MVVM with compiled bindings): desktop window and phone layout, dialogs, translations. | .NET 8 |
 | `Beam.App` | Windows host (also runs on Linux for development and tests): tray, toasts, firewall, Windows Wi-Fi Direct / Mobile hotspot, Bluetooth, Store integration. | .NET 8, Windows SDK |
 | `Beam.Android` | Android host: Wi-Fi Direct groups and the phone's hotspot, Bluetooth LE, notifications, the transfer foreground service, Share → Beam. | .NET 10 (android) |
@@ -25,7 +25,7 @@ Host app (Windows / Android / iOS)            Beam.UI                          B
                                                                        │  │   ResumeStore                           │
                                                                        │  ├─ DirectManager (Direct sessions)       │
                                                                        │  ├─ NearbyService (Bluetooth LE)          │
-                                                                       │  └─ PhoneLinkServer (Phone page, HTTP)    │
+                                                                       │  └─ PhoneLinkServer (Browser page, HTTP)  │
                                                                        └──────────────────────────────────────────┘
 ```
 
@@ -115,7 +115,7 @@ keys from ECDH + HKDF, AES-256-CBC with HMAC-SHA256) that returns the receiver's
 passphrase). Direct session messages then travel sealed over that connection. A device seen before must present
 the same certificate.
 
-## Phone page
+## Browser page
 
 `PhoneLinkServer` serves a small web page (`phone.html`) on the local network behind a random link, for phones
 without the app: uploads to the PC (with approval) and downloads of what the PC shares, folders as streamed ZIP

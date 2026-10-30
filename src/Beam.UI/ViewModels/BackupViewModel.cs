@@ -65,6 +65,12 @@ public sealed class BackupSourceViewModel : ObservableObject
         Source = source;
         _changed = changed;
         RemoveCommand = new RelayCommand(() => remove(this));
+        ToggleKindsCommand = new RelayCommand(() =>
+        {
+            ShowsKinds = !ShowsKinds;
+            OnPropertyChanged(nameof(ShowsKinds));
+            OnPropertyChanged(nameof(KindsButtonText));
+        });
         if (!IsFolder) return;
         Source.Types ??= Source.EffectiveTypes().ToList();
         string Of(string id) => Examples(BackupFileTypes.Kinds.First(k => k.Id == id).Extensions);
@@ -106,6 +112,32 @@ public sealed class BackupSourceViewModel : ObservableObject
     /// <summary>For a folder: a checkbox per kind of file, "Other" last.</summary>
     public IReadOnlyList<FileKindViewModel> FileKinds { get; } = Array.Empty<FileKindViewModel>();
 
+    /// <summary>The checkboxes are open (they start closed: the summary says what is chosen).</summary>
+    public bool ShowsKinds { get; private set; }
+
+    public string KindsButtonText => ShowsKinds ? L.T("Hide file types") : L.T("Choose file types");
+
+    public RelayCommand ToggleKindsCommand { get; }
+
+    /// <summary>"All file types", "File types: Documents, Music", "File types: PDF, Word" or "No file types".</summary>
+    public string KindsSummary
+    {
+        get
+        {
+            var types = Source.EffectiveTypes();
+            if (types.Count == 0) return L.T("No file types");
+            if (BackupFileTypes.All.All(types.Contains)) return L.T("All file types");
+            var names = new List<string>();
+            foreach (var kind in FileKinds.Where(k => !k.IsChild))
+            {
+                if (kind.IsChecked == true) names.Add(kind.Label);
+                else if (kind.IsChecked == null) names.AddRange(FileKinds.Where(c => c.IsChild && c.IsChecked == true).Select(c => c.Label));
+            }
+
+            return L.T("File types: {0}", string.Join(", ", names));
+        }
+    }
+
     /// <summary>A folder with nothing ticked: nothing of it is backed up.</summary>
     public bool HasNoKinds => IsFolder && Source.Types is { Count: 0 };
 
@@ -123,6 +155,7 @@ public sealed class BackupSourceViewModel : ObservableObject
         Source.Types = BackupFileTypes.All.Where(types.Contains).ToList();
         foreach (var kind in FileKinds) kind.Refresh();
         OnPropertyChanged(nameof(HasNoKinds));
+        OnPropertyChanged(nameof(KindsSummary));
         _changed();
     }
 
@@ -610,16 +643,23 @@ public sealed class BackupViewModel : ObservableObject
         var sources = _plan?.Sources ?? new List<BackupSource>();
         if (!Sources.Select(s => SourceKey(s.Source)).SequenceEqual(sources.Select(SourceKey)))
         {
+            // Other choices: new rows, a folder's file types staying open if they were.
+            var open = Sources.Where(s => s.ShowsKinds).Select(s => s.Source.Address).ToHashSet();
             Sources.Clear();
-            foreach (var source in sources) Sources.Add(new BackupSourceViewModel(source, OnSourcesEdited, RemoveSource));
+            foreach (var source in sources)
+            {
+                var row = new BackupSourceViewModel(source, OnSourcesEdited, RemoveSource);
+                if (source.Address != null && open.Contains(source.Address)) row.ToggleKindsCommand.Execute(null);
+                Sources.Add(row);
+            }
+
             OnPropertyChanged(nameof(HasSources));
         }
         else
         {
-            // Same choices: keep the rows (and the text being typed), pointing at the fresh copy.
-            for (var i = 0; i < Sources.Count; i++)
-                if (!ReferenceEquals(Sources[i].Source, sources[i]))
-                    Sources[i] = new BackupSourceViewModel(sources[i], OnSourcesEdited, RemoveSource);
+            // Same choices (any other setting was saved): the rows stay as they are, open or closed, and the fresh
+            // copy uses their sources.
+            for (var i = 0; i < Sources.Count; i++) sources[i] = Sources[i].Source;
         }
 
         foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) })

@@ -12,7 +12,7 @@ updated October 29, 2026._
 | iPhone/iPad app | First version; installed by sideloading, not on the App Store yet |
 | Send files, folders and text; resume; history; QR pairing; trusted devices | Done, all platforms |
 | Direct mode (devices link over their own Wi-Fi, set up over Bluetooth) | Done: Windows ↔ Android, PC ↔ PC, iPhone joins a PC |
-| Phone page for phones without the app | Done (Windows) |
+| Browser page for devices without the app | Done (Windows) |
 | Right-click "Send with Beam", Share → Beam | Done |
 | Languages: English, Turkish, Russian, Uzbek | Done |
 | Rating prompt after the 3rd successful transfer | Done (Microsoft Store) |
@@ -24,7 +24,7 @@ updated October 29, 2026._
 |---|---|---|
 | 1 | Google Play release | Needs the fixed signing key ([ANDROID-SIGNING.md](ANDROID-SIGNING.md)) and an App Bundle (`-p:AndroidPackageFormat=aab`) |
 | 2 | App Store / TestFlight release | Needs the Apple Developer Program and signing in CI ([MOBILE-APPS.md](MOBILE-APPS.md)) |
-| 3 | "Get Beam" link on the Phone page | People without the app learn about it (growth feature G1) |
+| 3 | "Get Beam" link on the Browser page | People without the app learn about it (growth feature G1) |
 | 4 | Website | One page with downloads, the privacy policy, and support contact |
 
 ## Ideas (not started)
