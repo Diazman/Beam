@@ -162,6 +162,7 @@ public class DirectRecoveryTests
         session.Cancel();
         await Wait.ForFinishAsync(session, TimeSpan.FromSeconds(10)); // not after the recovery window
         Assert.Equal(TransferState.Cancelled, session.State);
+        Assert.Equal(TransferErrorKind.CancelledByUser, session.Error?.Kind); // not "connection lost": the cancel closed it
         await Wait.UntilAsync(() => pcLink.Hosting == null, because: "the network is let go once nothing uses it");
         Assert.Equal(1, air.Joined);
     }

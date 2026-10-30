@@ -128,8 +128,11 @@ internal sealed class OutgoingTransfer
                 }
             }
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        catch (Exception ex) when (token.IsCancellationRequested)
         {
+            // Cancelling closes the connection: a write that failed because of that (not only the cancellation itself)
+            // is the user's cancel, not a lost connection.
+            if (ex is not OperationCanceledException) Log.Info($"Transfer {_session.Id} to {PeerName}: cancelled ({ex.GetType().Name} on the closed connection)");
             Finish(TransferState.Cancelled, new TransferError(TransferErrorKind.CancelledByUser, L.T("You cancelled the transfer.")));
         }
         catch (Exception ex)
