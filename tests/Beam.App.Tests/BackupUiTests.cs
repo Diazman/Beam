@@ -56,7 +56,8 @@ public class BackupUiTests
         Assert.Equal("Diaz's Galaxy", pc.ViewModel.Settings.Backup.Partners.Single().Name);
 
         var backup = phone.ViewModel.Settings.Backup;
-        await UiHarness.WaitForAsync(() => backup.HasPlan, "plan shown");
+        // The plan appears first, its starting choices a moment later (saved after Android's permission).
+        await UiHarness.WaitForAsync(() => backup.HasPlan && backup.BackUpPhotos, "plan shown");
         Assert.Equal("Backing up to Diaz's PC", backup.TargetText);
         Assert.True(backup.BackUpPhotos); // whole phone: photos and videos to start with
         Assert.True(backup.BackUpVideos);
