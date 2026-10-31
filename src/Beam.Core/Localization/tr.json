@@ -594,9 +594,6 @@
   "Back up automatically": "Otomatik yedekle",
   "Whenever this phone and the computer are on the same Wi-Fi. Mobile data is never used.": "Bu telefon ve bilgisayar aynı Wi-Fi ağında olduğunda. Mobil veri asla kullanılmaz.",
   "What is backed up": "Neler yedekleniyor",
-  "Nothing yet. Add photos, videos or a folder.": "Henüz hiçbir şey yok. Fotoğraf, video veya klasör ekleyin.",
-  "Add photos": "Fotoğraf ekle",
-  "Add videos": "Video ekle",
   "Add a folder…": "Klasör ekle…",
   "Back up now": "Şimdi yedekle",
   "Files go only to this computer, encrypted, over your Wi-Fi. Nothing is deleted on the computer when you delete it here.": "Dosyalar yalnızca bu bilgisayara, şifrelenerek, Wi-Fi ağınız üzerinden gider. Burada sildiğiniz bir şey bilgisayarda silinmez.",
@@ -639,5 +636,16 @@
   "On the computer, open Beam and go to Receive, choose “Can't find each other? Show a code”, then scan the code shown there.": "Bilgisayarda Beam'i açıp Al'a gidin, “Birbirinizi bulamıyor musunuz? Kod göster”i seçin ve gösterilen kodu tarayın.",
   "Send files between this computer and any phone, tablet or computer through its web browser. No app needed.": "Bu bilgisayarla herhangi bir telefon, tablet veya bilgisayar arasında web tarayıcısı üzerinden dosya gönderin. Uygulama gerekmez.",
   "Not showing up on the other device?": "Diğer cihazda görünmüyor mu?",
-  "On the other device, choose “Connect by address” on Send and type this address:": "Diğer cihazda Gönder'deki “Adresle bağlan”ı seçin ve bu adresi yazın:"
+  "On the other device, choose “Connect by address” on Send and type this address:": "Diğer cihazda Gönder'deki “Adresle bağlan”ı seçin ve bu adresi yazın:",
+  "Beam needs “All files access” to back up documents. Switch Documents off and on again to allow it.": "Beam'in belgeleri yedeklemesi için “Tüm dosyalara erişim” gerekir. İzin vermek için Belgeler'i kapatıp yeniden açın.",
+  "Allow Beam to back up your music": "Beam'in müziklerinizi yedeklemesine izin verin",
+  "To back up your music to your computer, Beam needs to read it. It goes only to the computer you set up, over your Wi-Fi, encrypted. The phone will ask you to allow it.": "Müziklerinizi bilgisayarınıza yedeklemek için Beam'in onları okuması gerekir. Yalnızca kurduğunuz bilgisayara, Wi-Fi ağınız üzerinden, şifrelenerek gönderilirler. Telefon izin isteyecek.",
+  "Allow Beam to back up your documents": "Beam'in belgelerinizi yedeklemesine izin verin",
+  "To find every document on your phone (PDF, Word, Excel…), including Download, Android needs Beam to have “All files access”. On the next screen, turn on “Allow access to manage all files”. Beam reads documents only to back them up to your computer.": "Telefonunuzdaki tüm belgeleri (PDF, Word, Excel…) İndirilenler dahil bulabilmesi için Android, Beam'in “Tüm dosyalara erişim” iznine sahip olmasını ister. Sonraki ekranda “Tüm dosyaları yönetmek için erişime izin ver”i açın. Beam belgeleri yalnızca bilgisayarınıza yedeklemek için okur.",
+  "Every photo on this phone": "Bu telefondaki tüm fotoğraflar",
+  "Every video on this phone": "Bu telefondaki tüm videolar",
+  "Every song and audio file on this phone": "Bu telefondaki tüm şarkılar ve ses dosyaları",
+  "Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone": "Bu telefondaki tüm PDF, Word, Excel, PowerPoint, metin dosyaları ve e-kitaplar",
+  "Folders": "Klasörler",
+  "Back up chosen kinds of files from one folder.": "Bir klasörden seçilen dosya türlerini yedekleyin."
 }

@@ -58,7 +58,11 @@ public class BackupUiTests
         var backup = phone.ViewModel.Settings.Backup;
         await UiHarness.WaitForAsync(() => backup.HasPlan, "plan shown");
         Assert.Equal("Backing up to Diaz's PC", backup.TargetText);
-        Assert.Equal(new[] { BackupSourceKinds.Photos, BackupSourceKinds.Videos }, backup.Sources.Select(s => s.Source.Kind));
+        Assert.True(backup.BackUpPhotos); // whole phone: photos and videos to start with
+        Assert.True(backup.BackUpVideos);
+        Assert.False(backup.BackUpMusic);
+        Assert.False(backup.BackUpDocuments);
+        Assert.Empty(backup.Sources); // no folders yet
         Assert.True(backup.Automatic);
         Assert.True(phone.Platform.BackupsScheduled);
 
@@ -66,14 +70,14 @@ public class BackupUiTests
         phone.Ui.FolderToPick = Path.Combine(phone.Root, "Download");
         Directory.CreateDirectory(phone.Ui.FolderToPick);
         backup.AddFolderCommand.Execute(null);
-        await UiHarness.WaitForAsync(() => backup.Sources.Count == 3, "folder added");
-        var kinds = backup.Sources[2].FileKinds;
-        Assert.False(backup.Sources[2].ShowsKinds); // closed: a summary and a button
-        Assert.Equal("All file types", backup.Sources[2].KindsSummary);
+        await UiHarness.WaitForAsync(() => backup.Sources.Count == 1, "folder added");
+        var kinds = backup.Sources[0].FileKinds;
+        Assert.False(backup.Sources[0].ShowsKinds); // closed: a summary and a button
+        Assert.Equal("All file types", backup.Sources[0].KindsSummary);
         await UiHarness.PumpAsync(100);
         Assert.Contains("Choose file types", Buttons(phone));
         Assert.DoesNotContain("E-books", phone.VisibleTexts());
-        backup.Sources[2].ToggleKindsCommand.Execute(null);
+        backup.Sources[0].ToggleKindsCommand.Execute(null);
         await UiHarness.PumpAsync(100);
         Assert.Contains("E-books", phone.VisibleTexts());
         Assert.Contains("Hide file types", Buttons(phone));
@@ -83,10 +87,10 @@ public class BackupUiTests
         KindViewModel(kinds, "Documents").IsChecked = false; // clears all documents
         Assert.All(kinds.Where(k => k.IsChild), k => Assert.False(k.IsChecked));
         foreach (var label in new[] { "Photos", "Videos", "Music", "Archives", "Other" }) KindViewModel(kinds, label).IsChecked = false;
-        Assert.True(backup.Sources[2].HasNoKinds);
+        Assert.True(backup.Sources[0].HasNoKinds);
         foreach (var label in new[] { "PDF", "Word", "PowerPoint" }) KindViewModel(kinds, label).IsChecked = true;
         Assert.Null(KindViewModel(kinds, "Documents").IsChecked); // some documents
-        Assert.Equal("File types: PDF, Word, PowerPoint", backup.Sources[2].KindsSummary);
+        Assert.Equal("File types: PDF, Word, PowerPoint", backup.Sources[0].KindsSummary);
         await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.ElementAtOrDefault(2)?.Types?.Count == 3, "saved", 5000);
         Assert.Equal(new[] { BackupFileTypes.Pdf, BackupFileTypes.Word, BackupFileTypes.PowerPoint },
             phone.Node.Settings.Current.Backups.Single().Sources[2].Types);
@@ -104,7 +108,7 @@ public class BackupUiTests
         Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -200, 10, 700));
         await UiHarness.PumpAsync(100);
         phone.Screenshot("backup-phone");
-        backup.Sources[2].ToggleKindsCommand.Execute(null); // closed again: the summary
+        backup.Sources[0].ToggleKindsCommand.Execute(null); // closed again: the summary
         await UiHarness.PumpAsync(100);
         Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -200, 10, 700));
         await UiHarness.PumpAsync(100);
@@ -253,8 +257,8 @@ public class BackupUiTests
             backup.AddFolderCommand.Execute(null);
             await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == checks + 1, "asked");
             await UiHarness.PumpAsync(100);
-            Assert.Equal(2, phone.Node.Settings.Current.Backups.Single().Sources.Count);
-            Assert.Equal(2, backup.Sources.Count);
+            Assert.Equal(2, phone.Node.Settings.Current.Backups.Single().Sources.Count); // photos and videos only
+            Assert.Empty(backup.Sources);
             Assert.True(backup.HasMessage);
 
             backup.Automatic = false; // backing up less never asks
@@ -266,14 +270,46 @@ public class BackupUiTests
             Assert.False(phone.Node.Settings.Current.Backups.Single().Automatic);
             Assert.False(backup.Automatic);
 
-            backup.Sources[0].RemoveCommand.Execute(null);
-            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 1, "removed");
-            Assert.Equal(checks + 2, phone.Platform.OwnerChecks);
+            // A whole-phone switch: on asks Android first (with Beam's reason), then the owner; refused, it goes back off.
+            backup.BackUpMusic = true;
+            await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Allow Beam to back up your music" }, "music reason");
+            ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == checks + 3, "owner asked for music");
+            await UiHarness.PumpAsync(100);
+            Assert.Contains("permission:Music", phone.Platform.Calls);
+            Assert.False(backup.BackUpMusic);
+            Assert.DoesNotContain(phone.Node.Settings.Current.Backups.Single().Sources, x => x.Kind == BackupSourceKinds.Music);
 
-            // The owner can.
+            backup.BackUpVideos = false; // off never asks
+            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 1, "videos off");
+            Assert.Equal(checks + 3, phone.Platform.OwnerChecks);
+
+            // The owner can: documents from the whole phone (Android's "All files access"), and a folder.
             phone.Platform.OwnerAnswer = OwnerCheck.Confirmed;
+            backup.BackUpDocuments = true;
+            await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Allow Beam to back up your documents" }, "documents reason");
+            ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
+            await UiHarness.WaitForAsync(() => backup.BackUpDocuments, "documents on");
+            Assert.Contains("permission:AllFiles", phone.Platform.Calls);
             backup.AddFolderCommand.Execute(null);
-            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 2, "folder added");
+            await UiHarness.WaitForAsync(() => backup.Sources.Count == 1, "folder added");
+
+            // A folder's own switch: off keeps it (and its choices) without backing it up; on again asks the owner.
+            var folder = backup.Sources[0];
+            var asked = phone.Platform.OwnerChecks;
+            folder.Enabled = false;
+            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Single(x => x.Kind == BackupSourceKinds.Folder).Enabled == false, "folder off");
+            Assert.Equal(asked, phone.Platform.OwnerChecks);
+            phone.Platform.OwnerAnswer = OwnerCheck.Refused;
+            backup.Sources[0].Enabled = true;
+            await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == asked + 1, "asked for the folder");
+            await UiHarness.PumpAsync(100);
+            Assert.False(phone.Node.Settings.Current.Backups.Single().Sources.Single(x => x.Kind == BackupSourceKinds.Folder).Enabled);
+            Assert.False(backup.Sources[0].Enabled);
+
+            backup.Sources[0].RemoveCommand.Execute(null); // removing never asks
+            await UiHarness.WaitForAsync(() => backup.Sources.Count == 0, "removed");
+            Assert.Equal(asked + 1, phone.Platform.OwnerChecks);
         }
         finally
         {

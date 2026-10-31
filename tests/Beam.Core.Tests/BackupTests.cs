@@ -298,6 +298,51 @@ public class BackupTests
     }
 
     [Fact]
+    public void MusicDocumentsAndFoldersSwitchedOff()
+    {
+        using var dir = new TempDir();
+        var off = dir.Combine("Off");
+        Directory.CreateDirectory(off);
+        File.WriteAllText(Path.Combine(off, "secret.pdf"), "x");
+        var now = DateTime.UtcNow;
+        var plan = new BackupPlan
+        {
+            Sources =
+            {
+                new BackupSource { Kind = BackupSourceKinds.Music, Name = "Music" },
+                new BackupSource { Kind = BackupSourceKinds.Documents, Name = "Documents" },
+                new BackupSource { Kind = BackupSourceKinds.Folder, Address = off, Name = "Off", Types = BackupFileTypes.All.ToList(), Enabled = false },
+            },
+        };
+        var platform = new KindSources(new Dictionary<string, BackupItem[]>
+        {
+            [BackupSourceKinds.Music] = new[] { new BackupItem("Music/Album/song.mp3", 3, now, "content://a", () => new MemoryStream(new byte[3])) },
+            // The phone's documents, found anywhere: anything else in the list isn't one, and stays out.
+            [BackupSourceKinds.Documents] = new[]
+            {
+                new BackupItem("Download/contract.pdf", 4, now, "/sdcard/Download/contract.pdf", null),
+                new BackupItem("WhatsApp/Media/Documents/slides.pptx", 5, now, "/sdcard/WhatsApp/Media/Documents/slides.pptx", null),
+                new BackupItem("Download/setup.apk", 6, now, "/sdcard/Download/setup.apk", null),
+            },
+        });
+
+        var paths = BackupManifest.Build(plan, platform, null, CancellationToken.None).Entries.Select(e => e.RelativePath).OrderBy(p => p, StringComparer.Ordinal);
+
+        Assert.Equal(new[] { "Documents/contract.pdf", "Documents/slides.pptx", "Music/song.mp3" }, paths);
+        Assert.True(plan.HasAnythingToBackUp);
+        plan.Sources.RemoveRange(0, 2);
+        Assert.False(plan.HasAnythingToBackUp); // only a folder that is switched off: nothing to do
+        Assert.Empty(BackupManifest.Build(plan, platform, null, CancellationToken.None).Entries);
+        Assert.Equal(BackupFileTypes.Documents, new BackupSource { Kind = BackupSourceKinds.Documents }.EffectiveTypes());
+    }
+
+    private sealed class KindSources(Dictionary<string, BackupItem[]> items) : IBackupSources
+    {
+        public IReadOnlyList<BackupItem>? List(BackupSource source, CancellationToken cancellationToken) =>
+            items.TryGetValue(source.Kind, out var found) ? found : null;
+    }
+
+    [Fact]
     public void WithoutFolderNamesFilesAreSortedByKind()
     {
         using var dir = new TempDir();

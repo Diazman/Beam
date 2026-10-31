@@ -682,9 +682,6 @@
   "Back up automatically": "Копировать автоматически",
   "Whenever this phone and the computer are on the same Wi-Fi. Mobile data is never used.": "Когда телефон и компьютер в одной сети Wi-Fi. Мобильный интернет не используется.",
   "What is backed up": "Что копируется",
-  "Nothing yet. Add photos, videos or a folder.": "Пока ничего. Добавьте фото, видео или папку.",
-  "Add photos": "Добавить фото",
-  "Add videos": "Добавить видео",
   "Add a folder…": "Добавить папку…",
   "Back up now": "Копировать сейчас",
   "Files go only to this computer, encrypted, over your Wi-Fi. Nothing is deleted on the computer when you delete it here.": "Файлы передаются только на этот компьютер, в зашифрованном виде, через ваш Wi-Fi. Если удалить файл здесь, на компьютере он останется.",
@@ -735,5 +732,16 @@
   "On the computer, open Beam and go to Receive, choose “Can't find each other? Show a code”, then scan the code shown there.": "На компьютере откройте Beam, перейдите в «Получить», выберите «Не находят друг друга? Показать код» и отсканируйте показанный код.",
   "Send files between this computer and any phone, tablet or computer through its web browser. No app needed.": "Передавайте файлы между этим компьютером и любым телефоном, планшетом или компьютером через его браузер. Приложение не нужно.",
   "Not showing up on the other device?": "Не видно на другом устройстве?",
-  "On the other device, choose “Connect by address” on Send and type this address:": "На другом устройстве выберите «Подключиться по адресу» в разделе «Отправить» и введите этот адрес:"
+  "On the other device, choose “Connect by address” on Send and type this address:": "На другом устройстве выберите «Подключиться по адресу» в разделе «Отправить» и введите этот адрес:",
+  "Beam needs “All files access” to back up documents. Switch Documents off and on again to allow it.": "Для резервного копирования документов Beam нужен «Доступ ко всем файлам». Выключите и снова включите «Документы», чтобы разрешить его.",
+  "Allow Beam to back up your music": "Разрешите Beam копировать вашу музыку",
+  "To back up your music to your computer, Beam needs to read it. It goes only to the computer you set up, over your Wi-Fi, encrypted. The phone will ask you to allow it.": "Чтобы копировать музыку на компьютер, Beam нужно её читать. Она передаётся только на настроенный вами компьютер, через ваш Wi-Fi, в зашифрованном виде. Телефон попросит разрешение.",
+  "Allow Beam to back up your documents": "Разрешите Beam копировать ваши документы",
+  "To find every document on your phone (PDF, Word, Excel…), including Download, Android needs Beam to have “All files access”. On the next screen, turn on “Allow access to manage all files”. Beam reads documents only to back them up to your computer.": "Чтобы найти все документы на телефоне (PDF, Word, Excel…), включая «Загрузки», Android требует для Beam «Доступ ко всем файлам». На следующем экране включите «Разрешить доступ к управлению всеми файлами». Beam читает документы только для того, чтобы скопировать их на ваш компьютер.",
+  "Every photo on this phone": "Все фото на этом телефоне",
+  "Every video on this phone": "Все видео на этом телефоне",
+  "Every song and audio file on this phone": "Вся музыка и аудиофайлы на этом телефоне",
+  "Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone": "Все файлы PDF, Word, Excel, PowerPoint, текстовые файлы и электронные книги на этом телефоне",
+  "Folders": "Папки",
+  "Back up chosen kinds of files from one folder.": "Копируйте выбранные типы файлов из отдельной папки."
 }

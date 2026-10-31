@@ -6,7 +6,7 @@
 dotnet test Beam.sln          # ~3 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (248 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (249 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 Direct mode and Bluetooth run against fakes of the radios (`FakeDirectAir`, `FakeNearbyAir`), which can drop links,
 refuse joins or turn Wi-Fi off; tests that change process-wide network state run alone.
@@ -126,6 +126,8 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 3. Phone: allow photos and videos, add a folder and tick only PDF (Documents shows partly ticked). Back up now: the
    PC's Documents/Beam Backups/<phone> gets Photos, Videos and Documents folders (the folder's PDFs only, without
    the phone's folders), without any question. Turn on "Keep the phone's folder names": the next backup keeps them.
+   Switch Music on (Android asks for music), and Documents (Android's "All files access" page opens; allow it):
+   the next backup adds every song and every document, including Download. Switch the folder off: its files stop.
 4. Back up now again: nothing is sent, no card, no history entry. Take a photo: it arrives on the next run.
 5. Leave the Wi-Fi, take photos, come back: the backup runs by itself within a few minutes (also with Beam closed).
 6. Hand the unlocked phone to someone else: setting up a backup (or adding a folder to it) asks for the fingerprint,

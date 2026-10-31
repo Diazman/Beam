@@ -118,17 +118,53 @@
               </Grid>
               <Separator />
               <TextBlock Classes="h3" Text="{l:T 'What is backed up'}" />
-              <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'Nothing yet. Add photos, videos or a folder.'}" IsVisible="{Binding !Backup.HasSources}" />
+              <!-- From the whole phone, a switch each -->
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{l:T 'Photos'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every photo on this phone'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpPhotos}" Margin="16,0,0,0" />
+              </Grid>
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{l:T 'Videos'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every video on this phone'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpVideos}" Margin="16,0,0,0" />
+              </Grid>
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{l:T 'Music'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every song and audio file on this phone'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpMusic}" Margin="16,0,0,0" />
+              </Grid>
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{l:T 'Documents'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpDocuments}" Margin="16,0,0,0" />
+              </Grid>
+              <Separator />
+              <!-- Folders chosen one by one: a switch each, and the kinds of files to take from it -->
+              <StackPanel Spacing="2">
+                <TextBlock Classes="h3" Text="{l:T 'Folders'}" />
+                <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Back up chosen kinds of files from one folder.'}" />
+              </StackPanel>
               <ItemsControl ItemsSource="{Binding Backup.Sources}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BackupSourceViewModel">
                     <StackPanel Spacing="6" Margin="0,4">
-                      <Grid ColumnDefinitions="*,Auto">
+                      <Grid ColumnDefinitions="*,Auto,Auto">
                         <StackPanel VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Title}" />
+                          <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                           <TextBlock Classes="caption" Text="{Binding Details}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" OnContent="" OffContent="" VerticalAlignment="Center"
+                                      Margin="12,0,0,0" AutomationProperties.Name="{Binding Title}" />
+                        <Button Grid.Column="2" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" Margin="8,0,0,0" />
                       </Grid>
                       <!-- A folder: which kinds of its files. Closed: what is chosen, and a button to change it. Open: a
                            checkbox each (the documents under "Documents", "Other" last), indented under the folder. -->
@@ -156,6 +192,8 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <Button Content="{l:T 'Add a folder…'}" Command="{Binding Backup.AddFolderCommand}" HorizontalAlignment="Left" />
+              <Separator />
               <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
                 <StackPanel VerticalAlignment="Center" Spacing="2">
                   <TextBlock Classes="h3" Text="{l:T 'Keep the phone\'s folder names'}" />
@@ -164,11 +202,6 @@
                 </StackPanel>
                 <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.KeepFolderNames}" Margin="16,0,0,0" />
               </Grid>
-              <WrapPanel Orientation="Horizontal">
-                <Button Content="{l:T 'Add photos'}" Command="{Binding Backup.AddPhotosCommand}" Margin="0,0,8,6" />
-                <Button Content="{l:T 'Add videos'}" Command="{Binding Backup.AddVideosCommand}" Margin="0,0,8,6" />
-                <Button Content="{l:T 'Add a folder…'}" Command="{Binding Backup.AddFolderCommand}" Margin="0,0,8,6" />
-              </WrapPanel>
               <Separator />
               <WrapPanel Orientation="Horizontal">
                 <Button Classes="accent" Content="{l:T 'Back up now'}" Command="{Binding Backup.BackUpNowCommand}" Margin="0,0,8,6" />

@@ -313,7 +313,7 @@ public sealed class BackupService : IDisposable
     /// </summary>
     public async Task RunDueAsync(TimeSpan findFor, CancellationToken cancellationToken)
     {
-        var plans = _settings.Current.Backups.Where(b => b.Automatic && b.Sources.Count > 0).ToList();
+        var plans = _settings.Current.Backups.Where(b => b.Automatic && b.HasAnythingToBackUp).ToList();
         if (plans.Count == 0) return;
         _discovery.Refresh();
         var deadline = Environment.TickCount64 + (long)findFor.TotalMilliseconds;
@@ -386,7 +386,7 @@ public sealed class BackupService : IDisposable
         lock (_gate)
         {
             if (_running.ContainsKey(plan.TargetId)) return null;
-            if (plan.Sources.Count == 0) return null;
+            if (!plan.HasAnythingToBackUp) return null;
             var now = Environment.TickCount64;
             if (automatic && _lastStarted.TryGetValue(plan.TargetId, out var last))
             {

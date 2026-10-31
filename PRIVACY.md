@@ -74,8 +74,9 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 - **You are told** – a notification says when a backup to a computer is set up, and each time files were backed up,
   naming the computer, with a **Stop backup** button.
 - **What is sent** – the files you chose, with their names, sizes and dates, encrypted on the way and checked
-  after they arrive. For folders you tick the kinds of files (photos, videos, PDF, Word, Excel, PowerPoint, text,
-  e-books, music, archives, other). Only files the computer doesn't have yet (or that changed) are sent. Nothing on
+  after they arrive. A switch each backs up all photos, all videos, all music or all documents on the phone; each
+  folder you add has its own switch and the kinds of files you tick (photos, videos, PDF, Word, Excel, PowerPoint,
+  text, e-books, music, archives, other). Only files the computer doesn't have yet (or that changed) are sent. Nothing on
   the computer is deleted when you delete it on the phone, and a changed file's earlier copy is kept beside the new
   one.
 - **What is stored** – on the phone: which computer it backs up to (its name, identifier and key fingerprint),
@@ -116,6 +117,11 @@ Beam asks for each permission when you use the feature that needs it, and explai
 - **Storage** (Android 10 and earlier only) – to save received files to the Downloads/Beam folder.
 - **Photos and videos** (only if you back up photos or videos) – to read them for the backup to your computer.
   On Android 12 and earlier this is the storage permission. Beam asks when you set up the backup.
+- **Music and audio** (only if you back up music) – to read it for the backup. Asked when you switch Music on.
+- **All files access** (only if you back up documents) – Android 11 and later let an app find documents saved by
+  other apps (in Download, for example) only with this access, which you switch on in Android's settings when you
+  turn Documents on. Beam uses it only to find documents to back up to your computer; it doesn't change or delete
+  anything, and you can turn it off at any time in the phone's settings.
 - **Fingerprint, face or screen lock** (only for backups) – to confirm it's you before a backup is set up or
   widened. Android does the check; Beam only learns whether it succeeded.
 - **Running at startup and in the background on Wi-Fi** (only if you set up automatic backups) – so the backup

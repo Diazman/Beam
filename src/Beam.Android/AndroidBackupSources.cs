@@ -3,6 +3,7 @@ using Android.Database;
 using Android.Provider;
 using Beam.Core.Backup;
 using Beam.Core.Diagnostics;
+using Beam.Core.Localization;
 using Uri = Android.Net.Uri;
 
 namespace Beam.Droid;
@@ -15,15 +16,65 @@ namespace Beam.Droid;
 internal sealed class AndroidBackupSources : IBackupSources
 {
     private readonly ContentResolver _resolver;
+    private readonly Func<string?> _receiveFolder;
 
-    public AndroidBackupSources(ContentResolver resolver) => _resolver = resolver;
+    public AndroidBackupSources(ContentResolver resolver, Func<string?> receiveFolder)
+    {
+        _resolver = resolver;
+        _receiveFolder = receiveFolder;
+    }
 
     public IReadOnlyList<BackupItem>? List(BackupSource source, CancellationToken cancellationToken) => source.Kind switch
     {
         BackupSourceKinds.Photos => Query(MediaStore.Images.Media.ExternalContentUri!, cancellationToken),
         BackupSourceKinds.Videos => Query(MediaStore.Video.Media.ExternalContentUri!, cancellationToken),
+        BackupSourceKinds.Music => Query(MediaStore.Audio.Media.ExternalContentUri!, cancellationToken),
+        BackupSourceKinds.Documents => FindDocuments(cancellationToken),
         _ => null,
     };
+
+    /// <summary>
+    /// Every document in the phone's shared storage (Download, Documents, WhatsApp's folders…): needs "All files
+    /// access" on Android 11+. Skips Android/ (apps' private data), hidden folders, and Beam's own received files.
+    /// </summary>
+    private List<BackupItem> FindDocuments(CancellationToken cancellationToken)
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(30) && !global::Android.OS.Environment.IsExternalStorageManager)
+            throw new UnauthorizedAccessException(L.T("Beam needs “All files access” to back up documents. Switch Documents off and on again to allow it."));
+        var root = global::Android.OS.Environment.ExternalStorageDirectory?.AbsolutePath ?? throw new IOException("No shared storage.");
+        var received = _receiveFolder()?.TrimEnd('/');
+        var items = new List<BackupItem>();
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var directory = pending.Pop();
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(directory))
+                {
+                    var name = Path.GetFileName(sub);
+                    if (name.StartsWith('.') || (directory == root && name == "Android") || sub == received) continue;
+                    pending.Push(sub);
+                }
+
+                foreach (var path in Directory.EnumerateFiles(directory))
+                {
+                    var name = Path.GetFileName(path);
+                    if (name.StartsWith('.') || !BackupFileTypes.Documents.Contains(BackupFileTypes.KindOf(name))) continue;
+                    var file = new FileInfo(path);
+                    items.Add(new BackupItem(Path.GetRelativePath(root, path), file.Length, file.LastWriteTimeUtc, path, null));
+                }
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                // a folder Android keeps to itself: skipped
+            }
+        }
+
+        return items;
+    }
 
     private List<BackupItem> Query(Uri collection, CancellationToken cancellationToken)
     {

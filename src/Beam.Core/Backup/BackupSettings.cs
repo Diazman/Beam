@@ -9,6 +9,12 @@ public static class BackupSourceKinds
     /// <summary>The phone's videos (its media library).</summary>
     public const string Videos = "videos";
 
+    /// <summary>The phone's music and other audio (its media library).</summary>
+    public const string Music = "music";
+
+    /// <summary>Every document on the phone (PDF, Word, Excel, PowerPoint, text, e-books), wherever it is.</summary>
+    public const string Documents = "documents";
+
     /// <summary>A folder the user chose (a path, or an Android content://…/tree/… address with lasting access).</summary>
     public const string Folder = "folder";
 }
@@ -96,6 +102,9 @@ public sealed class BackupSource
     /// <summary>Its name ("Camera", "Documents"): the folder its files go into when folder names are kept.</summary>
     public string Name { get; set; } = "";
 
+    /// <summary>A folder switched off: kept with its choices, but nothing of it is backed up until it is on again.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>For folders: the ticked <see cref="BackupFileTypes"/> kinds (null in plans saved before the checkboxes).</summary>
     public List<string>? Types { get; set; }
 
@@ -107,7 +116,7 @@ public sealed class BackupSource
 
     public BackupSource Copy() => new()
     {
-        Kind = Kind, Address = Address, Name = Name, Types = EffectiveTypes().ToList(),
+        Kind = Kind, Address = Address, Name = Name, Enabled = Enabled, Types = EffectiveTypes().ToList(),
     };
 
     /// <summary>The ticked kinds (for photos and videos: that kind).</summary>
@@ -115,6 +124,8 @@ public sealed class BackupSource
     {
         BackupSourceKinds.Photos => new[] { BackupFileTypes.Photos },
         BackupSourceKinds.Videos => new[] { BackupFileTypes.Videos },
+        BackupSourceKinds.Music => new[] { BackupFileTypes.Music },
+        BackupSourceKinds.Documents => BackupFileTypes.Documents,
         _ => Types ?? BackupFileTypes.FromLegacy(FileTypes, Extensions),
     };
 }
@@ -133,6 +144,10 @@ public sealed class BackupPlan
     public string TargetFingerprint { get; set; } = "";
 
     public List<BackupSource> Sources { get; set; } = new();
+
+    /// <summary>Something is switched on to back up.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasAnythingToBackUp => Sources.Any(s => s.Enabled);
 
     /// <summary>The computer's last known addresses, asked directly too (networks that drop Beam's announcements).</summary>
     public List<string> Addresses { get; set; } = new();

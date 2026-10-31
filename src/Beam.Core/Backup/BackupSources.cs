@@ -24,7 +24,7 @@ internal static class BackupManifest
         var found = new List<(string[] Path, BackupItem Item, string Origin)>();
         var warnings = new List<string>();
         var usedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var source in plan.Sources)
+        foreach (var source in plan.Sources.Where(s => s.Enabled))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var root = FileNaming.MakeUnique(SafePath.SanitizeSegment(string.IsNullOrWhiteSpace(source.Name) ? "Backup" : source.Name),
@@ -47,13 +47,19 @@ internal static class BackupManifest
             foreach (var item in items)
             {
                 var kind = BackupFileTypes.KindOf(item.RelativePath);
-                if (source.Kind == BackupSourceKinds.Folder && !types.Contains(kind)) continue;
+                if (source.Kind is BackupSourceKinds.Folder or BackupSourceKinds.Documents && !types.Contains(kind)) continue;
                 var segments = item.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(SafePath.SanitizeSegment).ToArray();
                 if (segments.Length == 0) continue;
                 // Folder names kept: "Camera/DCIM/IMG_1.jpg" under the source's name. Otherwise one folder per kind.
                 var path = plan.KeepFolderNames
                     ? segments.Prepend(root).ToArray()
-                    : new[] { KindFolder(source.Kind switch { BackupSourceKinds.Photos => BackupFileTypes.Photos, BackupSourceKinds.Videos => BackupFileTypes.Videos, _ => kind }), segments[^1] };
+                    : new[] { KindFolder(source.Kind switch
+                    {
+                        BackupSourceKinds.Photos => BackupFileTypes.Photos,
+                        BackupSourceKinds.Videos => BackupFileTypes.Videos,
+                        BackupSourceKinds.Music => BackupFileTypes.Music,
+                        _ => kind,
+                    }), segments[^1] };
                 found.Add((path, item, root + "/" + string.Join('/', segments)));
                 count++;
             }

@@ -265,6 +265,10 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         {
             AppPermission.Notifications => (L.T("Get notified about incoming files"),
                 L.T("Beam shows a notification when someone sends you files, so you can accept them even when Beam isn't open. The phone will ask you to allow notifications.")),
+            AppPermission.Music => (L.T("Allow Beam to back up your music"),
+                L.T("To back up your music to your computer, Beam needs to read it. It goes only to the computer you set up, over your Wi-Fi, encrypted. The phone will ask you to allow it.")),
+            AppPermission.AllFiles => (L.T("Allow Beam to back up your documents"),
+                L.T("To find every document on your phone (PDF, Word, Excel…), including Download, Android needs Beam to have “All files access”. On the next screen, turn on “Allow access to manage all files”. Beam reads documents only to back them up to your computer.")),
             AppPermission.MediaLibrary => (L.T("Allow Beam to back up your photos and videos"),
                 L.T("To back up your photos and videos to your computer, Beam needs to read them. They go only to the computer you set up, over your Wi-Fi, encrypted. The phone will ask you to allow it.")),
             _ when _platform.NearbyDevicesIsLocation => (L.T("Allow direct connections"),

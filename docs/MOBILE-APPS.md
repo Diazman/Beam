@@ -30,7 +30,9 @@ and set those two environment variables.
 
 **Backups.** Settings → Backup sets up automatic backups to a computer (scan the code from the computer's Settings →
 Backup → Add a phone). Android runs `BackupJobService` about every 15 minutes on Wi-Fi; Google Play's review asks
-why the app reads photos and videos (the answer: to back them up to the user's own computer, chosen by the user).
+why the app reads photos, videos and music (the answer: to back them up to the user's own computer, chosen by the
+user). "Documents" uses `MANAGE_EXTERNAL_STORAGE` ("All files access"): Play Console asks for a declaration form
+for it; the core use is "backup and restore" (the user's documents, anywhere on the phone, to their own computer).
 
 **Google Play** needs an Android App Bundle instead of an APK: add `-p:AndroidPackageFormat=aab`, and sign it with
 the same key. Keep that key safe: Play can't take an update signed with another one.

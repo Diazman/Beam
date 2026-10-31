@@ -101,10 +101,14 @@ internal sealed class AndroidPlatformServices : IPlatformServices
     }
 
     public bool HasPermission(AppPermission permission) =>
-        AndroidPermissionFor(permission) is not { } name || Context.CheckSelfPermission(name) == global::Android.Content.PM.Permission.Granted;
+        permission == AppPermission.AllFiles && OperatingSystem.IsAndroidVersionAtLeast(30)
+            ? AndroidEnvironment.IsExternalStorageManager
+            : AndroidPermissionFor(permission) is not { } name || Context.CheckSelfPermission(name) == global::Android.Content.PM.Permission.Granted;
 
     public Task<bool> RequestPermissionAsync(AppPermission permission) =>
-        permission == AppPermission.MediaLibrary && OperatingSystem.IsAndroidVersionAtLeast(33)
+        permission == AppPermission.AllFiles && OperatingSystem.IsAndroidVersionAtLeast(30)
+            ? AndroidHost.RequestAllFilesAccessAsync()
+            : permission == AppPermission.MediaLibrary && OperatingSystem.IsAndroidVersionAtLeast(33)
             ? AndroidHost.RequestPermissionsAsync(global::Android.Manifest.Permission.ReadMediaImages, global::Android.Manifest.Permission.ReadMediaVideo)
             : AndroidPermissionFor(permission) is { } name ? AndroidHost.RequestPermissionAsync(name) : Task.FromResult(true);
 
@@ -150,6 +154,9 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         // Android 13+ asks for photos and videos separately (both in one prompt, see RequestPermissionAsync).
         AppPermission.MediaLibrary => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.ReadMediaImages
             : global::Android.Manifest.Permission.ReadExternalStorage,
+        AppPermission.Music => OperatingSystem.IsAndroidVersionAtLeast(33) ? global::Android.Manifest.Permission.ReadMediaAudio
+            : global::Android.Manifest.Permission.ReadExternalStorage,
+        AppPermission.AllFiles => global::Android.Manifest.Permission.ReadExternalStorage, // Android 10 and older
         _ => null,
     };
 

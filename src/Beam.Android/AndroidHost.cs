@@ -72,7 +72,7 @@ internal static class AndroidHost
         {
             Paths = Paths,
             ExternalFiles = new ContentFiles(Context.ContentResolver!),
-            BackupSources = new AndroidBackupSources(Context.ContentResolver!),
+            BackupSources = new AndroidBackupSources(Context.ContentResolver!, () => _node?.Settings.Current.EffectiveReceiveFolder),
             DeviceKind = DeviceKinds.Phone,
             DirectLink = _directLink,
             NearbyRadio = new AndroidNearbyRadio(Context),
@@ -131,6 +131,49 @@ internal static class AndroidHost
     {
         if (_view != null) _view.IsInForeground = foreground;
         if (foreground) _keepAlive?.Retry();
+        if (foreground) Interlocked.Exchange(ref _settingsReturn, null)?.TrySetResult(true);
+    }
+
+    private static TaskCompletionSource<bool>? _settingsReturn;
+
+    /// <summary>
+    /// Android 11+: "All files access" is switched on in Android's settings, not answered in a prompt. Opens Beam's page
+    /// there and waits until the user comes back; true when it is on.
+    /// </summary>
+    public static async Task<bool> RequestAllFilesAccessAsync()
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(30)) return false;
+        if (AndroidEnvironment.IsExternalStorageManager) return true;
+        var activity = CurrentActivity;
+        if (activity == null) return false;
+        var back = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref _settingsReturn, back)?.TrySetResult(false);
+        try
+        {
+            var intent = new Intent(global::Android.Provider.Settings.ActionManageAppAllFilesAccessPermission,
+                global::Android.Net.Uri.Parse("package:" + Context.PackageName));
+            activity.RunOnUiThread(() =>
+            {
+                try
+                {
+                    activity.StartActivity(intent);
+                }
+                catch (ActivityNotFoundException)
+                {
+                    activity.StartActivity(new Intent(global::Android.Provider.Settings.ActionManageAllFilesAccessPermission)); // the list of apps
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Backup: couldn't open the All files access settings", ex);
+            return false;
+        }
+
+        await Task.WhenAny(back.Task, Task.Delay(TimeSpan.FromMinutes(10))).ConfigureAwait(false);
+        var granted = AndroidEnvironment.IsExternalStorageManager;
+        Log.Info($"Backup: All files access {(granted ? "allowed" : "not allowed")}");
+        return granted;
     }
 
     /// <summary>

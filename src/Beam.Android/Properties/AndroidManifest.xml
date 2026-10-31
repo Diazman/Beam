@@ -33,12 +33,18 @@
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
   <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
   <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+  <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+  <!-- Backups with "Documents" on: every document on the phone, wherever it is (Android 11+ has no narrower way to
+       read other apps' documents, e.g. in Download). Asked only when Documents is switched on; Android shows its own
+       settings switch. -->
+  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <!-- Backups: the owner confirms with fingerprint, face or screen lock before a backup is set up or widened (granted at install, nothing is asked). -->
   <uses-permission android:name="android.permission.USE_BIOMETRIC" />
   <!-- Backups keep checking in the background after the phone restarts. -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
   <application
+    android:requestLegacyExternalStorage="true"
     android:label="Beam"
     android:icon="@mipmap/ic_launcher"
     android:roundIcon="@mipmap/ic_launcher"

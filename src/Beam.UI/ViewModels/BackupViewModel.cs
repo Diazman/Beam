@@ -60,10 +60,13 @@ public sealed class BackupSourceViewModel : ObservableObject
 {
     private readonly Action _changed;
 
-    public BackupSourceViewModel(BackupSource source, Action changed, Action<BackupSourceViewModel> remove)
+    private readonly Action _saveNow;
+
+    public BackupSourceViewModel(BackupSource source, Action changed, Action saveNow, Action<BackupSourceViewModel> remove)
     {
         Source = source;
         _changed = changed;
+        _saveNow = saveNow;
         RemoveCommand = new RelayCommand(() => remove(this));
         ToggleKindsCommand = new RelayCommand(() =>
         {
@@ -111,6 +114,19 @@ public sealed class BackupSourceViewModel : ObservableObject
 
     /// <summary>For a folder: a checkbox per kind of file, "Other" last.</summary>
     public IReadOnlyList<FileKindViewModel> FileKinds { get; } = Array.Empty<FileKindViewModel>();
+
+    /// <summary>The folder is backed up (off: kept with its choices, nothing of it backed up).</summary>
+    public bool Enabled
+    {
+        get => Source.Enabled;
+        set
+        {
+            if (Source.Enabled == value) return;
+            Source.Enabled = value;
+            OnPropertyChanged();
+            _saveNow();
+        }
+    }
 
     /// <summary>The checkboxes are open (they start closed: the summary says what is chosen).</summary>
     public bool ShowsKinds { get; private set; }
@@ -218,10 +234,8 @@ public sealed class BackupViewModel : ObservableObject
             _platform.OpenFolder(BackupFolder);
         });
         SetUpCommand = new AsyncCommand(ScanAsync, () => !IsBusy);
-        AddPhotosCommand = new AsyncCommand(() => AddMediaAsync(BackupSourceKinds.Photos), () => !Has(BackupSourceKinds.Photos));
-        AddVideosCommand = new AsyncCommand(() => AddMediaAsync(BackupSourceKinds.Videos), () => !Has(BackupSourceKinds.Videos));
         AddFolderCommand = new AsyncCommand(AddFolderAsync);
-        BackUpNowCommand = new AsyncCommand(BackUpNowAsync, () => _plan is { Sources.Count: > 0 } && !IsRunning);
+        BackUpNowCommand = new AsyncCommand(BackUpNowAsync, () => _plan is { HasAnythingToBackUp: true } && !IsRunning);
         StopCommand = new AsyncCommand(StopAsync);
 
         // Typing file types: saved once the typing stops (each save checks the backup again).
@@ -269,6 +283,33 @@ public sealed class BackupViewModel : ObservableObject
 
     public string TargetText => L.T("Backing up to {0}", TargetName);
 
+    /// <summary>Every photo on the phone (its media library).</summary>
+    public bool BackUpPhotos
+    {
+        get => IsOn(BackupSourceKinds.Photos);
+        set => SetWholePhoneAsync(BackupSourceKinds.Photos, value).Forget("Changing what is backed up");
+    }
+
+    public bool BackUpVideos
+    {
+        get => IsOn(BackupSourceKinds.Videos);
+        set => SetWholePhoneAsync(BackupSourceKinds.Videos, value).Forget("Changing what is backed up");
+    }
+
+    public bool BackUpMusic
+    {
+        get => IsOn(BackupSourceKinds.Music);
+        set => SetWholePhoneAsync(BackupSourceKinds.Music, value).Forget("Changing what is backed up");
+    }
+
+    /// <summary>Every document on the phone, wherever it is (Android: needs "All files access").</summary>
+    public bool BackUpDocuments
+    {
+        get => IsOn(BackupSourceKinds.Documents);
+        set => SetWholePhoneAsync(BackupSourceKinds.Documents, value).Forget("Changing what is backed up");
+    }
+
+    /// <summary>The folders chosen one by one (the whole-phone kinds are the switches above).</summary>
     public ObservableCollection<BackupSourceViewModel> Sources { get; } = new();
 
     public bool HasSources => Sources.Count > 0;
@@ -311,7 +352,7 @@ public sealed class BackupViewModel : ObservableObject
                     : L.T("Checking what's new…");
             }
 
-            if (_plan.Sources.Count == 0) return L.T("Choose what to back up.");
+            if (!_plan.HasAnythingToBackUp) return L.T("Choose what to back up.");
             if (_plan.LastError is { } error) return L.T("The last backup didn't finish: {0}", error);
             var here = _node.Backup.IsReachable(_plan);
             if (_plan.LastCompletedAt is { } last)
@@ -345,10 +386,6 @@ public sealed class BackupViewModel : ObservableObject
     }
 
     public AsyncCommand SetUpCommand { get; }
-
-    public AsyncCommand AddPhotosCommand { get; }
-
-    public AsyncCommand AddVideosCommand { get; }
 
     public AsyncCommand AddFolderCommand { get; }
 
@@ -423,7 +460,50 @@ public sealed class BackupViewModel : ObservableObject
 
     internal void OnShown() => RefreshStatus();
 
-    private bool Has(string kind) => _plan?.Sources.Any(s => s.Kind == kind) == true;
+    private bool IsOn(string kind) => _plan?.Sources.Any(s => s.Kind == kind && s.Enabled) == true;
+
+    private static readonly string[] WholePhoneProperties = { nameof(BackUpPhotos), nameof(BackUpVideos), nameof(BackUpMusic), nameof(BackUpDocuments) };
+
+    /// <summary>
+    /// A whole-phone switch: on asks for Android's permission (with Beam's reason first) and, when it backs up more,
+    /// the owner's fingerprint, face or screen lock; off never asks. What was backed up stays on the computer.
+    /// </summary>
+    private async Task SetWholePhoneAsync(string kind, bool on)
+    {
+        if (_plan == null || IsOn(kind) == on) return;
+        if (on)
+        {
+            var permission = kind switch
+            {
+                BackupSourceKinds.Music => AppPermission.Music,
+                BackupSourceKinds.Documents => AppPermission.AllFiles,
+                _ => AppPermission.MediaLibrary,
+            };
+            if (!await _main.EnsurePermissionAsync(permission) || _plan == null)
+            {
+                foreach (var name in WholePhoneProperties) OnPropertyChanged(name); // the switch goes back off
+                return;
+            }
+
+            _plan.Sources.RemoveAll(s => s.Kind == kind);
+            _plan.Sources.Add(new BackupSource { Kind = kind, Name = WholePhoneName(kind) });
+        }
+        else
+        {
+            _plan.Sources.RemoveAll(s => s.Kind == kind);
+        }
+
+        await SaveAsync();
+    }
+
+    /// <summary>Its folder's name on the computer when the phone's folder names are kept.</summary>
+    private static string WholePhoneName(string kind) => kind switch
+    {
+        BackupSourceKinds.Photos => L.T("Photos"),
+        BackupSourceKinds.Videos => L.T("Videos"),
+        BackupSourceKinds.Music => L.T("Music"),
+        _ => L.T("Documents"),
+    };
 
     private async Task ScanAsync()
     {
@@ -436,14 +516,6 @@ public sealed class BackupViewModel : ObservableObject
         }
 
         await SetUpFromCodeAsync(code);
-    }
-
-    private async Task AddMediaAsync(string kind)
-    {
-        if (_plan == null || Has(kind)) return;
-        if (!await _main.EnsurePermissionAsync(AppPermission.MediaLibrary)) return;
-        _plan.Sources.Add(new BackupSource { Kind = kind, Name = kind == BackupSourceKinds.Photos ? L.T("Photos") : L.T("Videos") });
-        await SaveAsync();
     }
 
     private async Task AddFolderAsync()
@@ -527,15 +599,17 @@ public sealed class BackupViewModel : ObservableObject
         Reload();
     }
 
-    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{string.Join(",", s.EffectiveTypes())}";
+    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.Enabled}|{string.Join(",", s.EffectiveTypes())}";
 
-    /// <summary>Backs up more than before: a new source, a newly ticked kind, or automatic backups switched on.</summary>
+    /// <summary>
+    /// Backs up more than before: a new source, a source switched on, a newly ticked kind, or automatic backups switched on.
+    /// </summary>
     private static bool Widens(BackupPlan stored, BackupPlan plan)
     {
         if (plan.Automatic && !stored.Automatic) return true;
-        foreach (var source in plan.Sources)
+        foreach (var source in plan.Sources.Where(s => s.Enabled))
         {
-            var before = stored.Sources.FirstOrDefault(s => s.Kind == source.Kind && s.Address == source.Address);
+            var before = stored.Sources.FirstOrDefault(s => s.Enabled && s.Kind == source.Kind && s.Address == source.Address);
             if (before == null || source.EffectiveTypes().Except(before.EffectiveTypes()).Any()) return true;
         }
 
@@ -640,7 +714,7 @@ public sealed class BackupViewModel : ObservableObject
         var stored = settings.Backups.FirstOrDefault();
         if (_saveTimer.IsEnabled && stored?.TargetId == _plan?.TargetId) return; // typing: the edits win until saved
         _plan = stored;
-        var sources = _plan?.Sources ?? new List<BackupSource>();
+        var sources = (_plan?.Sources ?? new List<BackupSource>()).Where(s => s.Kind == BackupSourceKinds.Folder).ToList();
         if (!Sources.Select(s => SourceKey(s.Source)).SequenceEqual(sources.Select(SourceKey)))
         {
             // Other choices: new rows, a folder's file types staying open if they were.
@@ -648,7 +722,7 @@ public sealed class BackupViewModel : ObservableObject
             Sources.Clear();
             foreach (var source in sources)
             {
-                var row = new BackupSourceViewModel(source, OnSourcesEdited, RemoveSource);
+                var row = new BackupSourceViewModel(source, OnSourcesEdited, () => SaveAsync().Forget("Saving the backup choices"), RemoveSource);
                 if (source.Address != null && open.Contains(source.Address)) row.ToggleKindsCommand.Execute(null);
                 Sources.Add(row);
             }
@@ -659,14 +733,12 @@ public sealed class BackupViewModel : ObservableObject
         {
             // Same choices (any other setting was saved): the rows stay as they are, open or closed, and the fresh
             // copy uses their sources.
-            for (var i = 0; i < Sources.Count; i++) sources[i] = Sources[i].Source;
+            for (var i = 0; i < Sources.Count; i++) _plan!.Sources[_plan.Sources.IndexOf(sources[i])] = Sources[i].Source;
         }
 
-        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) })
+        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) }.Concat(WholePhoneProperties))
             OnPropertyChanged(name);
-        AddPhotosCommand.RaiseCanExecuteChanged();
-        AddVideosCommand.RaiseCanExecuteChanged();
-        _platform.ScheduleBackups(settings.Backups.Any(b => b.Automatic && b.Sources.Count > 0));
+        _platform.ScheduleBackups(settings.Backups.Any(b => b.Automatic && b.HasAnythingToBackUp));
         RefreshStatus();
     }
 

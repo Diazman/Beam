@@ -19,6 +19,15 @@ public enum AppPermission
 
     /// <summary>Backups: reading the phone's photos and videos (Android: Photos and videos).</summary>
     MediaLibrary,
+
+    /// <summary>Backups: reading the phone's music (Android: Music and audio).</summary>
+    Music,
+
+    /// <summary>
+    /// Backups: finding every document on the phone, wherever it is (Android 11+: "All files access", switched on in
+    /// Android's settings; before that, the storage permission).
+    /// </summary>
+    AllFiles,
 }
 
 /// <summary>How the check that the phone's owner is holding it went.</summary>
