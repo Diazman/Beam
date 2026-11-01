@@ -438,8 +438,12 @@ public sealed class BackupViewModel : ObservableObject
         StopCommand = new AsyncCommand(StopAsync);
 
         // Typing file types: saved once the typing stops (each save checks the backup again).
-        _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) => SaveAsync().Forget("Saving the backup choices"));
-        _statusTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshStatus());
+        // Not started here (that constructor overload starts them): the save timer runs only after an edit, and while
+        // it runs newer saved settings are held back, so a timer running from the start would save an old copy.
+        _saveTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1.5) };
+        _saveTimer.Tick += (_, _) => SaveAsync().Forget("Saving the backup choices");
+        _statusTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        _statusTimer.Tick += (_, _) => RefreshStatus();
 
         WholePhoneKinds = new[]
         {
