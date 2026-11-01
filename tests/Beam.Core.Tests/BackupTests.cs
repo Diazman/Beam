@@ -227,6 +227,40 @@ public class BackupTests
     }
 
     [Fact]
+    public async Task SeveralPhonesBackUpToOneComputer()
+    {
+        await using var pc = Computer();
+        await using var mine = Phone("Diaz's Galaxy");
+        await using var hers = Phone("Galaxy"); // a family member's phone, set up with its own code
+        Link(mine, pc);
+        Link(hers, pc);
+        foreach (var (phone, text) in new[] { (mine, "mine"), (hers, "hers") })
+        {
+            var source = Path.Combine(phone.Root, "docs");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "notes.txt"), text); // the same name on both phones
+            await SetUpAsync(phone, pc, source);
+            await BackUpAsync(phone, pc);
+        }
+
+        // Each phone has its own folder on the computer, and only its files are in it.
+        var partners = pc.Node.Settings.Current.BackupPartners;
+        Assert.Equal(2, partners.Count);
+        Assert.NotEqual(partners[0].Folder, partners[1].Folder);
+        string Folder(TestNode phone) => partners.Single(p => string.Equals(p.Fingerprint, phone.Node.Identity.Fingerprint, StringComparison.OrdinalIgnoreCase)).Folder;
+        Assert.Equal("mine", File.ReadAllText(Path.Combine(Folder(mine), "Documents", "notes.txt")));
+        Assert.Equal("hers", File.ReadAllText(Path.Combine(Folder(hers), "Documents", "notes.txt")));
+
+        // Removing one phone doesn't affect the other.
+        pc.Node.Backup.RemovePartner(hers.Node.Identity.Fingerprint);
+        File.WriteAllText(Path.Combine(mine.Root, "docs", "more.txt"), "more");
+        var again = await BackUpAsync(mine, pc);
+        Assert.Equal(TransferState.Completed, again.State);
+        Assert.True(File.Exists(Path.Combine(Folder(mine), "Documents", "more.txt")));
+        Assert.Equal(TransferState.Declined, (await BackUpAsync(hers, pc)).State);
+    }
+
+    [Fact]
     public async Task OnlyTheChosenKindsOfFiles()
     {
         await using var pc = Computer();

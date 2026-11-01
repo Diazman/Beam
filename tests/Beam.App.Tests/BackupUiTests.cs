@@ -283,7 +283,7 @@ public class BackupUiTests
             Assert.DoesNotContain(phone.Node.Settings.Current.Backups.Single().Sources, x => x.Kind == BackupSourceKinds.Music);
 
             backup.BackUpVideos = false; // off never asks
-            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Count == 1, "videos off");
+            await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.Backups.Single().Sources.Single(x => x.Kind == BackupSourceKinds.Videos).Enabled == false, "videos off");
             Assert.Equal(checks + 3, phone.Platform.OwnerChecks);
 
             // The owner can: documents from the whole phone (Android's "All files access"), and a folder.
@@ -413,6 +413,21 @@ public class BackupUiTests
             await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { AllFolders: false, Folders.Count: 1 }, "saved");
             Assert.Equal(new[] { "DCIM/Camera" }, SavedPhotos(phone)!.Folders);
             Assert.Equal(checks, phone.Platform.OwnerChecks);
+            Assert.Equal("Skipping: WhatsApp Images", photos.Summary);
+
+            // Photos off and on again: the folder choices are as they were left.
+            backup.BackUpPhotos = false;
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: false }, "photos off");
+            Assert.Equal(checks, phone.Platform.OwnerChecks);
+            backup.BackUpPhotos = true;
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: true }, "photos on again");
+            Assert.Equal(checks + 1, phone.Platform.OwnerChecks); // on again backs up more: the owner confirms
+            checks = phone.Platform.OwnerChecks;
+            Assert.False(SavedPhotos(phone)!.AllFolders);
+            Assert.Equal(new[] { "DCIM/Camera" }, SavedPhotos(phone)!.Folders);
+            Assert.False(photos.AllFolders);
+            Assert.False(photos.Folders.Single(f => f.Name == "WhatsApp Images").IsChecked);
+            Assert.True(photos.Folders.Single(f => f.Name == "Camera").IsChecked);
             Assert.Equal("Skipping: WhatsApp Images", photos.Summary);
             await UiHarness.PumpAsync(100);
             Assert.Empty(phone.TextOutsideWindow());

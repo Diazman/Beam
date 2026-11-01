@@ -730,7 +730,8 @@ public sealed class BackupViewModel : ObservableObject
 
     /// <summary>
     /// A whole-phone switch: on asks for Android's permission (with Beam's reason first) and, when it backs up more,
-    /// the owner's fingerprint, face or screen lock; off never asks. What was backed up stays on the computer.
+    /// the owner's fingerprint, face or screen lock; off never asks, and keeps the folder choices for when it is on
+    /// again. What was backed up stays on the computer.
     /// </summary>
     private async Task SetWholePhoneAsync(string kind, bool on)
     {
@@ -750,12 +751,13 @@ public sealed class BackupViewModel : ObservableObject
                 return;
             }
 
-            _plan.Sources.RemoveAll(s => s.Kind == kind);
-            _plan.Sources.Add(new BackupSource { Kind = kind, Name = WholePhoneName(kind) });
+            // On again: its folder choices as they were left (off only pauses it).
+            if (_plan.Sources.FirstOrDefault(s => s.Kind == kind) is { } paused) paused.Enabled = true;
+            else _plan.Sources.Add(new BackupSource { Kind = kind, Name = WholePhoneName(kind) });
         }
         else
         {
-            _plan.Sources.RemoveAll(s => s.Kind == kind);
+            foreach (var source in _plan.Sources.Where(s => s.Kind == kind)) source.Enabled = false;
         }
 
         await SaveAsync();
