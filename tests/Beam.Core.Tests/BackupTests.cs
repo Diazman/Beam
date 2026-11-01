@@ -298,6 +298,46 @@ public class BackupTests
     }
 
     [Fact]
+    public void OnlyTheChosenFoldersOfTheWholePhone()
+    {
+        var now = DateTime.UtcNow;
+        BackupItem Photo(string path) => new(path, 3, now, "content://" + path, () => new MemoryStream(new byte[3]));
+        var platform = new KindSources(new Dictionary<string, BackupItem[]>
+        {
+            [BackupSourceKinds.Photos] = new[]
+            {
+                Photo("DCIM/Camera/a.jpg"), Photo("DCIM/Camera/b.jpg"), Photo("WhatsApp/Media/WhatsApp Images/c.jpg"),
+                Photo("Pictures/Telegram/d.jpg"), Photo("Old/Camera/e.jpg"), Photo("top.jpg"),
+            },
+        });
+        var photos = new BackupSource { Kind = BackupSourceKinds.Photos, Name = "Photos" };
+
+        // The folder list: most files first; a name two folders share shown with its path; files at the top too.
+        var folders = BackupManifest.ListFolders(photos, platform, CancellationToken.None);
+        Assert.Equal("DCIM/Camera", folders[0].Name);
+        Assert.Equal(2, folders[0].Count);
+        Assert.Contains(folders, f => f.Name == "Old/Camera");
+        Assert.Contains(folders, f => f.Path == "" && f.Name == "Main storage");
+        Assert.Contains(folders, f => f.Path == "WhatsApp/Media/WhatsApp Images" && f.Name == "WhatsApp Images");
+
+        // "All folders": everything, also folders nobody has seen.
+        var plan = new BackupPlan { Sources = { photos } };
+        var fresh = new List<(BackupSource Source, string Folder)>();
+        Assert.Equal(6, BackupManifest.Build(plan, platform, null, CancellationToken.None, fresh).Entries.Count);
+        Assert.Empty(fresh);
+
+        // Chosen folders: only those. One never seen is new: left out, and reported (once per backup).
+        photos.AllFolders = false;
+        photos.Folders = new List<string> { "DCIM/Camera", "" };
+        photos.SeenFolders = new List<string> { "DCIM/Camera", "", "WhatsApp/Media/WhatsApp Images", "Old/Camera" };
+        var entries = BackupManifest.Build(plan, platform, null, CancellationToken.None, fresh).Entries.Select(e => e.RelativePath).OrderBy(p => p).ToList();
+        Assert.Equal(new[] { "Photos/a.jpg", "Photos/b.jpg", "Photos/top.jpg" }, entries);
+        Assert.Equal("Pictures/Telegram", Assert.Single(fresh).Folder);
+        Assert.False(new BackupSource { Kind = BackupSourceKinds.Photos, AllFolders = false }.IncludesFolder("DCIM/Camera"));
+        Assert.True(new BackupSource { Kind = BackupSourceKinds.Folder, AllFolders = false }.IncludesFolder("x")); // folders: their own choices
+    }
+
+    [Fact]
     public void MusicDocumentsAndFoldersSwitchedOff()
     {
         using var dir = new TempDir();

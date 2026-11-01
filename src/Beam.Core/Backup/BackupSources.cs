@@ -16,10 +16,18 @@ public interface IBackupSources
     IReadOnlyList<BackupItem>? List(BackupSource source, CancellationToken cancellationToken);
 }
 
+/// <summary>A folder on the phone with files of one kind (for "Choose folders"): its path, its name to show, how many.</summary>
+public sealed record BackupFolderInfo(string Path, string Name, int Count);
+
 /// <summary>Turns a backup plan's sources into the list of files that is offered (everything; the computer picks).</summary>
 internal static class BackupManifest
 {
-    public static Manifest Build(BackupPlan plan, IBackupSources? platform, IExternalFiles? external, CancellationToken cancellationToken)
+    /// <summary>
+    /// <paramref name="newFolders"/> collects the folders left out because they are new (not ticked, never seen in the
+    /// list) so the user can be told.
+    /// </summary>
+    public static Manifest Build(BackupPlan plan, IBackupSources? platform, IExternalFiles? external, CancellationToken cancellationToken,
+        ICollection<(BackupSource Source, string Folder)>? newFolders = null)
     {
         var found = new List<(string[] Path, BackupItem Item, string Origin)>();
         var warnings = new List<string>();
@@ -48,6 +56,13 @@ internal static class BackupManifest
             {
                 var kind = BackupFileTypes.KindOf(item.RelativePath);
                 if (source.Kind is BackupSourceKinds.Folder or BackupSourceKinds.Documents && !types.Contains(kind)) continue;
+                var folder = BackupSource.FolderOf(item.RelativePath);
+                if (!source.IncludesFolder(folder))
+                {
+                    if (newFolders != null && !source.SeenFolders.Contains(folder) && !newFolders.Contains((source, folder))) newFolders.Add((source, folder));
+                    continue;
+                }
+
                 var segments = item.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(SafePath.SanitizeSegment).ToArray();
                 if (segments.Length == 0) continue;
                 // Folder names kept: "Camera/DCIM/IMG_1.jpg" under the source's name. Otherwise one folder per kind.
@@ -92,6 +107,27 @@ internal static class BackupManifest
 
         var roots = entries.Select(e => e.RelativePath[..e.RelativePath.IndexOf('/')]).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return new Manifest { Entries = entries, RootNames = roots, Warnings = warnings };
+    }
+
+    /// <summary>
+    /// The folders on the phone with this whole-phone kind of file ("Camera", "WhatsApp Images"…), most files first. A
+    /// name two folders share is shown with its path.
+    /// </summary>
+    public static IReadOnlyList<BackupFolderInfo> ListFolders(BackupSource source, IBackupSources? platform, CancellationToken cancellationToken)
+    {
+        var items = platform?.List(source, cancellationToken) ?? Array.Empty<BackupItem>();
+        var types = source.EffectiveTypes();
+        var groups = items.Where(i => source.Kind != BackupSourceKinds.Documents || types.Contains(BackupFileTypes.KindOf(i.RelativePath)))
+            .GroupBy(i => BackupSource.FolderOf(i.RelativePath))
+            .Select(g => (Path: g.Key, Count: g.Count()))
+            .ToList();
+        string NameOf(string path) => path.Length == 0 ? L.T("Main storage") : path[(path.LastIndexOf('/') + 1)..];
+        var shared = groups.GroupBy(g => NameOf(g.Path), StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return groups
+            .Select(g => new BackupFolderInfo(g.Path, shared.Contains(NameOf(g.Path)) ? g.Path : NameOf(g.Path), g.Count))
+            .OrderByDescending(f => f.Count).ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>Where a kind goes on the computer when folder names aren't kept.</summary>

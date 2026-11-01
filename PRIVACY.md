@@ -74,9 +74,10 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 - **You are told** – a notification says when a backup to a computer is set up, and each time files were backed up,
   naming the computer, with a **Stop backup** button.
 - **What is sent** – the files you chose, with their names, sizes and dates, encrypted on the way and checked
-  after they arrive. A switch each backs up all photos, all videos, all music or all documents on the phone; each
-  folder you add has its own switch and the kinds of files you tick (photos, videos, PDF, Word, Excel, PowerPoint,
-  text, e-books, music, archives, other). Only files the computer doesn't have yet (or that changed) are sent. Nothing on
+  after they arrive. A switch each backs up all photos, all videos, all music or all documents on the phone, from
+  all folders or only the folders you tick (for example, without WhatsApp's); a folder that appears later isn't
+  backed up until you tick it, unless "All folders" is ticked. Each folder you add has its own switch and the kinds of
+  files you tick (photos, videos, PDF, Word, Excel, PowerPoint, text, e-books, music, archives, other). Only files the computer doesn't have yet (or that changed) are sent. Nothing on
   the computer is deleted when you delete it on the phone, and a changed file's earlier copy is kept beside the new
   one.
 - **What is stored** – on the phone: which computer it backs up to (its name, identifier and key fingerprint),

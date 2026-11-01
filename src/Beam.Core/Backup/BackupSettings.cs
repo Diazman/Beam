@@ -108,6 +108,27 @@ public sealed class BackupSource
     /// <summary>For folders: the ticked <see cref="BackupFileTypes"/> kinds (null in plans saved before the checkboxes).</summary>
     public List<string>? Types { get; set; }
 
+    /// <summary>For folders: "All file types" ticked (every kind, whatever <see cref="Types"/> says).</summary>
+    public bool AllTypes { get; set; }
+
+    /// <summary>
+    /// For the whole-phone kinds: "All folders" ticked, so every folder with this kind of file is backed up, also ones
+    /// that appear later. Off: only <see cref="Folders"/>.
+    /// </summary>
+    public bool AllFolders { get; set; } = true;
+
+    /// <summary>With <see cref="AllFolders"/> off: the folders backed up, by their path on the phone ("DCIM/Camera").</summary>
+    public List<string> Folders { get; set; } = new();
+
+    /// <summary>
+    /// Folders the user has seen in the list. With <see cref="AllFolders"/> off, a folder that isn't here is new: it
+    /// isn't backed up until the user ticks it.
+    /// </summary>
+    public List<string> SeenFolders { get; set; } = new();
+
+    /// <summary>New folders the phone has already told the user about (once each).</summary>
+    public List<string> AnnouncedFolders { get; set; } = new();
+
     /// <summary>Before the checkboxes: one choice ("all", "photos", "documents", "custom"); read once, then <see cref="Types"/>.</summary>
     public string? FileTypes { get; set; }
 
@@ -116,8 +137,20 @@ public sealed class BackupSource
 
     public BackupSource Copy() => new()
     {
-        Kind = Kind, Address = Address, Name = Name, Enabled = Enabled, Types = EffectiveTypes().ToList(),
+        Kind = Kind, Address = Address, Name = Name, Enabled = Enabled, Types = EffectiveTypes().ToList(), AllTypes = AllTypes,
+        AllFolders = AllFolders, Folders = Folders.ToList(), SeenFolders = SeenFolders.ToList(), AnnouncedFolders = AnnouncedFolders.ToList(),
     };
+
+    /// <summary>A file in <paramref name="folder"/> (its path on the phone) is backed up.</summary>
+    public bool IncludesFolder(string folder) => Kind == BackupSourceKinds.Folder || AllFolders || Folders.Contains(folder);
+
+    /// <summary>"DCIM/Camera/IMG_1.jpg" → "DCIM/Camera"; a file at the top of the storage → "".</summary>
+    public static string FolderOf(string relativePath)
+    {
+        var path = relativePath.Replace('\\', '/').Trim('/');
+        var slash = path.LastIndexOf('/');
+        return slash < 0 ? "" : path[..slash];
+    }
 
     /// <summary>The ticked kinds (for photos and videos: that kind).</summary>
     public IReadOnlyList<string> EffectiveTypes() => Kind switch
@@ -126,6 +159,7 @@ public sealed class BackupSource
         BackupSourceKinds.Videos => new[] { BackupFileTypes.Videos },
         BackupSourceKinds.Music => new[] { BackupFileTypes.Music },
         BackupSourceKinds.Documents => BackupFileTypes.Documents,
+        _ when AllTypes => BackupFileTypes.All,
         _ => Types ?? BackupFileTypes.FromLegacy(FileTypes, Extensions),
     };
 }

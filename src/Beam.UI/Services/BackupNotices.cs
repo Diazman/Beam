@@ -31,6 +31,12 @@ public static class BackupNotices
             L.T("Its chosen files go to {0} by themselves whenever both are on the same Wi-Fi. If you didn't set this up, tap Stop backup.", plan.TargetName),
             plan.TargetId, () => Stop(node, plan.TargetId));
 
+        // "All folders" off and a folder appeared (a new app's photos): it isn't backed up until the user ticks it.
+        node.Backup.NewFolders += (target, kind, names) => platform.ShowNotification(
+            L.Plural(names.Count, "New folder on this phone", "New folders on this phone"),
+            L.T("{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.",
+                string.Join(", ", names), KindName(kind), target));
+
         node.Transfers.SessionFinished += session =>
         {
             if (!session.IsBackup || session.Direction != TransferDirection.Send) return;
@@ -44,6 +50,14 @@ public static class BackupNotices
     }
 
     private static string Tag(string targetId) => "backup-" + targetId;
+
+    private static string KindName(string kind) => kind switch
+    {
+        Beam.Core.Backup.BackupSourceKinds.Photos => L.T("Photos"),
+        Beam.Core.Backup.BackupSourceKinds.Videos => L.T("Videos"),
+        Beam.Core.Backup.BackupSourceKinds.Music => L.T("Music"),
+        _ => L.T("Documents"),
+    };
 
     private static void Stop(BeamNode node, string targetId)
     {

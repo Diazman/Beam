@@ -13,6 +13,178 @@ using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels;
 
+/// <summary>A folder in "Choose folders": ticked when it is backed up; "New" while the user hasn't seen it yet.</summary>
+public sealed class FolderChoiceViewModel : ObservableObject
+{
+    private readonly WholePhoneViewModel _owner;
+
+    public FolderChoiceViewModel(WholePhoneViewModel owner, BackupFolderInfo folder)
+    {
+        _owner = owner;
+        Folder = folder;
+    }
+
+    public BackupFolderInfo Folder { get; }
+
+    public string Name => Folder.Name;
+
+    public string Details => L.Plural(Folder.Count, "{0} file", "{0} files");
+
+    public bool IsNew => _owner.IsNew(Folder.Path);
+
+    public bool IsChecked
+    {
+        get => _owner.Includes(Folder.Path);
+        set => _owner.SetFolder(Folder.Path, value);
+    }
+
+    /// <summary>Gray and fixed while "All folders" is ticked.</summary>
+    public bool IsEditable => !_owner.AllFolders;
+
+    internal void Refresh()
+    {
+        OnPropertyChanged(nameof(IsChecked));
+        OnPropertyChanged(nameof(IsEditable));
+        OnPropertyChanged(nameof(IsNew));
+    }
+}
+
+/// <summary>
+/// Photos, videos, music or documents from the whole phone: a switch, and "Choose folders" (closed at first): "All
+/// folders" (every folder, also later ones; the list gray) or the folders ticked one by one, a new folder shown as new
+/// and left out until it is ticked.
+/// </summary>
+public sealed class WholePhoneViewModel : ObservableObject
+{
+    private readonly BackupViewModel _owner;
+    private readonly Func<bool> _isOn;
+    private readonly Action<bool> _setOn;
+    private IReadOnlyList<BackupFolderInfo>? _loaded;
+    private bool _isLoading;
+    private string _loadError = "";
+
+    public WholePhoneViewModel(BackupViewModel owner, string kind, string title, string caption, Func<bool> isOn, Action<bool> setOn)
+    {
+        _owner = owner;
+        Kind = kind;
+        Title = title;
+        Caption = caption;
+        _isOn = isOn;
+        _setOn = setOn;
+        ToggleFoldersCommand = new RelayCommand(() =>
+        {
+            ShowsFolders = !ShowsFolders;
+            OnPropertyChanged(nameof(ShowsFolders));
+            OnPropertyChanged(nameof(FoldersButtonText));
+            if (ShowsFolders) LoadAsync().Forget("Listing folders");
+            else _owner.MarkSeen(this); // closed: the folders shown aren't new any more
+        });
+    }
+
+    public string Kind { get; }
+
+    public string Title { get; }
+
+    public string Caption { get; }
+
+    public bool IsOn
+    {
+        get => _isOn();
+        set => _setOn(value);
+    }
+
+    public bool ShowsFolders { get; private set; }
+
+    public string FoldersButtonText => ShowsFolders ? L.T("Hide folders") : L.T("Choose folders");
+
+    public RelayCommand ToggleFoldersCommand { get; }
+
+    public ObservableCollection<FolderChoiceViewModel> Folders { get; } = new();
+
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set => SetProperty(ref _isLoading, value);
+    }
+
+    public string LoadError
+    {
+        get => _loadError;
+        private set
+        {
+            if (SetProperty(ref _loadError, value)) OnPropertyChanged(nameof(HasLoadError));
+        }
+    }
+
+    public bool HasLoadError => LoadError.Length > 0;
+
+    /// <summary>"All folders": everything, also folders that appear later; unticked, each folder is chosen.</summary>
+    public bool AllFolders
+    {
+        get => Source?.AllFolders ?? true;
+        set => _owner.SetAllFolders(this, value);
+    }
+
+    /// <summary>"All folders", "Skipping: WhatsApp Images", "New, not backed up: Telegram".</summary>
+    public string Summary
+    {
+        get
+        {
+            if (Source is not { } source) return "";
+            if (source.AllFolders) return L.T("All folders");
+            static string NameOf(string path) => path.Length == 0 ? L.T("Main storage") : path[(path.LastIndexOf('/') + 1)..];
+            var skipped = source.SeenFolders.Where(f => !source.Folders.Contains(f)).Select(NameOf).ToList();
+            var fresh = source.AnnouncedFolders.Concat(LoadedPaths ?? Array.Empty<string>())
+                .Where(f => !source.SeenFolders.Contains(f) && !source.Folders.Contains(f)).Distinct().Select(NameOf).ToList();
+            var parts = new List<string>();
+            if (skipped.Count > 0) parts.Add(L.T("Skipping: {0}", string.Join(", ", skipped)));
+            if (fresh.Count > 0) parts.Add(L.T("New, not backed up: {0}", string.Join(", ", fresh)));
+            return parts.Count > 0 ? string.Join(" · ", parts) : L.T("Chosen folders");
+        }
+    }
+
+    internal BackupSource? Source => _owner.SourceOf(Kind);
+
+    internal IReadOnlyList<string>? LoadedPaths => _loaded?.Select(f => f.Path).ToList();
+
+    internal bool Includes(string path) => Source?.IncludesFolder(path) == true;
+
+    internal bool IsNew(string path) => Source is { AllFolders: false } source && !source.SeenFolders.Contains(path);
+
+    internal void SetFolder(string path, bool ticked) => _owner.SetFolder(this, path, ticked);
+
+    internal void Refresh()
+    {
+        OnPropertyChanged(nameof(IsOn));
+        OnPropertyChanged(nameof(AllFolders));
+        OnPropertyChanged(nameof(Summary));
+        foreach (var folder in Folders) folder.Refresh();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Source is not { } source) return;
+        IsLoading = true;
+        LoadError = "";
+        try
+        {
+            _loaded = await _owner.ListFoldersAsync(source);
+            Folders.Clear();
+            foreach (var folder in _loaded) Folders.Add(new FolderChoiceViewModel(this, folder));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Backup: couldn't list the {Kind} folders", ex);
+            LoadError = L.T("Couldn't list the folders: {0}", ex.Message);
+        }
+        finally
+        {
+            IsLoading = false;
+            Refresh();
+        }
+    }
+}
+
 /// <summary>One kind of file a folder backup can take (a checkbox); "Documents" ticks or clears all of its kinds.</summary>
 public sealed class FileKindViewModel : ObservableObject
 {
@@ -52,7 +224,14 @@ public sealed class FileKindViewModel : ObservableObject
         set => _owner.Set(_kinds, value == true);
     }
 
-    internal void Refresh() => OnPropertyChanged(nameof(IsChecked));
+    /// <summary>Gray and fixed while "All file types" is ticked.</summary>
+    public bool IsEditable => !_owner.Source.AllTypes;
+
+    internal void Refresh()
+    {
+        OnPropertyChanged(nameof(IsChecked));
+        OnPropertyChanged(nameof(IsEditable));
+    }
 }
 
 /// <summary>On the phone: one thing that is backed up (the photos, the videos, or a folder and its kinds of files).</summary>
@@ -142,7 +321,7 @@ public sealed class BackupSourceViewModel : ObservableObject
         {
             var types = Source.EffectiveTypes();
             if (types.Count == 0) return L.T("No file types");
-            if (BackupFileTypes.All.All(types.Contains)) return L.T("All file types");
+            if (Source.AllTypes || BackupFileTypes.All.All(types.Contains)) return L.T("All file types");
             var names = new List<string>();
             foreach (var kind in FileKinds.Where(k => !k.IsChild))
             {
@@ -159,10 +338,30 @@ public sealed class BackupSourceViewModel : ObservableObject
 
     public RelayCommand RemoveCommand { get; }
 
-    internal bool Has(string kind) => Source.Types?.Contains(kind) == true;
+    /// <summary>
+    /// "All file types": every kind, the checkboxes below gray. Unticked, every kind stays ticked and each can be changed.
+    /// </summary>
+    public bool AllTypes
+    {
+        get => Source.AllTypes;
+        set
+        {
+            if (Source.AllTypes == value) return;
+            Source.AllTypes = value;
+            if (!value) Source.Types = BackupFileTypes.All.ToList();
+            OnPropertyChanged();
+            foreach (var kind in FileKinds) kind.Refresh();
+            OnPropertyChanged(nameof(HasNoKinds));
+            OnPropertyChanged(nameof(KindsSummary));
+            _saveNow();
+        }
+    }
+
+    internal bool Has(string kind) => Source.AllTypes || Source.Types?.Contains(kind) == true;
 
     internal void Set(IReadOnlyList<string> kinds, bool ticked)
     {
+        if (Source.AllTypes) return; // fixed while "All file types" is ticked
         var types = Source.Types ??= new List<string>();
         var before = types.Count;
         types.RemoveAll(kinds.Contains);
@@ -242,6 +441,14 @@ public sealed class BackupViewModel : ObservableObject
         _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Background, (_, _) => SaveAsync().Forget("Saving the backup choices"));
         _statusTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => RefreshStatus());
 
+        WholePhoneKinds = new[]
+        {
+            new WholePhoneViewModel(this, BackupSourceKinds.Photos, L.T("Photos"), L.T("Every photo on this phone"), () => BackUpPhotos, v => BackUpPhotos = v),
+            new WholePhoneViewModel(this, BackupSourceKinds.Videos, L.T("Videos"), L.T("Every video on this phone"), () => BackUpVideos, v => BackUpVideos = v),
+            new WholePhoneViewModel(this, BackupSourceKinds.Music, L.T("Music"), L.T("Every song and audio file on this phone"), () => BackUpMusic, v => BackUpMusic = v),
+            new WholePhoneViewModel(this, BackupSourceKinds.Documents, L.T("Documents"),
+                L.T("Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone"), () => BackUpDocuments, v => BackUpDocuments = v),
+        };
         node.Backup.Changed += () => Dispatcher.UIThread.Post(Reload);
         node.Settings.Changed += _ => Dispatcher.UIThread.Post(Reload);
         node.Discovery.DeviceFound += (_, _) => Dispatcher.UIThread.Post(RefreshStatus);
@@ -282,6 +489,9 @@ public sealed class BackupViewModel : ObservableObject
     public string TargetName => _plan?.TargetName ?? "";
 
     public string TargetText => L.T("Backing up to {0}", TargetName);
+
+    /// <summary>Photos, videos, music and documents from the whole phone: a switch each, and their folders.</summary>
+    public IReadOnlyList<WholePhoneViewModel> WholePhoneKinds { get; private set; } = Array.Empty<WholePhoneViewModel>();
 
     /// <summary>Every photo on the phone (its media library).</summary>
     public bool BackUpPhotos
@@ -462,6 +672,56 @@ public sealed class BackupViewModel : ObservableObject
 
     private bool IsOn(string kind) => _plan?.Sources.Any(s => s.Kind == kind && s.Enabled) == true;
 
+    internal BackupSource? SourceOf(string kind) => _plan?.Sources.FirstOrDefault(s => s.Kind == kind && s.Enabled);
+
+    internal Task<IReadOnlyList<BackupFolderInfo>> ListFoldersAsync(BackupSource source) =>
+        _node.Backup.ListFoldersAsync(source.Copy(), CancellationToken.None);
+
+    /// <summary>
+    /// "All folders" ticked: everything, also later folders (backs up more: the owner confirms). Unticked: every folder
+    /// listed stays ticked and can be changed; later folders wait to be ticked.
+    /// </summary>
+    internal void SetAllFolders(WholePhoneViewModel kind, bool all)
+    {
+        if (SourceOf(kind.Kind) is not { } source || source.AllFolders == all) return;
+        if (!all)
+        {
+            if (kind.LoadedPaths is not { } loaded)
+            {
+                kind.Refresh(); // the list isn't there yet: nothing to keep ticked
+                return;
+            }
+
+            source.Folders = loaded.ToList();
+            source.SeenFolders = source.SeenFolders.Union(loaded).ToList();
+        }
+
+        source.AllFolders = all;
+        kind.Refresh();
+        SaveAsync().Forget("Saving the backup choices");
+    }
+
+    internal void SetFolder(WholePhoneViewModel kind, string path, bool ticked)
+    {
+        if (SourceOf(kind.Kind) is not { AllFolders: false } source || source.Folders.Contains(path) == ticked) return;
+        if (ticked) source.Folders.Add(path);
+        else source.Folders.Remove(path);
+        if (!source.SeenFolders.Contains(path)) source.SeenFolders.Add(path);
+        kind.Refresh();
+        SaveAsync().Forget("Saving the backup choices");
+    }
+
+    /// <summary>The folder list was closed: the folders it showed aren't new any more.</summary>
+    internal void MarkSeen(WholePhoneViewModel kind)
+    {
+        if (SourceOf(kind.Kind) is not { AllFolders: false } source || kind.LoadedPaths is not { } loaded) return;
+        var unseen = loaded.Where(f => !source.SeenFolders.Contains(f)).ToList();
+        if (unseen.Count == 0) return;
+        source.SeenFolders.AddRange(unseen);
+        kind.Refresh();
+        SaveAsync().Forget("Saving the backup choices");
+    }
+
     private static readonly string[] WholePhoneProperties = { nameof(BackUpPhotos), nameof(BackUpVideos), nameof(BackUpMusic), nameof(BackUpDocuments) };
 
     /// <summary>
@@ -482,6 +742,7 @@ public sealed class BackupViewModel : ObservableObject
             if (!await _main.EnsurePermissionAsync(permission) || _plan == null)
             {
                 foreach (var name in WholePhoneProperties) OnPropertyChanged(name); // the switch goes back off
+                foreach (var row in WholePhoneKinds) row.Refresh();
                 return;
             }
 
@@ -539,6 +800,7 @@ public sealed class BackupViewModel : ObservableObject
             Kind = BackupSourceKinds.Folder,
             Address = address,
             Name = string.IsNullOrWhiteSpace(name) ? L.T("Folder") : name,
+            AllTypes = true,
         });
         await SaveAsync();
     }
@@ -599,7 +861,7 @@ public sealed class BackupViewModel : ObservableObject
         Reload();
     }
 
-    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.Enabled}|{string.Join(",", s.EffectiveTypes())}";
+    private static string SourceKey(BackupSource s) => $"{s.Kind}|{s.Address}|{s.Name}|{s.Enabled}|{s.AllTypes}|{string.Join(",", s.EffectiveTypes())}";
 
     /// <summary>
     /// Backs up more than before: a new source, a source switched on, a newly ticked kind, or automatic backups switched on.
@@ -611,6 +873,9 @@ public sealed class BackupViewModel : ObservableObject
         {
             var before = stored.Sources.FirstOrDefault(s => s.Enabled && s.Kind == source.Kind && s.Address == source.Address);
             if (before == null || source.EffectiveTypes().Except(before.EffectiveTypes()).Any()) return true;
+            // The whole phone's folders: "All folders" ticked again, or a folder ticked that wasn't.
+            if (source.AllFolders && !before.AllFolders) return true;
+            if (!source.AllFolders && !before.AllFolders && source.Folders.Except(before.Folders).Any()) return true;
         }
 
         return false;
@@ -738,6 +1003,7 @@ public sealed class BackupViewModel : ObservableObject
 
         foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) }.Concat(WholePhoneProperties))
             OnPropertyChanged(name);
+        foreach (var kind in WholePhoneKinds) kind.Refresh();
         _platform.ScheduleBackups(settings.Backups.Any(b => b.Automatic && b.HasAnythingToBackUp));
         RefreshStatus();
     }

@@ -647,5 +647,16 @@
   "Every song and audio file on this phone": "Bu telefondaki tüm şarkılar ve ses dosyaları",
   "Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone": "Bu telefondaki tüm PDF, Word, Excel, PowerPoint, metin dosyaları ve e-kitaplar",
   "Folders": "Klasörler",
-  "Back up chosen kinds of files from one folder.": "Bir klasörden seçilen dosya türlerini yedekleyin."
+  "Back up chosen kinds of files from one folder.": "Bir klasörden seçilen dosya türlerini yedekleyin.",
+  "Main storage": "Ana depolama",
+  "Hide folders": "Klasörleri gizle",
+  "Choose folders": "Klasörleri seç",
+  "All folders": "Tüm klasörler",
+  "Skipping: {0}": "Atlanıyor: {0}",
+  "New, not backed up: {0}": "Yeni, yedeklenmiyor: {0}",
+  "Chosen folders": "Seçilen klasörler",
+  "Couldn't list the folders: {0}": "Klasörler listelenemedi: {0}",
+  "New": "Yeni",
+  "{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.": "{0} ({1}), {2} cihazına yedeklenmiyor. Yedeklemek için Beam'de işaretleyin: Ayarlar → Yedekleme → Klasörleri seç.",
+  "New folders on this phone": "Bu telefonda yeni klasörler"
 }

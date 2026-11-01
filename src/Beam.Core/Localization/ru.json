@@ -743,5 +743,20 @@
   "Every song and audio file on this phone": "Вся музыка и аудиофайлы на этом телефоне",
   "Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone": "Все файлы PDF, Word, Excel, PowerPoint, текстовые файлы и электронные книги на этом телефоне",
   "Folders": "Папки",
-  "Back up chosen kinds of files from one folder.": "Копируйте выбранные типы файлов из отдельной папки."
+  "Back up chosen kinds of files from one folder.": "Копируйте выбранные типы файлов из отдельной папки.",
+  "Main storage": "Основная память",
+  "Hide folders": "Скрыть папки",
+  "Choose folders": "Выбрать папки",
+  "All folders": "Все папки",
+  "Skipping: {0}": "Пропускаются: {0}",
+  "New, not backed up: {0}": "Новые, не копируются: {0}",
+  "Chosen folders": "Выбранные папки",
+  "Couldn't list the folders: {0}": "Не удалось получить список папок: {0}",
+  "New": "Новая",
+  "{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.": "{0} ({1}) не копируется на {2}. Чтобы копировать, отметьте папку в Beam: «Настройки → Резервное копирование → Выбрать папки».",
+  "New folders on this phone": [
+    "На телефоне новая папка",
+    "На телефоне новые папки",
+    "На телефоне новые папки"
+  ]
 }

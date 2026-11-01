@@ -83,6 +83,16 @@ public sealed class BackupService : IDisposable
     /// <summary>On the phone: a backup to a computer was set up (raised on any thread), so the phone can say so where it can't be missed.</summary>
     public event Action<BackupPlan>? SetUp;
 
+    /// <summary>
+    /// On the phone: a backup found folders that aren't backed up because they are new ("All folders" is off): the
+    /// computer's name, the kind ("photos"), and the folders' names. Once per folder; raised on any thread.
+    /// </summary>
+    public event Action<string, string, IReadOnlyList<string>>? NewFolders;
+
+    /// <summary>The folders on this phone with a whole-phone kind of file, for "Choose folders" (takes a moment).</summary>
+    public Task<IReadOnlyList<BackupFolderInfo>> ListFoldersAsync(BackupSource source, CancellationToken cancellationToken) =>
+        Task.Run(() => BackupManifest.ListFolders(source, _sources, cancellationToken), cancellationToken);
+
     internal void Start()
     {
         // The computer's last known addresses: found even on a network that drops Beam's announcements.
@@ -270,7 +280,12 @@ public sealed class BackupService : IDisposable
         _settings.Update(s =>
         {
             if (s.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) is not { } stored) return;
+            var announced = stored.Sources.ToDictionary(c => c.Kind + "|" + c.Address, c => c.AnnouncedFolders);
             stored.Sources = plan.Sources.Select(c => c.Copy()).ToList();
+            // What the phone already told the user about stays told (recorded while the screen had an older copy).
+            foreach (var source in stored.Sources)
+                if (announced.TryGetValue(source.Kind + "|" + source.Address, out var told))
+                    source.AnnouncedFolders = source.AnnouncedFolders.Union(told).ToList();
             stored.Automatic = plan.Automatic;
             stored.KeepFolderNames = plan.KeepFolderNames;
         });
@@ -398,12 +413,43 @@ public sealed class BackupService : IDisposable
             var targetId = plan.TargetId;
             var session = _transfers.SendBackup(device,
                 () => _discovery.Find(targetId) is { } found && Reachable(plan) is { } current ? current : device with { Endpoints = Array.Empty<IPEndPoint>() },
-                token => BackupManifest.Build(plan, _sources, _transfers.ExternalFiles, token),
+                token =>
+                {
+                    var fresh = new List<(BackupSource Source, string Folder)>();
+                    var manifest = BackupManifest.Build(plan, _sources, _transfers.ExternalFiles, token, fresh);
+                    Announce(plan, fresh);
+                    return manifest;
+                },
                 L.T("Backup to {0}", plan.TargetName));
             _running[plan.TargetId] = session;
             Log.Info($"Backup to {plan.TargetName}: {(automatic ? "checking (automatic)" : "checking (Back up now)")}");
             Changed?.Invoke();
             return session;
+        }
+    }
+
+    /// <summary>New folders left out of a backup: told once each (and remembered as told).</summary>
+    private void Announce(BackupPlan plan, List<(BackupSource Source, string Folder)> fresh)
+    {
+        if (fresh.Count == 0) return;
+        var told = new List<(string Kind, List<string> Folders)>();
+        _settings.Update(s =>
+        {
+            if (s.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) is not { } stored) return;
+            foreach (var group in fresh.GroupBy(f => f.Source.Kind))
+            {
+                if (stored.Sources.FirstOrDefault(c => c.Kind == group.Key) is not { } source) continue;
+                var folders = group.Select(f => f.Folder).Where(f => !source.AnnouncedFolders.Contains(f)).Distinct().ToList();
+                if (folders.Count == 0) continue;
+                source.AnnouncedFolders.AddRange(folders);
+                told.Add((group.Key, folders));
+            }
+        });
+        foreach (var (kind, folders) in told)
+        {
+            var names = folders.Select(f => f.Length == 0 ? L.T("Main storage") : f[(f.LastIndexOf('/') + 1)..]).ToList();
+            Log.Info($"Backup: {names.Count} new {kind} folder(s) not backed up until chosen");
+            NewFolders?.Invoke(plan.TargetName, kind, names);
         }
     }
 

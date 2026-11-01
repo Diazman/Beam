@@ -134,7 +134,9 @@ encrypted by Beam (plain HTTP on the LAN).
 - **Runs:** the phone offers everything its switched-on sources list (`BackupManifest.Build`: photos, videos and
   music from the media library and every document in shared storage, the latter with Android's "All files access",
   through `IBackupSources` on Android; folders through `IExternalFiles` or the file system, filtered by the ticked
-  `BackupFileTypes` kinds, "other" being everything no kind covers). Paths keep the phone's folders under the source's
+  `BackupFileTypes` kinds, "other" being everything no kind covers; a whole-phone kind takes every folder with
+  `AllFolders`, else only `Folders`, a folder not in `SeenFolders` being new: left out and announced once through
+  `BackupService.NewFolders`). Paths keep the phone's folders under the source's
   name with `BackupPlan.KeepFolderNames`; otherwise (the default) each file goes into its kind's folder (Photos,
   Videos, Documents, Music, Archives, Other files), different files with one name kept apart by a tag from their phone
   path, the same on every run. It goes as an ordinary transfer with `OfferMessage.Backup` set. The receiver takes it

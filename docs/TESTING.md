@@ -6,12 +6,12 @@
 dotnet test Beam.sln          # ~3 minutes; runs on Windows, Linux and macOS
 ```
 
-**`tests/Beam.Core.Tests`** (249 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
+**`tests/Beam.Core.Tests`** (250 tests) start real Beam nodes in-process — real TLS, real sockets, real files — and
 transfer between them over loopback. A fault-injecting TCP proxy (`FlakyProxy`) cuts connections mid-transfer.
 Direct mode and Bluetooth run against fakes of the radios (`FakeDirectAir`, `FakeNearbyAir`), which can drop links,
 refuse joins or turn Wi-Fi off; tests that change process-wide network state run alone.
 
-**`tests/Beam.App.Tests`** (56 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
+**`tests/Beam.App.Tests`** (58 tests, including one that renders the Microsoft Store screenshots) run the actual Avalonia UI headlessly against a real node, drive it through
 view-model commands while a second node sends/receives, and render screenshots of every major screen to
 `artifacts/screenshots/` for visual review.
 
@@ -128,6 +128,9 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
    the phone's folders), without any question. Turn on "Keep the phone's folder names": the next backup keeps them.
    Switch Music on (Android asks for music), and Documents (Android's "All files access" page opens; allow it):
    the next backup adds every song and every document, including Download. Switch the folder off: its files stop.
+   Photos → Choose folders: "All folders" ticked and the folders gray; untick it, untick WhatsApp Images: the next
+   backup leaves them out. Save a photo from a new app: a notification says its folder isn't backed up, and it shows
+   as New in the list until ticked.
 4. Back up now again: nothing is sent, no card, no history entry. Take a photo: it arrives on the next run.
 5. Leave the Wi-Fi, take photos, come back: the backup runs by itself within a few minutes (also with Beam closed).
 6. Hand the unlocked phone to someone else: setting up a backup (or adding a folder to it) asks for the fingerprint,

@@ -118,35 +118,55 @@
               </Grid>
               <Separator />
               <TextBlock Classes="h3" Text="{l:T 'What is backed up'}" />
-              <!-- From the whole phone, a switch each -->
-              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                  <TextBlock Text="{l:T 'Photos'}" />
-                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every photo on this phone'}" />
-                </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpPhotos}" Margin="16,0,0,0" />
-              </Grid>
-              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                  <TextBlock Text="{l:T 'Videos'}" />
-                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every video on this phone'}" />
-                </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpVideos}" Margin="16,0,0,0" />
-              </Grid>
-              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                  <TextBlock Text="{l:T 'Music'}" />
-                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every song and audio file on this phone'}" />
-                </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpMusic}" Margin="16,0,0,0" />
-              </Grid>
-              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                  <TextBlock Text="{l:T 'Documents'}" />
-                  <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Every PDF, Word, Excel, PowerPoint, text file and e-book on this phone'}" />
-                </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Backup.BackUpDocuments}" Margin="16,0,0,0" />
-              </Grid>
+              <!-- From the whole phone: a switch each, and "Choose folders" (closed at first) -->
+              <ItemsControl ItemsSource="{Binding Backup.WholePhoneKinds}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:WholePhoneViewModel">
+                    <StackPanel Spacing="6" Margin="0,4">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                          <TextBlock Text="{Binding Title}" />
+                          <TextBlock Classes="caption" TextWrapping="Wrap" Text="{Binding Caption}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsOn}" Margin="16,0,0,0" AutomationProperties.Name="{Binding Title}" />
+                      </Grid>
+                      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOn}" Margin="16,0,0,0">
+                        <TextBlock Classes="caption" Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="link" Content="{Binding FoldersButtonText}" Command="{Binding ToggleFoldersCommand}"
+                                VerticalAlignment="Center" Margin="12,0,0,0" />
+                      </Grid>
+                      <StackPanel Spacing="2" Margin="16,0,0,0">
+                        <StackPanel.IsVisible>
+                          <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="IsOn" />
+                            <Binding Path="ShowsFolders" />
+                          </MultiBinding>
+                        </StackPanel.IsVisible>
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+                        <TextBlock Classes="caption error" TextWrapping="Wrap" Text="{Binding LoadError}" IsVisible="{Binding HasLoadError}" />
+                        <CheckBox IsChecked="{Binding AllFolders}" MinHeight="32" IsVisible="{Binding !IsLoading}">
+                          <TextBlock Text="{l:T 'All folders'}" FontWeight="SemiBold" />
+                        </CheckBox>
+                        <ItemsControl ItemsSource="{Binding Folders}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FolderChoiceViewModel">
+                              <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" Classes="child" MinHeight="32">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                  <TextBlock Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" />
+                                  <Border Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center">
+                                    <TextBlock Text="{l:T 'New'}" FontSize="11" />
+                                  </Border>
+                                </StackPanel>
+                              </CheckBox>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
               <Separator />
               <!-- Folders chosen one by one: a switch each, and the kinds of files to take from it -->
               <StackPanel Spacing="2">
@@ -173,10 +193,13 @@
                         <Button Grid.Column="1" Classes="link" Content="{Binding KindsButtonText}" Command="{Binding ToggleKindsCommand}"
                                 VerticalAlignment="Center" Margin="12,0,0,0" />
                       </Grid>
+                      <CheckBox IsChecked="{Binding AllTypes}" IsVisible="{Binding ShowsKinds}" Margin="16,0,0,0" MinHeight="32">
+                        <TextBlock Text="{l:T 'All file types'}" FontWeight="SemiBold" />
+                      </CheckBox>
                       <ItemsControl ItemsSource="{Binding FileKinds}" IsVisible="{Binding ShowsKinds}" Margin="16,0,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:FileKindViewModel">
-                            <CheckBox IsChecked="{Binding IsChecked}" Classes.child="{Binding IsChild}" MinHeight="32">
+                            <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" Classes.child="{Binding IsChild}" MinHeight="32">
                               <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
                                 <TextBlock Classes="caption" Text="{Binding Details}" IsVisible="{Binding HasDetails}" VerticalAlignment="Center"

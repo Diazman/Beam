@@ -67,6 +67,15 @@
     <Setter Property="Padding" Value="24" />
     <Setter Property="BoxShadow" Value="0 12 40 0 #40000000" />
   </Style>
+  <!-- A small label next to an item ("New" folders in backup choices). -->
+  <Style Selector="Border.badge">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="6,1" />
+  </Style>
+  <Style Selector="Border.badge > TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+  </Style>
   <Style Selector="Border.iconBadge">
     <Setter Property="Width" Value="40" />
     <Setter Property="Height" Value="40" />
