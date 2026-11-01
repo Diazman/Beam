@@ -658,5 +658,10 @@
   "Couldn't list the folders: {0}": "Jildlar ro‘yxatini olib bo‘lmadi: {0}",
   "New": "Yangi",
   "{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.": "{0} ({1}) {2} ga zaxiralanmaydi. Zaxiralash uchun Beam’da belgilang: Sozlamalar → Zaxiralash → Jildlarni tanlash.",
-  "New folders on this phone": "Bu telefonda yangi jildlar"
+  "New folders on this phone": "Bu telefonda yangi jildlar",
+  "Screenshots": "Skrinshotlar",
+  "Camera": "Kamera",
+  "Downloads": "Yuklanmalar",
+  "Hide": "Yashirish",
+  "Other folders ({0})": "Boshqa jildlar ({0})"
 }

@@ -59,7 +59,10 @@ internal static class BackupManifest
                 var folder = BackupSource.FolderOf(item.RelativePath);
                 if (!source.IncludesFolder(folder))
                 {
-                    if (newFolders != null && !source.SeenFolders.Contains(folder) && !newFolders.Contains((source, folder))) newFolders.Add((source, folder));
+                    // A new folder of no main folder (a main folder left out is left out on purpose, new or not).
+                    if (newFolders != null && BackupFolderGroups.Of(folder) == null && !source.SeenFolders.Contains(folder)
+                        && !newFolders.Contains((source, folder)))
+                        newFolders.Add((source, folder));
                     continue;
                 }
 

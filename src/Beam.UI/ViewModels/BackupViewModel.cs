@@ -13,29 +13,59 @@ using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels;
 
-/// <summary>A folder in "Choose folders": ticked when it is backed up; "New" while the user hasn't seen it yet.</summary>
+/// <summary>
+/// A row in "Choose folders": a main folder ("WhatsApp": every folder of it), one other folder, or "Other folders"
+/// (all of them, partly ticked when some are; opens to choose them one by one).
+/// </summary>
 public sealed class FolderChoiceViewModel : ObservableObject
 {
     private readonly WholePhoneViewModel _owner;
 
-    public FolderChoiceViewModel(WholePhoneViewModel owner, BackupFolderInfo folder)
+    internal FolderChoiceViewModel(WholePhoneViewModel owner, string name, int count, string? key, IReadOnlyList<string> paths)
     {
         _owner = owner;
-        Folder = folder;
+        Name = name;
+        Count = count;
+        Key = key;
+        Paths = paths;
+        ToggleChildrenCommand = new RelayCommand(() =>
+        {
+            ShowsChildren = !ShowsChildren;
+            OnPropertyChanged(nameof(ShowsChildren));
+            OnPropertyChanged(nameof(ChildrenButtonText));
+        });
     }
 
-    public BackupFolderInfo Folder { get; }
+    public string Name { get; }
 
-    public string Name => Folder.Name;
+    public int Count { get; }
 
-    public string Details => L.Plural(Folder.Count, "{0} file", "{0} files");
+    public string Details => L.Plural(Count, "{0} file", "{0} files");
 
-    public bool IsNew => _owner.IsNew(Folder.Path);
+    /// <summary>"group:whatsapp" for a main folder, the path for one other folder, null for "Other folders".</summary>
+    internal string? Key { get; }
 
-    public bool IsChecked
+    /// <summary>The folders on the phone this row stands for.</summary>
+    internal IReadOnlyList<string> Paths { get; }
+
+    /// <summary>"Other folders": the folders inside it.</summary>
+    public ObservableCollection<FolderChoiceViewModel> Children { get; } = new();
+
+    public bool IsOther => Key == null;
+
+    public bool ShowsChildren { get; private set; }
+
+    public string ChildrenButtonText => ShowsChildren ? L.T("Hide") : L.T("Show");
+
+    public RelayCommand ToggleChildrenCommand { get; }
+
+    /// <summary>A folder (or, for "Other folders", one inside it) the user hasn't seen yet: not backed up until ticked.</summary>
+    public bool IsNew => IsOther ? Children.Any(c => c.IsNew) : _owner.IsNew(Key!);
+
+    public bool? IsChecked
     {
-        get => _owner.Includes(Folder.Path);
-        set => _owner.SetFolder(Folder.Path, value);
+        get => _owner.StateOf(this);
+        set => _owner.Set(this, value == true);
     }
 
     /// <summary>Gray and fixed while "All folders" is ticked.</summary>
@@ -43,6 +73,7 @@ public sealed class FolderChoiceViewModel : ObservableObject
 
     internal void Refresh()
     {
+        foreach (var child in Children) child.Refresh();
         OnPropertyChanged(nameof(IsChecked));
         OnPropertyChanged(nameof(IsEditable));
         OnPropertyChanged(nameof(IsNew));
@@ -51,8 +82,8 @@ public sealed class FolderChoiceViewModel : ObservableObject
 
 /// <summary>
 /// Photos, videos, music or documents from the whole phone: a switch, and "Choose folders" (closed at first): "All
-/// folders" (every folder, also later ones; the list gray) or the folders ticked one by one, a new folder shown as new
-/// and left out until it is ticked.
+/// folders" (every folder, also later ones; the list gray) or the main folders (camera, screenshots, the usual apps)
+/// and "Other folders" ticked one by one; a new other folder shows as new and is left out until it is ticked.
 /// </summary>
 public sealed class WholePhoneViewModel : ObservableObject
 {
@@ -99,6 +130,7 @@ public sealed class WholePhoneViewModel : ObservableObject
 
     public RelayCommand ToggleFoldersCommand { get; }
 
+    /// <summary>The main folders found on this phone, then "Other folders" (when there are any).</summary>
     public ObservableCollection<FolderChoiceViewModel> Folders { get; } = new();
 
     public bool IsLoading
@@ -125,17 +157,16 @@ public sealed class WholePhoneViewModel : ObservableObject
         set => _owner.SetAllFolders(this, value);
     }
 
-    /// <summary>"All folders", "Skipping: WhatsApp Images", "New, not backed up: Telegram".</summary>
+    /// <summary>"All folders", "Skipping: WhatsApp, Telegram", "New, not backed up: scanner".</summary>
     public string Summary
     {
         get
         {
             if (Source is not { } source) return "";
             if (source.AllFolders) return L.T("All folders");
-            static string NameOf(string path) => path.Length == 0 ? L.T("Main storage") : path[(path.LastIndexOf('/') + 1)..];
-            var skipped = source.SeenFolders.Where(f => !source.Folders.Contains(f)).Select(NameOf).ToList();
-            var fresh = source.AnnouncedFolders.Concat(LoadedPaths ?? Array.Empty<string>())
-                .Where(f => !source.SeenFolders.Contains(f) && !source.Folders.Contains(f)).Distinct().Select(NameOf).ToList();
+            var skipped = source.SeenFolders.Where(k => !Includes(source, k)).Select(NameOf).ToList();
+            var fresh = source.AnnouncedFolders.Concat(OtherPaths)
+                .Where(f => !source.SeenFolders.Contains(f) && !source.IncludesFolder(f)).Distinct().Select(NameOf).ToList();
             var parts = new List<string>();
             if (skipped.Count > 0) parts.Add(L.T("Skipping: {0}", string.Join(", ", skipped)));
             if (fresh.Count > 0) parts.Add(L.T("New, not backed up: {0}", string.Join(", ", fresh)));
@@ -145,13 +176,47 @@ public sealed class WholePhoneViewModel : ObservableObject
 
     internal BackupSource? Source => _owner.SourceOf(Kind);
 
-    internal IReadOnlyList<string>? LoadedPaths => _loaded?.Select(f => f.Path).ToList();
+    /// <summary>Everything the list shows: the main folders' keys and the other folders' paths (null before it is loaded).</summary>
+    internal IReadOnlyList<string>? LoadedKeys => _loaded == null ? null : Folders.SelectMany(f => f.IsOther ? f.Children.Select(c => c.Key!) : new[] { f.Key! }).ToList();
 
-    internal bool Includes(string path) => Source?.IncludesFolder(path) == true;
+    internal IEnumerable<string> OtherPaths => Folders.Where(f => f.IsOther).SelectMany(f => f.Children).Select(c => c.Key!);
 
-    internal bool IsNew(string path) => Source is { AllFolders: false } source && !source.SeenFolders.Contains(path);
+    internal static string NameOf(string key) =>
+        key.StartsWith(BackupFolderGroups.Prefix, StringComparison.Ordinal) ? BackupFolderGroups.NameOf(key[BackupFolderGroups.Prefix.Length..])
+        : key.Length == 0 ? L.T("Main storage") : key[(key.LastIndexOf('/') + 1)..];
 
-    internal void SetFolder(string path, bool ticked) => _owner.SetFolder(this, path, ticked);
+    private static bool Includes(BackupSource source, string key) =>
+        key.StartsWith(BackupFolderGroups.Prefix, StringComparison.Ordinal) ? source.Folders.Contains(key) : source.IncludesFolder(key);
+
+    /// <summary>Not seen yet: only other folders can be new (a main folder is chosen as a whole).</summary>
+    internal bool IsNew(string key) =>
+        Source is { AllFolders: false } source && !key.StartsWith(BackupFolderGroups.Prefix, StringComparison.Ordinal)
+        && !source.SeenFolders.Contains(key) && !source.IncludesFolder(key);
+
+    internal bool? StateOf(FolderChoiceViewModel row)
+    {
+        if (Source is not { } source) return false;
+        if (source.AllFolders) return true;
+        if (row.IsOther) return Combine(row.Children.Select(c => StateOf(c) == true));
+        if (row.Key!.StartsWith(BackupFolderGroups.Prefix, StringComparison.Ordinal))
+            return source.Folders.Contains(row.Key) ? true : Combine(row.Paths.Select(p => source.Folders.Contains(p)));
+        return source.IncludesFolder(row.Key);
+    }
+
+    private static bool? Combine(IEnumerable<bool> states)
+    {
+        var list = states.ToList();
+        return list.All(x => x) ? true : list.Any(x => x) ? null : false;
+    }
+
+    /// <summary>Ticks or unticks a row (a main folder as a whole, one folder, or every other folder).</summary>
+    internal void Set(FolderChoiceViewModel row, bool ticked)
+    {
+        var keys = row.IsOther ? row.Children.Select(c => c.Key!).ToList() : new List<string> { row.Key! };
+        // A main folder replaces any of its folders chosen one by one before.
+        var remove = keys.Concat(row.IsOther ? Array.Empty<string>() : row.Paths).ToList();
+        _owner.ChangeFolders(this, ticked ? keys : Array.Empty<string>(), remove, keys);
+    }
 
     internal void Refresh()
     {
@@ -170,7 +235,22 @@ public sealed class WholePhoneViewModel : ObservableObject
         {
             _loaded = await _owner.ListFoldersAsync(source);
             Folders.Clear();
-            foreach (var folder in _loaded) Folders.Add(new FolderChoiceViewModel(this, folder));
+            var grouped = _loaded.GroupBy(f => BackupFolderGroups.Of(f.Path)).ToList();
+            foreach (var id in BackupFolderGroups.Order)
+            {
+                if (grouped.FirstOrDefault(g => g.Key == id) is not { } group) continue;
+                Folders.Add(new FolderChoiceViewModel(this, BackupFolderGroups.NameOf(id), group.Sum(f => f.Count), BackupFolderGroups.Prefix + id,
+                    group.Select(f => f.Path).ToList()));
+            }
+
+            var others = grouped.FirstOrDefault(g => g.Key == null)?.ToList() ?? new List<BackupFolderInfo>();
+            if (others.Count > 0)
+            {
+                var other = new FolderChoiceViewModel(this, L.T("Other folders ({0})", others.Count), others.Sum(f => f.Count), null,
+                    others.Select(f => f.Path).ToList());
+                foreach (var folder in others) other.Children.Add(new FolderChoiceViewModel(this, folder.Name, folder.Count, folder.Path, new[] { folder.Path }));
+                Folders.Add(other);
+            }
         }
         catch (Exception ex)
         {
@@ -682,15 +762,16 @@ public sealed class BackupViewModel : ObservableObject
         _node.Backup.ListFoldersAsync(source.Copy(), CancellationToken.None);
 
     /// <summary>
-    /// "All folders" ticked: everything, also later folders (backs up more: the owner confirms). Unticked: every folder
-    /// listed stays ticked and can be changed; later folders wait to be ticked.
+    /// "All folders" ticked: everything, also later folders (backs up more: the owner confirms). Unticked: everything
+    /// listed stays ticked (the main folders as wholes, the other folders one by one) and can be changed; later other
+    /// folders wait to be ticked.
     /// </summary>
     internal void SetAllFolders(WholePhoneViewModel kind, bool all)
     {
         if (SourceOf(kind.Kind) is not { } source || source.AllFolders == all) return;
         if (!all)
         {
-            if (kind.LoadedPaths is not { } loaded)
+            if (kind.LoadedKeys is not { } loaded)
             {
                 kind.Refresh(); // the list isn't there yet: nothing to keep ticked
                 return;
@@ -705,12 +786,12 @@ public sealed class BackupViewModel : ObservableObject
         SaveAsync().Forget("Saving the backup choices");
     }
 
-    internal void SetFolder(WholePhoneViewModel kind, string path, bool ticked)
+    /// <summary>Ticks (<paramref name="add"/>) or unticks (<paramref name="remove"/>) folders; all of them are seen now.</summary>
+    internal void ChangeFolders(WholePhoneViewModel kind, IReadOnlyList<string> add, IReadOnlyList<string> remove, IReadOnlyList<string> seen)
     {
-        if (SourceOf(kind.Kind) is not { AllFolders: false } source || source.Folders.Contains(path) == ticked) return;
-        if (ticked) source.Folders.Add(path);
-        else source.Folders.Remove(path);
-        if (!source.SeenFolders.Contains(path)) source.SeenFolders.Add(path);
+        if (SourceOf(kind.Kind) is not { AllFolders: false } source) return;
+        source.Folders = source.Folders.Except(remove).Concat(add).Distinct().ToList();
+        source.SeenFolders = source.SeenFolders.Union(seen).ToList();
         kind.Refresh();
         SaveAsync().Forget("Saving the backup choices");
     }
@@ -718,7 +799,7 @@ public sealed class BackupViewModel : ObservableObject
     /// <summary>The folder list was closed: the folders it showed aren't new any more.</summary>
     internal void MarkSeen(WholePhoneViewModel kind)
     {
-        if (SourceOf(kind.Kind) is not { AllFolders: false } source || kind.LoadedPaths is not { } loaded) return;
+        if (SourceOf(kind.Kind) is not { AllFolders: false } source || kind.LoadedKeys is not { } loaded) return;
         var unseen = loaded.Where(f => !source.SeenFolders.Contains(f)).ToList();
         if (unseen.Count == 0) return;
         source.SeenFolders.AddRange(unseen);

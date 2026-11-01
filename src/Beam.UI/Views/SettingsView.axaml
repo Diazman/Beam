@@ -147,18 +147,48 @@
                         <CheckBox IsChecked="{Binding AllFolders}" MinHeight="32" IsVisible="{Binding !IsLoading}">
                           <TextBlock Text="{l:T 'All folders'}" FontWeight="SemiBold" />
                         </CheckBox>
-                        <ItemsControl ItemsSource="{Binding Folders}">
+                        <ItemsControl ItemsSource="{Binding Folders}" Margin="24,0,0,0">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:FolderChoiceViewModel">
-                              <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" Classes="child" MinHeight="32">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                  <TextBlock Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" />
-                                  <Border Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center">
-                                    <TextBlock Text="{l:T 'New'}" FontSize="11" />
-                                  </Border>
-                                </StackPanel>
-                              </CheckBox>
+                              <StackPanel>
+                              <Grid ColumnDefinitions="*,Auto">
+                                <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" MinHeight="32" HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                  <Grid ColumnDefinitions="Auto,Auto,Auto" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxWidth="190"
+                                               ToolTip.Tip="{Binding Name}" />
+                                    <TextBlock Grid.Column="1" Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                    <Border Grid.Column="2" Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center" Margin="6,0,0,0">
+                                      <TextBlock Text="{l:T 'New'}" FontSize="11" />
+                                    </Border>
+                                  </Grid>
+                                </CheckBox>
+                                <Button Grid.Column="1" Classes="link" Content="{Binding ChildrenButtonText}" Command="{Binding ToggleChildrenCommand}"
+                                        IsVisible="{Binding IsOther}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                              </Grid>
+                                <!-- "Other folders" opened: each of them -->
+                                <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding ShowsChildren}" Margin="24,0,0,0">
+                                  <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FolderChoiceViewModel">
+                                      <Grid ColumnDefinitions="*,Auto">
+                                <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" MinHeight="32" HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                  <Grid ColumnDefinitions="Auto,Auto,Auto" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxWidth="190"
+                                               ToolTip.Tip="{Binding Name}" />
+                                    <TextBlock Grid.Column="1" Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                    <Border Grid.Column="2" Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center" Margin="6,0,0,0">
+                                      <TextBlock Text="{l:T 'New'}" FontSize="11" />
+                                    </Border>
+                                  </Grid>
+                                </CheckBox>
+                                <Button Grid.Column="1" Classes="link" Content="{Binding ChildrenButtonText}" Command="{Binding ToggleChildrenCommand}"
+                                        IsVisible="{Binding IsOther}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                              </Grid>
+                                    </DataTemplate>
+                                  </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                              </StackPanel>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>

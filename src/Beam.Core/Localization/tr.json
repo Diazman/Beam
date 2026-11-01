@@ -658,5 +658,10 @@
   "Couldn't list the folders: {0}": "Klasörler listelenemedi: {0}",
   "New": "Yeni",
   "{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.": "{0} ({1}), {2} cihazına yedeklenmiyor. Yedeklemek için Beam'de işaretleyin: Ayarlar → Yedekleme → Klasörleri seç.",
-  "New folders on this phone": "Bu telefonda yeni klasörler"
+  "New folders on this phone": "Bu telefonda yeni klasörler",
+  "Screenshots": "Ekran görüntüleri",
+  "Camera": "Kamera",
+  "Downloads": "İndirilenler",
+  "Hide": "Gizle",
+  "Other folders ({0})": "Diğer klasörler ({0})"
 }

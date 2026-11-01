@@ -117,7 +117,10 @@ public sealed class BackupSource
     /// </summary>
     public bool AllFolders { get; set; } = true;
 
-    /// <summary>With <see cref="AllFolders"/> off: the folders backed up, by their path on the phone ("DCIM/Camera").</summary>
+    /// <summary>
+    /// With <see cref="AllFolders"/> off: what is backed up: main folders ("group:whatsapp", every folder of it, also
+    /// later ones; see <see cref="BackupFolderGroups"/>) and other folders by their path on the phone ("Pictures/Scans").
+    /// </summary>
     public List<string> Folders { get; set; } = new();
 
     /// <summary>
@@ -142,7 +145,9 @@ public sealed class BackupSource
     };
 
     /// <summary>A file in <paramref name="folder"/> (its path on the phone) is backed up.</summary>
-    public bool IncludesFolder(string folder) => Kind == BackupSourceKinds.Folder || AllFolders || Folders.Contains(folder);
+    public bool IncludesFolder(string folder) =>
+        Kind == BackupSourceKinds.Folder || AllFolders || Folders.Contains(folder)
+        || (BackupFolderGroups.Of(folder) is { } group && Folders.Contains(BackupFolderGroups.Prefix + group));
 
     /// <summary>"DCIM/Camera/IMG_1.jpg" → "DCIM/Camera"; a file at the top of the storage → "".</summary>
     public static string FolderOf(string relativePath)

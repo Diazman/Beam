@@ -372,10 +372,11 @@ public class BackupUiTests
         Beam.App.ViewModels.BackupViewModel.OwnerGrace = TimeSpan.Zero;
         try
         {
+            const string whatsApp = "Android/media/com.whatsapp/WhatsApp/Media/";
             var library = new PhoneLibrary();
-            library.Add("DCIM/Camera/IMG_1.jpg", "DCIM/Camera/IMG_2.jpg");
-            library.Add("Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/IMG-1.jpg",
-                "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/IMG-2.jpg", "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/IMG-3.jpg");
+            library.Add("DCIM/Camera/IMG_1.jpg", "DCIM/Camera/IMG_2.jpg", "DCIM/Screenshots/s.png");
+            library.Add(whatsApp + "WhatsApp Images/IMG-1.jpg", whatsApp + "WhatsApp Images/IMG-2.jpg", whatsApp + "WhatsApp Business Images/IMG-3.jpg");
+            library.Add("Pictures/AdobeLightroom/a.jpg", "Pictures/Picsart/b.jpg", "Movies/Ghost Graduation (2012) [720p] [BluRay] [YTS.MX]/poster.jpg");
             await using var pc = new UiHarness("Diaz's PC");
             await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true, backupSources: library);
             phone.Platform.SupportsBackup = true;
@@ -392,74 +393,78 @@ public class BackupUiTests
             var photos = backup.WholePhoneKinds.Single(k => k.Kind == BackupSourceKinds.Photos);
             await UiHarness.WaitForAsync(() => photos.IsOn, "photos on");
 
-            // Closed at first, "All folders": every folder, gray.
-            Assert.False(photos.ShowsFolders);
+            // Closed at first. Open: the main folders (each app's folders as one), then "Other folders"; "All folders" ticked, all gray.
             Assert.Equal("All folders", photos.Summary);
             photos.ToggleFoldersCommand.Execute(null);
-            await UiHarness.WaitForAsync(() => photos.Folders.Count == 2, "folders listed");
-            Assert.Equal(new[] { "WhatsApp Images", "Camera" }, photos.Folders.Select(f => f.Name)); // most files first
-            Assert.Equal("3 files", photos.Folders[0].Details);
+            await UiHarness.WaitForAsync(() => photos.Folders.Count > 0, "folders listed");
+            Assert.Equal(new[] { "Camera", "Screenshots", "WhatsApp", "Other folders (3)" }, photos.Folders.Select(f => f.Name));
+            var whatsAppRow = photos.Folders.Single(f => f.Name == "WhatsApp");
+            Assert.Equal("3 files", whatsAppRow.Details); // WhatsApp Images and WhatsApp Business Images
+            var other = photos.Folders.Single(f => f.IsOther);
+            Assert.False(other.ShowsChildren);
+            Assert.Equal(3, other.Children.Count);
             Assert.True(photos.AllFolders);
-            Assert.All(photos.Folders, f => Assert.True(f.IsChecked));
-            Assert.All(photos.Folders, f => Assert.False(f.IsEditable));
-            photos.Folders[0].IsChecked = false; // gray: nothing changes
-            Assert.True(photos.Folders[0].IsChecked);
+            Assert.All(photos.Folders, f => Assert.True(f.IsChecked == true && !f.IsEditable));
+            whatsAppRow.IsChecked = false; // gray: nothing changes
+            Assert.True(whatsAppRow.IsChecked);
 
-            // "All folders" off: still everything ticked, now each can be changed. Backing up less never asks.
+            // "All folders" off: everything still ticked, now each can be changed. Unticking never asks.
             var checks = phone.Platform.OwnerChecks;
             photos.AllFolders = false;
-            Assert.All(photos.Folders, f => Assert.True(f.IsChecked && f.IsEditable));
-            photos.Folders.Single(f => f.Name == "WhatsApp Images").IsChecked = false;
-            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { AllFolders: false, Folders.Count: 1 }, "saved");
-            Assert.Equal(new[] { "DCIM/Camera" }, SavedPhotos(phone)!.Folders);
+            Assert.All(photos.Folders, f => Assert.True(f.IsChecked == true && f.IsEditable));
+            whatsAppRow.IsChecked = false;
+            other.ToggleChildrenCommand.Execute(null);
+            Assert.True(other.ShowsChildren);
+            other.Children.Single(c => c.Name == "Picsart").IsChecked = false;
+            Assert.Null(other.IsChecked); // some of the other folders
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { AllFolders: false } saved && !saved.Folders.Contains("group:whatsapp")
+                                               && !saved.Folders.Contains("Pictures/Picsart"), "saved");
             Assert.Equal(checks, phone.Platform.OwnerChecks);
-            Assert.Equal("Skipping: WhatsApp Images", photos.Summary);
-
-            // Photos off and on again: the folder choices are as they were left.
-            backup.BackUpPhotos = false;
-            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: false }, "photos off");
-            Assert.Equal(checks, phone.Platform.OwnerChecks);
-            backup.BackUpPhotos = true;
-            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: true }, "photos on again");
-            Assert.Equal(checks + 1, phone.Platform.OwnerChecks); // on again backs up more: the owner confirms
-            checks = phone.Platform.OwnerChecks;
-            Assert.False(SavedPhotos(phone)!.AllFolders);
-            Assert.Equal(new[] { "DCIM/Camera" }, SavedPhotos(phone)!.Folders);
-            Assert.False(photos.AllFolders);
-            Assert.False(photos.Folders.Single(f => f.Name == "WhatsApp Images").IsChecked);
-            Assert.True(photos.Folders.Single(f => f.Name == "Camera").IsChecked);
-            Assert.Equal("Skipping: WhatsApp Images", photos.Summary);
+            Assert.Contains("WhatsApp", photos.Summary);
+            Assert.Contains("Picsart", photos.Summary);
             await UiHarness.PumpAsync(100);
             Assert.Empty(phone.TextOutsideWindow());
             var heading = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(phone.Window).OfType<Avalonia.Controls.TextBlock>()
-                .First(t => t.Text == "WhatsApp Images");
+                .First(t => t.Text == "WhatsApp");
             Avalonia.Controls.ControlExtensions.BringIntoView(heading, new Avalonia.Rect(0, -300, 10, 700));
             await UiHarness.PumpAsync(100);
             phone.Screenshot("backup-phone-folders");
 
-            // Only the ticked folders are backed up.
+            // Photos off and on again: the choices are as they were left.
+            backup.BackUpPhotos = false;
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: false }, "photos off");
+            backup.BackUpPhotos = true;
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone) is { Enabled: true }, "photos on again");
+            checks = phone.Platform.OwnerChecks;
+            Assert.False(whatsAppRow.IsChecked);
+            Assert.Null(other.IsChecked);
+
+            // Only what is ticked is backed up: no WhatsApp, no Picsart.
             var plan = phone.Node.Settings.Current.Backups.Single();
             var paths = Beam.Core.Backup.BackupManifest.Build(plan, library, null, CancellationToken.None).Entries.Select(e => e.RelativePath).ToList();
-            Assert.Equal(2, paths.Count(p => p.StartsWith("Photos/IMG_", StringComparison.Ordinal)));
-            Assert.DoesNotContain(paths, p => p.Contains("IMG-1"));
+            Assert.Equal(5, paths.Count); // 2 camera, 1 screenshot, Lightroom, the movie poster
+            Assert.DoesNotContain(paths, p => p.Contains("IMG-") || p.EndsWith("b.jpg", StringComparison.Ordinal));
 
-            // A new folder later (a new app): not backed up, shown as new until it is ticked.
-            library.Add("Pictures/Telegram/photo.jpg");
+            // A new WhatsApp folder stays out (WhatsApp is unticked) and isn't "new"; a new folder of no app is new.
+            library.Add(whatsApp + "WhatsApp Stickers/st.webp", "Pictures/scanner/scan.jpg");
             var fresh = new List<(BackupSource, string)>();
             Beam.Core.Backup.BackupManifest.Build(phone.Node.Settings.Current.Backups.Single(), library, null, CancellationToken.None, fresh);
-            Assert.Equal("Pictures/Telegram", Assert.Single(fresh).Item2);
+            Assert.Equal("Pictures/scanner", Assert.Single(fresh).Item2);
             photos.ToggleFoldersCommand.Execute(null); // closed
             photos.ToggleFoldersCommand.Execute(null); // and open again
-            await UiHarness.WaitForAsync(() => photos.Folders.Count == 3, "new folder listed");
-            var telegram = photos.Folders.Single(f => f.Name == "Telegram");
-            Assert.True(telegram.IsNew);
-            Assert.False(telegram.IsChecked);
-            Assert.Contains("New, not backed up: Telegram", photos.Summary);
+            await UiHarness.WaitForAsync(() => photos.Folders.Any(f => f.IsOther && f.Children.Count == 4), "new folder listed");
+            other = photos.Folders.Single(f => f.IsOther);
+            var scanner = other.Children.Single(c => c.Name == "scanner");
+            Assert.True(scanner.IsNew);
+            Assert.True(other.IsNew);
+            Assert.False(scanner.IsChecked);
+            Assert.Contains("New, not backed up: scanner", photos.Summary);
 
-            // Ticking it backs up more: the owner confirms. So does "All folders" again.
-            telegram.IsChecked = true;
-            await UiHarness.WaitForAsync(() => phone.Platform.OwnerChecks == checks + 1, "owner asked");
-            await UiHarness.WaitForAsync(() => SavedPhotos(phone)!.Folders.Contains("Pictures/Telegram"), "saved");
+            // Ticking backs up more: the owner confirms (a main folder takes its later folders too).
+            photos.Folders.Single(f => f.Name == "WhatsApp").IsChecked = true;
+            await UiHarness.WaitForAsync(() => SavedPhotos(phone)!.Folders.Contains("group:whatsapp"), "saved");
+            Assert.Equal(checks + 1, phone.Platform.OwnerChecks);
+            Assert.True(SavedPhotos(phone)!.IncludesFolder(whatsApp + "WhatsApp Stickers"));
             photos.AllFolders = true;
             await UiHarness.WaitForAsync(() => SavedPhotos(phone)!.AllFolders, "all again");
             Assert.Equal(checks + 2, phone.Platform.OwnerChecks);

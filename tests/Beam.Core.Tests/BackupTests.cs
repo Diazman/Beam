@@ -402,6 +402,37 @@ public class BackupTests
         Assert.Equal(new[] { BackupFileTypes.Photos }, sources[3].EffectiveTypes());
     }
 
+    [Theory]
+    [InlineData("DCIM/Camera", "camera")]
+    [InlineData("DCIM", "camera")]
+    [InlineData("DCIM/100ANDRO", "camera")]
+    [InlineData("Pictures/Camera", "camera")]
+    [InlineData("DCIM/Screenshots", "screenshots")]
+    [InlineData("Pictures/Screenshots", "screenshots")]
+    [InlineData("Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images", "whatsapp")]
+    [InlineData("Android/media/com.whatsapp.w4b/WhatsApp Business/Media/WhatsApp Business Images", "whatsapp")]
+    [InlineData("WhatsApp/Media/WhatsApp Video", "whatsapp")]
+    [InlineData("Pictures/Telegram", "telegram")]
+    [InlineData("Android/media/org.telegram.messenger/Telegram/Telegram Images", "telegram")]
+    [InlineData("Pictures/Instagram", "instagram")]
+    [InlineData("Pictures/Facebook", "facebook")]
+    [InlineData("Pictures/Messenger", "facebook")]
+    [InlineData("Download", "downloads")]
+    [InlineData("Download/Archive (2020) [720p]", "downloads")]
+    [InlineData("Pictures/AdobeLightroom", null)]
+    [InlineData("Pictures/scanner", null)]
+    [InlineData("DCIM/Picsart", null)]
+    [InlineData("", null)]
+    public void MainFoldersOfThePhone(string path, string? group)
+    {
+        Assert.Equal(group, BackupFolderGroups.Of(path));
+        if (group == null) return;
+        // Ticking a main folder takes every folder of it, also ones that appear later.
+        var source = new BackupSource { Kind = BackupSourceKinds.Photos, AllFolders = false, Folders = { BackupFolderGroups.Prefix + group } };
+        Assert.True(source.IncludesFolder(path));
+        Assert.False(source.IncludesFolder("Pictures/scanner"));
+    }
+
     [Fact]
     public void OnlyTheChosenFoldersOfTheWholePhone()
     {
@@ -412,7 +443,7 @@ public class BackupTests
             [BackupSourceKinds.Photos] = new[]
             {
                 Photo("DCIM/Camera/a.jpg"), Photo("DCIM/Camera/b.jpg"), Photo("WhatsApp/Media/WhatsApp Images/c.jpg"),
-                Photo("Pictures/Telegram/d.jpg"), Photo("Old/Camera/e.jpg"), Photo("top.jpg"),
+                Photo("Pictures/Scans/d.jpg"), Photo("Old/Camera/e.jpg"), Photo("top.jpg"),
             },
         });
         var photos = new BackupSource { Kind = BackupSourceKinds.Photos, Name = "Photos" };
@@ -437,7 +468,7 @@ public class BackupTests
         photos.SeenFolders = new List<string> { "DCIM/Camera", "", "WhatsApp/Media/WhatsApp Images", "Old/Camera" };
         var entries = BackupManifest.Build(plan, platform, null, CancellationToken.None, fresh).Entries.Select(e => e.RelativePath).OrderBy(p => p).ToList();
         Assert.Equal(new[] { "Photos/a.jpg", "Photos/b.jpg", "Photos/top.jpg" }, entries);
-        Assert.Equal("Pictures/Telegram", Assert.Single(fresh).Folder);
+        Assert.Equal("Pictures/Scans", Assert.Single(fresh).Folder);
         Assert.False(new BackupSource { Kind = BackupSourceKinds.Photos, AllFolders = false }.IncludesFolder("DCIM/Camera"));
         Assert.True(new BackupSource { Kind = BackupSourceKinds.Folder, AllFolders = false }.IncludesFolder("x")); // folders: their own choices
     }
