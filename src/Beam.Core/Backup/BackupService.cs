@@ -44,6 +44,7 @@ public sealed class BackupService : IDisposable
     private readonly ConcurrentDictionary<string, long> _lastStarted = new();
     private readonly ConcurrentDictionary<string, bool> _present = new();
     private readonly ConcurrentDictionary<string, bool> _warnedMismatch = new();
+    private readonly ConcurrentDictionary<string, bool> _restart = new();
     private readonly Timer _timer;
     private Invite? _invite;
 
@@ -277,9 +278,11 @@ public sealed class BackupService : IDisposable
     /// </summary>
     public void Save(BackupPlan plan)
     {
+        BackupPlan? before = null;
         _settings.Update(s =>
         {
             if (s.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) is not { } stored) return;
+            before = new BackupPlan { Sources = stored.Sources.Select(c => c.Copy()).ToList() };
             var announced = stored.Sources.ToDictionary(c => c.Kind + "|" + c.Address, c => c.AnnouncedFolders);
             stored.Sources = plan.Sources.Select(c => c.Copy()).ToList();
             // What the phone already told the user about stays told (recorded while the screen had an older copy).
@@ -291,8 +294,35 @@ public sealed class BackupService : IDisposable
         });
         plan = _settings.Current.Backups.FirstOrDefault(b => b.TargetId == plan.TargetId) ?? plan;
         _lastStarted.TryRemove(plan.TargetId, out _);
+        if (before != null && Narrows(before, plan) && _running.TryGetValue(plan.TargetId, out var running))
+        {
+            // A running backup sends the list it made when it started: what was just switched off would still go.
+            // It stops, and starts again at once with the new choices (what is already there isn't sent again).
+            Log.Info($"Backup to {plan.TargetName}: less is backed up now; the running backup starts again with the new choices");
+            _restart[plan.TargetId] = true;
+            running.Cancel();
+        }
+
         Changed?.Invoke();
         if (plan.Automatic && Reachable(plan) is { } device) TryStart(plan, device, automatic: true);
+    }
+
+    /// <summary>
+    /// <paramref name="after"/> backs up less than <paramref name="before"/>: a source switched off or removed, a kind
+    /// of file unticked, "All folders" unticked or a folder unticked.
+    /// </summary>
+    internal static bool Narrows(BackupPlan before, BackupPlan after)
+    {
+        foreach (var old in before.Sources.Where(s => s.Enabled))
+        {
+            var now = after.Sources.FirstOrDefault(s => s.Enabled && s.Kind == old.Kind && s.Address == old.Address);
+            if (now == null || old.EffectiveTypes().Except(now.EffectiveTypes()).Any()) return true;
+            if (old.Kind == BackupSourceKinds.Folder) continue;
+            if (old.AllFolders && !now.AllFolders) return true;
+            if (!old.AllFolders && !now.AllFolders && old.Folders.Except(now.Folders).Any()) return true;
+        }
+
+        return false;
     }
 
     /// <summary>Stops backing up to a computer (what was backed up stays there).</summary>
@@ -490,6 +520,9 @@ public sealed class BackupService : IDisposable
         });
         Log.Info($"Backup to {session.PeerName}: {snapshot.State}, {snapshot.CompletedFiles} sent, {snapshot.SkippedFiles} already there");
         Changed?.Invoke();
+        if (_restart.TryRemove(session.PeerId, out _)
+            && _settings.Current.Backups.FirstOrDefault(b => b.TargetId == session.PeerId) is { } current && Reachable(current) is { } device)
+            TryStart(current, device, automatic: false);
     }
 
     private static string DeviceShort(string fingerprint) => Identity.DeviceIdentity.ShortCode(fingerprint);

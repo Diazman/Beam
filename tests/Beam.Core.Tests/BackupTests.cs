@@ -227,6 +227,77 @@ public class BackupTests
     }
 
     [Fact]
+    public async Task SwitchingSomethingOffDuringABackupStopsSendingIt()
+    {
+        // Photos that are read slowly, so the backup is still running when Photos is switched off.
+        var now = DateTime.UtcNow;
+        var library = new KindSources(new Dictionary<string, BackupItem[]>
+        {
+            [BackupSourceKinds.Photos] = Enumerable.Range(1, 5)
+                .Select(n => new BackupItem($"DCIM/Camera/IMG_{n}.jpg", 4_000_000, now, "content://photo" + n, () => new SlowStream(4_000_000)))
+                .ToArray(),
+            [BackupSourceKinds.Music] = new[] { new BackupItem("Music/song.mp3", 10, now, "content://song", () => new MemoryStream(new byte[10])) },
+        });
+        await using var pc = Computer();
+        await using var phone = new TestNode("Pixel", startDiscovery: true, kind: DeviceKinds.Phone, backupSources: library);
+        Link(phone, pc);
+        var plan = await phone.Node.Backup.SetUpAsync(Scan(pc, pc.Node.Backup.CreateSetupCode()), CancellationToken.None);
+        plan.Sources.Add(new BackupSource { Kind = BackupSourceKinds.Photos, Name = "Photos" });
+        plan.Sources.Add(new BackupSource { Kind = BackupSourceKinds.Music, Name = "Music" });
+        plan.Automatic = false;
+        phone.Node.Backup.Save(plan);
+        await Wait.UntilAsync(() => phone.Node.Backup.IsReachable(plan));
+        var first = phone.Node.Backup.BackUpNow(plan.TargetId);
+        await Wait.UntilAsync(() => first.State == TransferState.Transferring && first.GetSnapshot().TransferredBytes > 0, because: "sending photos");
+
+        // Photos off while it runs: the run stops, and a new one sends only what is still chosen.
+        plan = phone.Node.Settings.Current.Backups.Single();
+        plan.Sources.Single(x => x.Kind == BackupSourceKinds.Photos).Enabled = false;
+        phone.Node.Backup.Save(plan);
+        await Wait.ForFinishAsync(first);
+        Assert.Equal(TransferState.Cancelled, first.State);
+        // (The new run has only the song: it may be over before anyone looks, so wait for what it leaves behind.)
+        var target = PartnerFolder(pc);
+        await Wait.UntilAsync(() => File.Exists(Path.Combine(target, "Music", "song.mp3")) && phone.Node.Backup.Running(plan.TargetId) == null
+                                    && phone.Node.Settings.Current.Backups.Single().LastCompletedAt != null, because: "started again with the song");
+        Assert.Null(phone.Node.Settings.Current.Backups.Single().LastError);
+        Assert.True(Directory.GetFiles(target, "IMG_*.jpg", SearchOption.AllDirectories).Length < 5); // not all the photos went
+
+        // Backing up more (a widening change) doesn't interrupt a running backup.
+        Assert.False(BackupService.Narrows(phone.Node.Settings.Current.Backups.Single(), plan));
+        var wider = phone.Node.Settings.Current.Backups.Single();
+        wider.Sources.Single(x => x.Kind == BackupSourceKinds.Photos).Enabled = true;
+        Assert.False(BackupService.Narrows(phone.Node.Settings.Current.Backups.Single(), wider));
+        Assert.True(BackupService.Narrows(wider, phone.Node.Settings.Current.Backups.Single()));
+    }
+
+    /// <summary>A file read at about 2 MB/s.</summary>
+    private sealed class SlowStream(long length) : Stream
+    {
+        private long _position;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => length;
+        public override long Position { get => _position; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = (int)Math.Min(Math.Min(count, 64 * 1024), length - _position);
+            if (n <= 0) return 0;
+            Thread.Sleep(30);
+            Array.Clear(buffer, offset, n);
+            _position += n;
+            return n;
+        }
+    }
+
+    [Fact]
     public async Task SeveralPhonesBackUpToOneComputer()
     {
         await using var pc = Computer();
