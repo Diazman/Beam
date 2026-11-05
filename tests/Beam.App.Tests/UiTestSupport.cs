@@ -212,6 +212,8 @@ public sealed class UiHarness : IAsyncDisposable
             ExternalFiles = externalFiles,
             BackupSources = backupSources,
             DeviceKind = phone ? DeviceKinds.Phone : DeviceKinds.Laptop,
+            // Browsing shares these when first switched on (not this machine's own folders).
+            DefaultSharedFolders = () => new[] { ("Pictures", SharedFolder("Pictures")), ("Documents", SharedFolder("Documents")) },
         });
         Node.Settings.Update(s =>
         {
@@ -236,6 +238,14 @@ public sealed class UiHarness : IAsyncDisposable
     }
 
     public BeamNode Node { get; }
+
+    /// <summary>A folder this device shares when browsing is first switched on (made on first use).</summary>
+    public string SharedFolder(string name)
+    {
+        var path = _dir.Combine("shared", name);
+        Directory.CreateDirectory(path);
+        return path;
+    }
 
     public FakeUi Ui { get; }
 

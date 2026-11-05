@@ -226,6 +226,23 @@
     <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
   </Style>
 
+  <!-- A full-width row in a list (Browse: a file or folder) -->
+  <Style Selector="Button.row">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.row:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+  </Style>
+  <Style Selector="Button.row:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
+  </Style>
+
   <!-- Device cards -->
   <Style Selector="Button.device">
     <Setter Property="Background" Value="{DynamicResource CardBrush}" />

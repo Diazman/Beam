@@ -103,6 +103,14 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
+          <!-- A trusted device is chosen: browse its shared folders -->
+          <Button Classes="link" Command="{Binding BrowseCommand}" IsVisible="{Binding CanBrowse}" HorizontalAlignment="Left" Margin="-6,-6,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+              <TextBlock Text="{Binding BrowseText}" />
+            </StackPanel>
+          </Button>
+
           <!-- Searching state -->
           <Border Classes="card" IsVisible="{Binding HasNoDevices}" Padding="20">
             <Grid ColumnDefinitions="Auto,*">

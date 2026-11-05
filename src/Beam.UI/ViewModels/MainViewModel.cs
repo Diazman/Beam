@@ -24,6 +24,9 @@ public enum Page
 
     /// <summary>Phones only: the list of transfers (the desktop shows it beside the current page).</summary>
     Transfers,
+
+    /// <summary>A trusted device's shared folders (opened from Send or Settings; not in the navigation).</summary>
+    Browse,
 }
 
 /// <summary>
@@ -68,6 +71,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         node.Transfers.SessionStarted += s => Dispatcher.UIThread.Post(() => AddTransfer(s));
         node.Direct.BeforeHosting = () => Dispatcher.UIThread.InvokeAsync(EnsureFirewallForDirectAsync);
         node.Direct.Problem += message => Dispatcher.UIThread.Post(() => ShowDirectProblem(message));
+        AttachBrowse();
     }
 
     private bool _showingDirectProblem;
@@ -118,6 +122,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         Page.History => History,
         Page.Settings => Settings,
         Page.Transfers => _transfersPage ??= new TransfersPage(this),
+        Page.Browse when _browse != null => _browse,
         _ => Home,
     };
 
@@ -355,6 +360,12 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         }
 
         if (_page == Page.Home) return false;
+        if (_page == Page.Browse)
+        {
+            if (_browse?.GoBack() != true) CloseBrowse();
+            return true;
+        }
+
         Navigate(Page.Home);
         return true;
     }
@@ -364,6 +375,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         if (_page == Page.Settings && page != Page.Settings) Settings.SaveName();
         if (_page == page) return;
         if (_page == Page.Receive && page != Page.Receive) Receive.OnHidden();
+        if (_page == Page.Browse && _browse != null) CloseBrowseAsync().Forget("Closing browsing"); // left by the navigation
         if (page != Page.Home) Node.Nearby.SetLooking(false);
         _page = page;
         if (page == Page.Phone) Phone.OnShown();

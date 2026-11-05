@@ -148,6 +148,30 @@ encrypted by Beam (plain HTTP on the LAN).
   Android a `JobScheduler` job (`BackupJobService`, every 15 minutes on an unmetered network) that starts the node
   without a screen and calls `RunDueAsync`. Runs that find nothing new leave no history entry and no card.
 
+## Trusted devices and browsing
+
+- **`Trust/TrustService`:** Settings → Trusted devices → Add a trusted device shows a `PairingCode` with a
+  `TrustToken` (the same one-time rules as backups); the device that scans it connects to the code's certificate
+  (`ConnectionPurpose.Pair`, LAN only) and both store the other as a `TrustedDevice` (and `DirectManager.Remember`,
+  so Bluetooth and direct links know it).
+- **`Browse/BrowseService` (being browsed):** `ConnectionPurpose.Browse` from a trusted certificate only, with
+  `BrowsingEnabled`; asks through `IIncomingTransferHandler.ApproveBrowseAsync` (one question at a time, 60 s)
+  unless `TrustedDevice.AlwaysBrowse` or a resumed session token; serves `SharedFolders` by opaque id through
+  `Resolve` (strict segments, no hidden, system or linked items, `SafePath.IsInside`), re-reading settings per
+  request. At most 4 visits; `Stop` ends one and keeps it out for a minute; `DirectManager.InUseBy` keeps a joined
+  direct network while a visit runs. Adding files (`BrowseAllowAdding`) goes to a hidden part file, is hash-checked
+  and saved with `FileNaming.MakeUnique`.
+- **`Browse/BrowseSession` (browsing):** one request connection plus one per download or upload, each to the
+  trusted certificate: the shared Wi-Fi first, else a direct link (`DirectManager.OpenLink`/`ConnectLinkAsync`). A
+  dropped connection reconnects by itself, whichever way works now, with the session token (no new question);
+  downloads resume from their part file, uploads resend the file. Downloads and uploads are `TransferSession`s
+  registered with `TransferService.RegisterExternal`, so they show in Transfers and History; closing Browse lets
+  them finish (the link closes after the last one).
+- **UI:** Send shows "Browse …'s files" for one chosen trusted device; Settings lists trusted devices (Browse, Ask
+  again, Remove) and Browsing (switch, shared folders, Allow adding files); `BrowseViewModel` is the Browse page;
+  `MainViewModel.Browse` holds the question and the "… is browsing" bar with Stop. Phones confirm the owner
+  before adding a trusted device, switching browsing on or allowing adding files, and ask for All files access.
+
 ## Security model
 
 - **Identity:** each installation creates a random device id and a self-signed ECDSA P-256 certificate (RSA-2048
@@ -173,4 +197,7 @@ encrypted by Beam (plain HTTP on the LAN).
   setup and each backup that sent files, with a Stop button that works after the app was closed; afterwards each side
   insists on the other's certificate, so a guest on the same Wi-Fi can neither take a phone's backup nor back up
   into the computer. Backups stay on the shared network (never a direct link) and land in the partner's own folder.
+- **Browsing:** off by default; only trusted certificates, asked each visit unless always allowed; only the shared
+  folders (no paths outside, no hidden files, no links); adding files only when allowed, never overwriting; visits
+  visible with Stop. Mutual trust needs the other device's one-time code (and, on phones, the owner's lock).
 - **Not yet covered:** per-device blocking of request spam.

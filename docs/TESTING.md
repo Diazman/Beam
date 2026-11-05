@@ -36,7 +36,11 @@ Security-specific tests: `ImpostorWithWrongFingerprintIsRejected`, `NeverWritesT
 `SafePathTests` (traversal, rooted paths, reserved names), `RejectsMalformedPackets`, `RejectsOversizedAndUnknownFrames`,
 `OnlyFileListsMayBeBigAndMemoryFollowsWhatArrives`, `DirectSecurityTests` (who may make a device start or join a
 network), `AnImpostorWithADifferentCertificateIsNotTrusted` (Bluetooth), `BackupTests` (the backup code works once, expires,
-ends after wrong guesses; strangers, removed phones and impostor computers get nothing; never over a direct link).
+ends after wrong guesses; strangers, removed phones and impostor computers get nothing; never over a direct link),
+`BrowseTests` (trusted-device codes work once and close after guesses; only trusted devices, only with browsing on,
+asked unless always allowed; `..`, absolute, hidden, linked and unshared paths refused; adding only when allowed,
+never overwriting; Stop keeps a device out; dropped downloads resume without a new question; the direct link when
+there is no shared Wi-Fi), `BrowseUiTests` (the whole flow on a PC and a phone).
 
 ## Manual test procedure (two Windows PCs, then phones)
 
@@ -139,6 +143,22 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
    "N files backed up to …" after each backup that sent files; its Stop backup button works with Beam closed.
 7. Delete a photo on the phone: it stays on the PC. Remove the phone on the PC: the next backup is refused and the
    phone says to set it up again.
+
+### Trusted devices and browsing (a PC and a phone)
+
+1. PC: Settings → Trusted devices → Add a trusted device. Phone: same, then "Scan the other device's code instead",
+   scan it (the phone asks for its lock first). Both list each other; scanning the same code again is refused.
+2. PC: Settings → Browsing on: Documents, Pictures, Videos, Music, Downloads and Desktop are listed. Phone: Send →
+   choose the PC → "Browse Diaz's PC's files". The PC asks, with "Always allow … to browse my files"; allow.
+3. Phone: open Pictures (photos show previews), tick some files and a folder, Download: they arrive in Download/Beam
+   and show in Transfers. The PC shows "… is browsing your shared folders" with Stop.
+4. Turn the Wi-Fi off on both while a large download runs (with Bluetooth on and Receive open on the PC): it
+   carries on over a direct link without a new question; Wi-Fi back on: the next connection uses it again.
+5. PC: Stop: the phone can't carry on and says the PC ended browsing. Remove a shared folder while the phone
+   browses it: it is gone at once. Switch Allow adding files on: "Add files here…" appears on the phone; adding a
+   file with a name already there keeps both.
+6. Phone: Settings → Browsing on (fingerprint, then All files access) and browse the phone from the PC the same way.
+7. A device that isn't trusted: Send shows no Browse, and nothing it does reaches the question.
 
 ### Phones
 39. Android: install the test APK; scan a PC's code (Receive page) to pair. ✅ Each can send to the other; Share →

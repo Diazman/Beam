@@ -47,6 +47,8 @@ internal static class IosHost
             DirectLink = directLink,
             // iOS drops broadcast and multicast without Apple's multicast permission: others are asked one by one.
             Discovery = new DiscoveryOptions { UseMulticastAndBroadcast = false },
+            // iOS gives apps no shared folders of their own: browsing shows what Beam received.
+            DefaultSharedFolders = () => new[] { ("Beam", ReceiveFolder) },
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>

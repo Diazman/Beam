@@ -38,7 +38,23 @@
       </Border>
 
       <!-- Current page -->
-      <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" />
+      <DockPanel Grid.Column="1">
+        <!-- Someone is browsing this device: who, and Stop -->
+        <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Visits}" IsVisible="{Binding HasVisits}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BrowseVisitViewModel">
+              <Border Background="{DynamicResource AccentSoftBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="10,0" />
+                  <Button Grid.Column="2" Content="{l:T 'Stop'}" Command="{Binding StopCommand}" VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ContentControl Content="{Binding CurrentPage}" />
+      </DockPanel>
 
       <!-- Transfers panel (only while there are transfers) -->
       <Border Grid.Column="2" Width="340"

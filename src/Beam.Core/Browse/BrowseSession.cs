@@ -63,6 +63,8 @@ public sealed class BrowseSession : IAsyncDisposable
     private PeerConnection? _connection;
     private DirectLinkLease? _link;
     private string? _session;
+    private int _active; // downloads and uploads running
+    private bool _disposed;
 
     internal BrowseSession(BrowseService service, DeviceInfo device, string fingerprint)
     {
@@ -102,10 +104,13 @@ public sealed class BrowseSession : IAsyncDisposable
     }
 
     /// <summary>A shared folder's contents: folders first, then files, by name.</summary>
-    public async Task<IReadOnlyList<BrowseItem>> ListAsync(string root, string path, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<BrowseItem>> ListAsync(string root, string path, CancellationToken cancellationToken) =>
+        ListAsync(root, path, cancellationToken, forTransfer: false);
+
+    private async Task<IReadOnlyList<BrowseItem>> ListAsync(string root, string path, CancellationToken cancellationToken, bool forTransfer)
     {
-        var response = await RequestAsync(new BrowseRequestMessage { Action = BrowseActions.List, Root = root, Path = path }, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await RequestAsync(new BrowseRequestMessage { Action = BrowseActions.List, Root = root, Path = path }, cancellationToken,
+            forTransfer: forTransfer).ConfigureAwait(false);
         return response.Entries
             .Select(e => new BrowseItem(root, path.Length == 0 ? e.Name : path + "/" + e.Name, e.Name, e.IsFolder, e.Size,
                 DateTimeOffset.FromUnixTimeMilliseconds(e.Modified)))
@@ -132,7 +137,12 @@ public sealed class BrowseSession : IAsyncDisposable
         transfer.DestinationFolder = _service.ReceiveFolder;
         transfer.SetState(TransferState.Preparing);
         _service.Transfers.RegisterExternal(transfer);
-        _ = Task.Run(() => DownloadAsync(transfer, items));
+        Began();
+        _ = Task.Run(async () =>
+        {
+            try { await DownloadAsync(transfer, items).ConfigureAwait(false); }
+            finally { await EndedAsync().ConfigureAwait(false); }
+        });
         return transfer;
     }
 
@@ -140,16 +150,29 @@ public sealed class BrowseSession : IAsyncDisposable
     public TransferSession Upload(string root, string folder, IReadOnlyList<string> paths)
     {
         var transfer = new TransferSession(Guid.NewGuid().ToString("N"), TransferDirection.Send, Device.Id, Name, _fingerprint);
-        transfer.SetDescription(paths.Select(p => System.IO.Path.GetFileName(p)).ToList());
+        var external = _service.Transfers.ExternalFiles;
+        transfer.SetDescription(paths.Select(p => external != null && external.TryGet(p, out var f) ? f.Name : System.IO.Path.GetFileName(p)).ToList());
         transfer.SetState(TransferState.Preparing);
         _service.Transfers.RegisterExternal(transfer);
-        _ = Task.Run(() => UploadAsync(transfer, root, folder, paths));
+        Began();
+        _ = Task.Run(async () =>
+        {
+            try { await UploadAsync(transfer, root, folder, paths).ConfigureAwait(false); }
+            finally { await EndedAsync().ConfigureAwait(false); }
+        });
         return transfer;
     }
 
+    /// <summary>Ends browsing. Downloads and uploads already started carry on (the direct link stays until they end).</summary>
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         _closed.Cancel();
+        if (Volatile.Read(ref _active) == 0) await CloseAsync().ConfigureAwait(false);
+    }
+
+    private async Task CloseAsync()
+    {
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -161,8 +184,15 @@ public sealed class BrowseSession : IAsyncDisposable
             _gate.Release();
         }
 
-        if (_link != null) await _service.Direct.CloseLinkAsync(_link).ConfigureAwait(false);
-        _link = null;
+        var link = Interlocked.Exchange(ref _link, null);
+        if (link != null) await _service.Direct.CloseLinkAsync(link).ConfigureAwait(false);
+    }
+
+    private void Began() => Interlocked.Increment(ref _active);
+
+    private async Task EndedAsync()
+    {
+        if (Interlocked.Decrement(ref _active) == 0 && _disposed) await CloseAsync().ConfigureAwait(false);
     }
 
     // ---------------------------------------------------------------- connecting
@@ -203,7 +233,7 @@ public sealed class BrowseSession : IAsyncDisposable
 
         if (connection == null)
             throw failure ?? new TransferException(TransferErrorKind.ConnectFailed,
-                L.T("{0} isn't nearby. Both need to be on the same Wi-Fi, or close enough to connect directly.", Name));
+                L.T("{0} isn't nearby. Both need to be on the same Wi-Fi. Without one, open Receive on {0} and keep the devices close: they then connect directly.", Name));
 
         try
         {
@@ -244,9 +274,13 @@ public sealed class BrowseSession : IAsyncDisposable
         || (ex is TransferException t && t.Error.Kind is TransferErrorKind.ConnectFailed or TransferErrorKind.ConnectionLost)
         || (ex is TimeoutException);
 
-    private async Task<BrowseResponseMessage> RequestAsync(BrowseRequestMessage request, CancellationToken cancellationToken, bool failOk = false)
+    private async Task<BrowseResponseMessage> RequestAsync(BrowseRequestMessage request, CancellationToken cancellationToken, bool failOk = false,
+        bool forTransfer = false)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
+        // A transfer's own requests (listing a folder it downloads) carry on after browsing was closed.
+        using var linked = forTransfer
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
         var token = linked.Token;
         await _gate.WaitAsync(token).ConfigureAwait(false);
         try
@@ -340,7 +374,7 @@ public sealed class BrowseSession : IAsyncDisposable
             return;
         }
 
-        foreach (var child in await ListAsync(item.Root, item.Path, token).ConfigureAwait(false))
+        foreach (var child in await ListAsync(item.Root, item.Path, token, forTransfer: true).ConfigureAwait(false))
             await CollectAsync(child, target.Append(child.Name).ToArray(), files, token).ConfigureAwait(false);
     }
 
@@ -433,8 +467,21 @@ public sealed class BrowseSession : IAsyncDisposable
         PeerConnection? connection = null;
         try
         {
-            var files = paths.Where(File.Exists).Select(p => new FileInfo(p)).ToList();
-            transfer.SetTotals(files.Count, files.Sum(f => f.Length), 0, 0, 0);
+            // Paths, or what the phone's file picker gave (content://…).
+            var external = _service.Transfers.ExternalFiles;
+            var files = new List<ExternalFile>();
+            foreach (var path in paths)
+            {
+                if (external != null && external.TryGet(path, out var picked)) files.Add(picked);
+                else if (File.Exists(path))
+                {
+                    var info = new FileInfo(path);
+                    files.Add(new ExternalFile(info.Name, info.Length, info.LastWriteTimeUtc,
+                        () => new FileStream(info.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1, FileOptions.SequentialScan | FileOptions.Asynchronous)));
+                }
+            }
+
+            transfer.SetTotals(files.Count, files.Sum(f => f.Size), 0, 0, 0);
             transfer.SetState(TransferState.Transferring);
             foreach (var file in files)
             {
@@ -480,7 +527,7 @@ public sealed class BrowseSession : IAsyncDisposable
     }
 
     /// <summary>One file, sent whole (a drop sends it again; the other side never keeps a half file).</summary>
-    private async Task UploadFileAsync(TransferSession transfer, PeerConnection connection, string root, string folder, FileInfo file, CancellationToken token)
+    private async Task UploadFileAsync(TransferSession transfer, PeerConnection connection, string root, string folder, ExternalFile file, CancellationToken token)
     {
         var channel = connection.Channel;
         await channel.SendAsync(FrameType.BrowseRequest, new BrowseRequestMessage
@@ -489,8 +536,8 @@ public sealed class BrowseSession : IAsyncDisposable
             Root = root,
             Path = folder,
             Name = file.Name,
-            Size = file.Length,
-            Modified = new DateTimeOffset(file.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
+            Size = file.Size,
+            Modified = new DateTimeOffset(DateTime.SpecifyKind(file.ModifiedUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
         }, token).ConfigureAwait(false);
         var ready = await channel.ReadMessageAsync<BrowseResponseMessage>(FrameType.BrowseResponse, TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
         if (!ready.Ok)
@@ -502,17 +549,23 @@ public sealed class BrowseSession : IAsyncDisposable
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[256 * 1024];
         long sent = 0;
-        await using (var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1, FileOptions.SequentialScan | FileOptions.Asynchronous))
+        try
         {
-            while (sent < file.Length)
+            await using var stream = file.OpenRead();
+            while (sent < file.Size)
             {
-                var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, file.Length - sent)), token).ConfigureAwait(false);
+                var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, file.Size - sent)), token).ConfigureAwait(false);
                 if (read == 0) throw new IOException("The file got shorter while it was sent.");
                 hash.AppendData(buffer, 0, read);
                 await channel.SendDataAsync(FrameType.BrowseData, buffer.AsMemory(0, read), token).ConfigureAwait(false);
                 sent += read;
                 transfer.AddTransferred(read);
             }
+        }
+        catch
+        {
+            transfer.AddTransferred(-sent); // sent again whole after a reconnect
+            throw;
         }
 
         await channel.SendAsync(FrameType.BrowseRequest, new BrowseRequestMessage { Action = BrowseActions.Commit, Hash = Convert.ToHexString(hash.GetHashAndReset()) },

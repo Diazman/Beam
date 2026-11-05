@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.TrustCodeView"
+             x:DataType="dlg:TrustCodeViewModel"
+             Classes="dialogBody w460">
+  <StackPanel Spacing="16">
+    <StackPanel Spacing="10">
+      <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Left">
+        <PathIcon Data="{StaticResource IconShield}" Width="22" Height="22" />
+      </Border>
+      <TextBlock Classes="dialogTitle" Text="{l:T 'Add a trusted device'}" />
+      <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding ShowsCode}"
+                 Text="{l:T 'On the other device, open Beam → Settings → Trusted devices → Add a trusted device, and scan this code. Both need to be on the same Wi-Fi for this.'}" />
+    </StackPanel>
+
+    <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->
+    <Border Background="White" CornerRadius="12" Padding="16" HorizontalAlignment="Center" IsVisible="{Binding ShowsCode}">
+      <Path Data="{Binding Code}" Fill="Black" Stretch="Uniform" Width="220" Height="220"
+            AutomationProperties.Name="{l:T 'Code for adding a trusted device. Scan it with Beam on the other device.'}" />
+    </Border>
+
+    <Button Content="{l:T 'Scan the other device\'s code instead'}" Command="{Binding ScanCommand}" IsVisible="{Binding ShowsScan}"
+            HorizontalAlignment="Center" />
+
+    <Border Classes="details" IsVisible="{Binding ShowsCode}">
+      <TextBlock Classes="caption" TextWrapping="Wrap"
+                 Text="{l:T 'The code works once, for one device, for 10 minutes. Trusted devices send each other files without asking, and can ask to browse each other\'s shared folders. Two computers without a camera: send a file each way and tick “Always accept”.'}" />
+    </Border>
+
+    <StackPanel Spacing="8" IsVisible="{Binding IsExpired}">
+      <TextBlock TextWrapping="Wrap" Text="{l:T 'The code expired. Show a new one when the other device is ready.'}" />
+      <Button Content="{l:T 'Show a new code'}" Command="{Binding NewCodeCommand}" />
+    </StackPanel>
+
+    <Border Classes="notice" IsVisible="{Binding IsAdded}">
+      <TextBlock Text="{Binding AddedText}" TextWrapping="Wrap" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Classes="accent" Content="{Binding CloseText}" MinWidth="96" Command="{Binding CloseCommand}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

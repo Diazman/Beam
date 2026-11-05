@@ -1,0 +1,115 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:l="using:Beam.App.Localization"
+             x:Class="Beam.App.Views.BrowseView"
+             x:DataType="vm:BrowseViewModel">
+  <!-- A trusted device's shared folders: where you are, what is in it, and (when something is chosen) Download. -->
+  <Grid RowDefinitions="Auto,*,Auto">
+    <StackPanel Classes="page" Spacing="10">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Button Classes="icon" Command="{Binding BackCommand}" VerticalAlignment="Center"
+                AutomationProperties.Name="{l:T 'Back'}" ToolTip.Tip="{l:T 'Back'}">
+          <PathIcon Data="{StaticResource IconBack}" />
+        </Button>
+        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+          <TextBlock Classes="h1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Classes="caption" Text="{Binding ConnectionText}" />
+        </StackPanel>
+        <Button Grid.Column="2" Content="{l:T 'Close'}" Command="{Binding CloseCommand}" VerticalAlignment="Center" />
+      </Grid>
+
+      <!-- Where: Shared folders › Photos › Trip -->
+      <ItemsControl ItemsSource="{Binding Crumbs}" IsVisible="{Binding IsReady}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:BrowseCrumbViewModel">
+            <StackPanel Orientation="Horizontal">
+              <Button Classes="link" Content="{Binding Name}" Command="{Binding GoCommand}" IsVisible="{Binding IsNotLast}" />
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,4" IsVisible="{Binding IsLast}" />
+              <TextBlock Classes="tertiary" Text="›" VerticalAlignment="Center" IsVisible="{Binding IsNotLast}" />
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <Panel Grid.Row="1">
+      <!-- Connecting (the other device may be asking its user) -->
+      <StackPanel Spacing="12" IsVisible="{Binding IsConnecting}" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420" Margin="24">
+        <ProgressBar IsIndeterminate="True" />
+        <TextBlock Classes="secondary" Text="{Binding ConnectingText}" TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
+
+      <!-- Couldn't open -->
+      <StackPanel Spacing="12" IsVisible="{Binding HasError}" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420" Margin="24">
+        <TextBlock Classes="h3" Text="{l:T 'Can\'t browse right now'}" HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary" Text="{Binding Error}" TextWrapping="Wrap" TextAlignment="Center" />
+        <Button Classes="accent" Content="{l:T 'Try again'}" Command="{Binding RetryCommand}" HorizontalAlignment="Center" />
+      </StackPanel>
+
+      <!-- The list -->
+      <ScrollViewer IsVisible="{Binding IsReady}">
+        <StackPanel Classes="page" Spacing="8">
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+          <Border Classes="notice" IsVisible="{Binding HasStatus}">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+          </Border>
+          <TextBlock Classes="tertiary" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" TextWrapping="Wrap" Margin="0,12" />
+          <Border Classes="card" Padding="0" IsVisible="{Binding !IsEmpty}">
+            <ItemsControl ItemsSource="{Binding Entries}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BrowseEntryViewModel">
+                  <Grid ColumnDefinitions="Auto,*">
+                    <CheckBox IsChecked="{Binding IsChecked}" IsVisible="{Binding CanCheck}" Margin="12,0,0,0" VerticalAlignment="Center"
+                              AutomationProperties.Name="{Binding Name}" />
+                    <Button Grid.Column="1" Classes="row" Command="{Binding OpenCommand}">
+                      <Grid ColumnDefinitions="Auto,*">
+                        <Panel Width="40" Height="40">
+                          <Border Classes="iconBadge neutral" Width="40" Height="40" CornerRadius="8" IsVisible="{Binding !HasThumbnail}">
+                            <PathIcon Data="{Binding Icon}" Width="18" Height="18" />
+                          </Border>
+                          <Border CornerRadius="8" ClipToBounds="True" IsVisible="{Binding HasThumbnail}">
+                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" Width="40" Height="40" />
+                          </Border>
+                        </Panel>
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                          <TextBlock Classes="caption" Text="{Binding Details}" />
+                        </StackPanel>
+                      </Grid>
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Panel>
+
+    <!-- What to do: Download what is chosen, or add files here -->
+    <Border Grid.Row="2" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
+            Padding="24,12" IsVisible="{Binding ShowsBottomBar}">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding HasSelection}">
+          <TextBlock Text="{Binding SelectionText}" VerticalAlignment="Center" />
+          <Button Classes="link" Content="{l:T 'Clear'}" Command="{Binding ClearSelectionCommand}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="{l:T 'Add files here…'}" Command="{Binding AddFilesCommand}" IsVisible="{Binding CanAddHere}" />
+          <Button Classes="accent" Command="{Binding DownloadCommand}" IsVisible="{Binding HasSelection}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <PathIcon Data="{StaticResource IconDownload}" Width="14" Height="14" />
+              <TextBlock Text="{l:T 'Download'}" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

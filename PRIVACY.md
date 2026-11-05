@@ -89,6 +89,27 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 - **Stopping** – "Stop backup" on the phone, or "Remove" next to the phone on the computer. What was backed up
   stays on the computer until you delete it.
 
+## Trusted devices and browsing
+
+- **Adding a trusted device** – one device shows a code (Settings → Trusted devices → Add a trusted device) and the
+  other scans it, while both are on the same Wi-Fi. The code works once, for one device, for 10 minutes, and stops
+  working after a few wrong tries. The two devices then store each other's name, identifier and encryption-key
+  fingerprint, and trust each other: files between them are accepted without asking. On a phone, adding a trusted
+  device first needs the phone's own lock (fingerprint, face, PIN, pattern or password); Beam never sees it.
+- **Browsing is off until you switch it on** (Settings → Browsing). Then only your **trusted devices** can ask to see
+  the **folders you share** there (to start with: the usual Documents, Pictures, Videos, Music and Downloads folders
+  on a computer; Camera, Pictures, Movies, Music, Download and Documents on a phone; you can remove or add any).
+  Nothing outside them is ever shown: no other folders, no hidden or system files, no links leading elsewhere.
+- **You are asked each time**, unless you tick "Always allow … to browse my files" for that device ("Ask again"
+  undoes it). A bar (and on phones a notification) shows who is browsing, with a **Stop** button.
+- **What the other device can do** – see the names, sizes and dates of what is in the shared folders, small previews
+  of photos and videos (made on your device, never stored), and download files. With "Allow adding files" (off
+  unless you switch it on) it can also put new files into them; nothing is ever replaced, changed or deleted.
+- **How** – directly between the two devices, over your Wi-Fi or, when there is no shared Wi-Fi, a direct Wi-Fi
+  connection between them; never over the internet and never through a server. Everything is encrypted, both
+  devices check each other's key, and every file is checked after it arrives. Beam keeps no record of what was
+  looked at; downloads and added files appear in Transfers and History like any transfer.
+
 ## Devices without the app (Browser page)
 
 On Windows, "Connect with the browser" on the Browser page runs a small web page on your local network that a phone

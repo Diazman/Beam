@@ -174,6 +174,7 @@ public sealed class HomeViewModel : ObservableObject
         SendTextCommand = new AsyncCommand(SendTextAsync, () => _selected.Count > 0);
         RefreshCommand = new RelayCommand(Refresh);
         ScanCodeCommand = new AsyncCommand(ScanCodeAsync);
+        BrowseCommand = new AsyncCommand(() => SelectedDevice is { } d ? _main.OpenBrowseAsync(d.Device) : Task.CompletedTask, () => CanBrowse);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
         EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
         AllowBluetoothCommand = new AsyncCommand(async () => await _node.Nearby.RequestPermissionAsync());
@@ -212,6 +213,7 @@ public sealed class HomeViewModel : ObservableObject
             OnPropertyChanged(nameof(PreferDirect));
             OnPropertyChanged(nameof(DiscoveryStatus));
             OnPropertyChanged(nameof(HasDiscoveryStatus));
+            RefreshBrowse(); // trusted devices changed
         });
     }
 
@@ -390,6 +392,21 @@ public sealed class HomeViewModel : ObservableObject
     /// <summary>Opens the "send text" box for the chosen computers (pre-filled with copied text, if any).</summary>
     public AsyncCommand SendTextCommand { get; }
 
+    /// <summary>One trusted device is chosen: its shared folders can be browsed.</summary>
+    public bool CanBrowse => _selected.Count == 1 && _node.Settings.Current.TrustedDevices.Any(t =>
+        t.DeviceId == _selected[0].Device.Id || string.Equals(t.Fingerprint, _selected[0].Device.Fingerprint, StringComparison.OrdinalIgnoreCase));
+
+    public string BrowseText => _selected.Count == 1 ? L.T("Browse {0}'s files", _selected[0].Name) : "";
+
+    public AsyncCommand BrowseCommand { get; }
+
+    private void RefreshBrowse()
+    {
+        OnPropertyChanged(nameof(CanBrowse));
+        OnPropertyChanged(nameof(BrowseText));
+        BrowseCommand.RaiseCanExecuteChanged();
+    }
+
     public RelayCommand RefreshCommand { get; }
 
     /// <summary>Phones: scan a computer's code to pair with it (works with and without a shared Wi-Fi).</summary>
@@ -502,6 +519,7 @@ public sealed class HomeViewModel : ObservableObject
     private void OnSelectionChanged()
     {
         SendTextCommand.RaiseCanExecuteChanged();
+        RefreshBrowse();
         OnPropertyChanged(nameof(SelectedDevice));
         UpdateSendState();
     }
@@ -690,6 +708,13 @@ public sealed class HomeViewModel : ObservableObject
         {
             await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("That's not a Beam code"),
                 L.T("On the computer, open Beam and go to Receive, choose “Can't find each other? Show a code”, then scan the code shown there."), L.T("OK"), ""));
+            return;
+        }
+
+        if (code.TrustToken != null)
+        {
+            // Another device's code from Settings → Trusted devices → Add a trusted device: both trust each other.
+            await _main.Settings.AddTrustedFromCodeAsync(code);
             return;
         }
 

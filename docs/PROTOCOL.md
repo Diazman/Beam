@@ -157,6 +157,35 @@ still follows, so a proof can't be replayed or bent towards another network. A t
 that moved no data (30 in all). It never continues over the shared network by itself. Older versions' receiver-hosted requests (`host`, `join`,
 `prefer`, `stop`) are still answered for compatibility; this version never sends them.
 
+## Trusted devices (protocol 2)
+
+Connection purpose `pair`: one `PairRequest` (frame 18, `{token}`) answered by one `PairResponse` (frame 19, `{ok,
+message, name}`). The token is `t` in the pairing code JSON: 32 random bytes, one device, 10 minutes, dropped after 5
+wrong tries, compared in fixed time. The scanner connects to the code's certificate fingerprint only; on success
+each side records the other's certificate as trusted. Refused from a direct-network address.
+
+## Browsing (protocol 2)
+
+Connection purpose `browse`. The client sends `BrowseRequest` (frame 20) `{action: "open", session?}`; the server
+answers `BrowseResponse` (frame 21, up to 32 MB) `{ok, reason?, message?, session, name, canAdd, roots: [{id,
+name}]}`. Refusals: `not_trusted` (the client's certificate isn't trusted, nothing else is told), `off`, `declined`
+(asked and refused, or no answer within 60 s), `stopped` (the user ended the visit in the last minute), `failed`.
+The user is asked unless the device is always allowed, or `session` is one given to the same certificate in the
+last 10 minutes (reconnecting, or a download's own connection).
+
+Then, on the same connection, any number of requests, each `{action, root, path, …}` where `path` is relative to the
+root, `/`-separated, without empty, `.`, `..`, hidden (`.`-prefixed) or odd segments; links, hidden and system items
+are refused anywhere on the way. Every request re-reads the settings (an unshared folder or browsing switched off
+counts at once).
+
+- `list` → `{entries: [{name, isFolder, size, modified (unix ms)}]}` (at most 20 000).
+- `thumb` `{max}` → `{image}` (base64 JPEG under 48 KB) or `ok: false`.
+- `read` `{offset}` → `{size}`, then `BrowseData` frames (22, file bytes from `offset`), then `{ok, size, hash}` with
+  the SHA-256 of the whole file (the client hashes its resumed copy the same way).
+- `write` `{name, size, modified}` (only with `canAdd`, else `read_only`) → `{ok}`, then `size` bytes of `BrowseData`,
+  then `BrowseRequest{action: "commit", hash}` → `{ok, name}`. Saved under a new name when one is taken, never over
+  a file; written to a hidden part file first and kept only when the hash matches.
+
 ## Backups (protocol 2 transfers)
 
 Setup uses connection purpose `backup`: one `BackupRequest` (frame 16, JSON `{action: "setup", token}`) answered by

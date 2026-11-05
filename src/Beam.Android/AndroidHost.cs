@@ -76,6 +76,8 @@ internal static class AndroidHost
             DeviceKind = DeviceKinds.Phone,
             DirectLink = _directLink,
             NearbyRadio = new AndroidNearbyRadio(Context),
+            DefaultSharedFolders = AndroidBrowseThumbnails.DefaultFolders,
+            BrowseThumbnails = new AndroidBrowseThumbnails(),
         });
         var firstRun = !_node.Settings.Current.FirstRunCompleted;
         _node.Settings.Update(s =>

@@ -27,11 +27,21 @@ public sealed record LanguageOption(string Code, string Label)
 
 public sealed class TrustedDeviceViewModel
 {
-    public TrustedDeviceViewModel(TrustedDevice device, Action<TrustedDeviceViewModel> remove)
+    public TrustedDeviceViewModel(TrustedDevice device, Action<TrustedDeviceViewModel> remove, Action<TrustedDeviceViewModel> browse,
+        Action<TrustedDeviceViewModel> askAgain)
     {
         Device = device;
         RemoveCommand = new RelayCommand(() => remove(this));
+        BrowseCommand = new RelayCommand(() => browse(this));
+        AskAgainCommand = new RelayCommand(() => askAgain(this));
     }
+
+    /// <summary>It browses this device's shared folders without being asked ("Ask again" undoes that).</summary>
+    public bool AlwaysBrowse => Device.AlwaysBrowse;
+
+    public RelayCommand BrowseCommand { get; }
+
+    public RelayCommand AskAgainCommand { get; }
 
     public TrustedDevice Device { get; }
 
@@ -55,7 +65,7 @@ public sealed class ManualAddressViewModel
     public RelayCommand RemoveCommand { get; }
 }
 
-public sealed class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly BeamNode _node;
     private readonly IPlatformServices _platform;
@@ -85,6 +95,7 @@ public sealed class SettingsViewModel : ObservableObject
         OpenLogsCommand = new RelayCommand(() => _platform.ShareLog(_node.Paths.LogDirectory));
         CopyAddressCommand = new AsyncCommand(() => _ui.CopyToClipboardAsync(LocalAddresses));
         OpenPrivacyCommand = new RelayCommand(() => _main.Platform.OpenUrl(AppInfo.PrivacyPolicyUrl));
+        InitBrowse();
 
         ThemeOptions = new[]
         {
@@ -276,11 +287,11 @@ public sealed class SettingsViewModel : ObservableObject
             ResetFolderCommand.RaiseCanExecuteChanged();
 
             // The lists are rebuilt only when they changed (any setting saved, e.g. the window size, came through here).
-            static string Key(TrustedDevice t) => $"{t.Fingerprint}|{t.DeviceId}|{t.Name}|{t.AddedAt:O}";
+            static string Key(TrustedDevice t) => $"{t.Fingerprint}|{t.DeviceId}|{t.Name}|{t.AddedAt:O}|{t.AlwaysBrowse}";
             if (!TrustedDevices.Select(t => Key(t.Device)).SequenceEqual(settings.TrustedDevices.Select(Key)))
             {
                 TrustedDevices.Clear();
-                foreach (var device in settings.TrustedDevices) TrustedDevices.Add(new TrustedDeviceViewModel(device, RemoveTrusted));
+                foreach (var device in settings.TrustedDevices) TrustedDevices.Add(new TrustedDeviceViewModel(device, RemoveTrusted, BrowseTrusted, AskAgain));
                 OnPropertyChanged(nameof(HasTrustedDevices));
             }
 
@@ -290,6 +301,8 @@ public sealed class SettingsViewModel : ObservableObject
                 foreach (var address in settings.ManualAddresses) ManualAddresses.Add(new ManualAddressViewModel(address, RemoveManual));
                 OnPropertyChanged(nameof(HasManualAddresses));
             }
+
+            ReloadBrowse(settings);
         }
         finally
         {
@@ -320,10 +333,14 @@ public sealed class SettingsViewModel : ObservableObject
         {
             var confirmed = await _main.ShowDialogAsync(new ConfirmViewModel(
                 L.T("Stop trusting {0}?", device.Name),
-                L.T("Beam will ask you again before accepting files from {0}.", device.Name),
+                L.T("Beam will ask you again before accepting files from {0}, and it can't browse this device any more.", device.Name),
                 L.T("Stop trusting")));
             if (confirmed is true)
-                _node.Settings.Update(s => s.TrustedDevices.RemoveAll(t => t.Fingerprint == device.Device.Fingerprint));
+            {
+                _node.Trust.Remove(device.Device.Fingerprint);
+                foreach (var visit in _node.Browse.Visits.Where(v => string.Equals(v.Fingerprint, device.Device.Fingerprint, StringComparison.OrdinalIgnoreCase)))
+                    _node.Browse.Stop(visit); // browsing now ends at once, not at its next request
+            }
         }
         catch (Exception ex)
         {

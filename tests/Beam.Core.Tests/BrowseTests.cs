@@ -459,6 +459,32 @@ public class BrowseTests
     }
 
     [Fact]
+    public async Task ClosingBrowsingLetsStartedDownloadsFinish()
+    {
+        await using var pc = Pc();
+        await using var phone = Phone();
+        await TrustAsync(phone, pc);
+        var (folder, root) = Share(pc);
+        var visit = await phone.Node.Browse.OpenAsync(pc.AsDevice(), CancellationToken.None);
+        var items = await visit.ListAsync(root, "", CancellationToken.None);
+        BrowseService.ReadPause = TimeSpan.FromMilliseconds(50);
+        try
+        {
+            var session = visit.Download(items); // a folder too: listed by the download itself
+            await visit.DisposeAsync(); // left the Browse page at once
+
+            await Wait.ForFinishAsync(session);
+            Assert.Equal(TransferState.Completed, session.State);
+            Assert.Equal(TestFiles.Hash(Path.Combine(folder, "Trip", "b.jpg")), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "Trip", "b.jpg")));
+            await Wait.UntilAsync(() => pc.Node.Browse.Visits.Count == 0, because: "everything closed afterwards");
+        }
+        finally
+        {
+            BrowseService.ReadPause = TimeSpan.Zero;
+        }
+    }
+
+    [Fact]
     public async Task ACancelledDownloadLeavesNothing()
     {
         await using var pc = Pc();
