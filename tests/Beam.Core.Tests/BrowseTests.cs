@@ -387,11 +387,16 @@ public class BrowseTests
     public async Task TheFirstTimeOnSharesTheUsualFolders()
     {
         await using var pc = Pc();
+        var pictures = Path.Combine(pc.Root, "Pictures");
+        Directory.CreateDirectory(pictures);
+        pc.DefaultSharedFolders.Add(("Pictures", pictures));
+        pc.DefaultSharedFolders.Add(("Gone", Path.Combine(pc.Root, "missing"))); // not there: not shared
         Assert.False(pc.Node.Settings.Current.BrowsingEnabled);
         pc.Node.Browse.SetEnabled(true);
         Assert.True(pc.Node.Settings.Current.SharedFoldersSetUp);
-        var first = pc.Node.Settings.Current.SharedFolders.Select(f => f.Path).ToList();
-        Assert.All(first, p => Assert.True(Directory.Exists(p)));
+        var first = Assert.Single(pc.Node.Settings.Current.SharedFolders);
+        Assert.Equal("Pictures", first.Name);
+        Assert.Equal(pictures, first.Path);
 
         // Removed by the user: not added back when switched off and on.
         foreach (var folder in pc.Node.Settings.Current.SharedFolders.ToList()) pc.Node.Browse.RemoveFolder(folder.Id);

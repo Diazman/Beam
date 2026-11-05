@@ -143,6 +143,8 @@ public sealed class TestNode : IAsyncDisposable
             NearbyRadio = nearbyRadio,
             BackupSources = backupSources,
             DeviceKind = kind,
+            // Never this machine's own Documents, Pictures… (tests choose what is shared).
+            DefaultSharedFolders = () => DefaultSharedFolders,
             Discovery = new DiscoveryOptions
             {
                 Port = 0,
@@ -163,6 +165,9 @@ public sealed class TestNode : IAsyncDisposable
     }
 
     public BeamNode Node { get; }
+
+    /// <summary>What browsing shares when first switched on (none unless a test says).</summary>
+    public List<(string Name, string Path)> DefaultSharedFolders { get; } = new();
 
     public TestHandler Handler { get; }
 
