@@ -51,6 +51,9 @@ public sealed partial class DirectManager
     /// <summary>After the last transfer to/from a device whose network this device joined, how long before leaving it.</summary>
     internal static TimeSpan LeaveReceiverAfter { get; set; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>Something other than a transfer uses the link with this certificate (a browsing session): this device stays.</summary>
+    internal Func<string, bool> InUseBy { get; set; } = _ => false;
+
     /// <summary>Joined another device's network to receive, and nothing came: leave it after this long.</summary>
     internal static TimeSpan UnusedJoinTimeout { get; set; } = TimeSpan.FromMinutes(2);
 

@@ -714,7 +714,7 @@ public sealed partial class DirectManager
                     continue;
                 }
 
-                if (IsReceivingFrom(incoming.SenderFingerprint)
+                if (IsReceivingFrom(incoming.SenderFingerprint) || InUseBy(incoming.SenderFingerprint)
                     || _transfers.Sessions.Any(s => s.Direction == TransferDirection.Receive && !s.IsFinished
                                                     && string.Equals(s.PeerFingerprint, incoming.SenderFingerprint, StringComparison.OrdinalIgnoreCase)))
                 {

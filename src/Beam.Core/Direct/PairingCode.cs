@@ -44,6 +44,13 @@ public sealed class PairingCode
     [JsonPropertyName("b")]
     public string? BackupToken { get; set; }
 
+    /// <summary>
+    /// Only in the code of "Add a trusted device": a one-time secret, good for a few minutes. The device that scans it
+    /// and this one then trust each other.
+    /// </summary>
+    [JsonPropertyName("t")]
+    public string? TrustToken { get; set; }
+
     /// <summary>Appends the pairing information to a link (the Phone page's), or returns it as a "beam:" text.</summary>
     public string AppendTo(string? link)
     {
@@ -107,6 +114,7 @@ public sealed class PairingCode
         code.Fingerprint = code.Fingerprint.ToLowerInvariant();
         code.Addresses = code.Addresses.Where(a => TryParseEndPoint(a, out _)).Take(8).ToList();
         if (code.BackupToken is { Length: > 128 }) code.BackupToken = null;
+        if (code.TrustToken is { Length: > 128 }) code.TrustToken = null;
         return code;
     }
 

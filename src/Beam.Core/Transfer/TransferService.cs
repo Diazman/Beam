@@ -97,6 +97,12 @@ public sealed class TransferService : IAsyncDisposable
     /// <summary>Handles <see cref="ConnectionPurpose.Backup"/> connections (backup setup; null: such connections are closed).</summary>
     internal Func<PeerConnection, CancellationToken, Task>? BackupHandler { get; set; }
 
+    /// <summary>Handles <see cref="ConnectionPurpose.Pair"/> connections (adding a trusted device; null: such connections are closed).</summary>
+    internal Func<PeerConnection, CancellationToken, Task>? PairHandler { get; set; }
+
+    /// <summary>Handles <see cref="ConnectionPurpose.Browse"/> connections (null: such connections are closed).</summary>
+    internal Func<PeerConnection, CancellationToken, Task>? BrowseHandler { get; set; }
+
     /// <summary>Whether an address is reached over a direct Wi-Fi link (replaced in tests).</summary>
     public Func<IPAddress, bool> IsDirectAddress { get; set; } = Direct.DirectAddresses.IsDirect;
 
@@ -413,6 +419,20 @@ public sealed class TransferService : IAsyncDisposable
             {
                 // Setup only over the shared network: a direct link is not where a backup is set up.
                 if (BackupHandler != null && !(socket.RemoteEndPoint is IPEndPoint ip && IsDirectAddress(ip.Address))) await BackupHandler(connection, token).ConfigureAwait(false);
+                return;
+            }
+
+            if (hello.Purpose == ConnectionPurpose.Pair)
+            {
+                // Adding a trusted device happens over the shared network only, like a backup setup.
+                if (PairHandler != null && !(socket.RemoteEndPoint is IPEndPoint pairing && IsDirectAddress(pairing.Address)))
+                    await PairHandler(connection, token).ConfigureAwait(false);
+                return;
+            }
+
+            if (hello.Purpose == ConnectionPurpose.Browse)
+            {
+                if (BrowseHandler != null) await BrowseHandler(connection, token).ConfigureAwait(false);
                 return;
             }
 

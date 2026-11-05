@@ -31,7 +31,8 @@ public sealed class FrameChannel
     /// <summary>The largest frame of a type: only file lists and their answers can be big, and text up to its limit.</summary>
     public static int MaxPayload(FrameType type) => type switch
     {
-        FrameType.FileData => MaxDataPayload,
+        FrameType.FileData or FrameType.BrowseData => MaxDataPayload,
+        FrameType.BrowseResponse => MaxControlPayload,
         FrameType.Offer or FrameType.OfferResponse or FrameType.Result => MaxControlPayload,
         FrameType.Text => 2 * 1024 * 1024, // 256K characters, escaped
         _ => MaxSmallPayload,
@@ -81,6 +82,16 @@ public sealed class FrameChannel
         if (payloadLength > MaxDataPayload) throw new ArgumentOutOfRangeException(nameof(payloadLength));
         WriteHeader(buffer, FrameType.FileData, payloadLength);
         return WriteAsync(buffer.AsMemory(0, HeaderSize + payloadLength), cancellationToken);
+    }
+
+    /// <summary>Sends <paramref name="data"/> as one frame of <paramref name="type"/> (a copy; for browsing's data frames).</summary>
+    public Task SendDataAsync(FrameType type, ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
+    {
+        if (data.Length > MaxPayload(type)) throw new ArgumentOutOfRangeException(nameof(data));
+        var buffer = new byte[HeaderSize + data.Length];
+        WriteHeader(buffer, type, data.Length);
+        data.CopyTo(buffer.AsMemory(HeaderSize));
+        return WriteAsync(buffer, cancellationToken);
     }
 
     public async Task<Frame> ReadAsync(CancellationToken cancellationToken)

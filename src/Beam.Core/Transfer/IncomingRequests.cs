@@ -95,6 +95,24 @@ public interface IIncomingTransferHandler
     /// Wi-Fi for that network while the files come). True to join. Without an answer (no UI), it is refused.
     /// </summary>
     Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    /// <summary>
+    /// A trusted device asks to browse this device's shared folders. Without an answer (no UI), it is refused.
+    /// </summary>
+    Task<BrowseDecision> ApproveBrowseAsync(IncomingBrowseRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(BrowseDecision.Deny);
+}
+
+/// <summary>A trusted device asking to browse (see <see cref="IIncomingTransferHandler.ApproveBrowseAsync"/>).</summary>
+public sealed record IncomingBrowseRequest(string DeviceId, string DeviceName, string Fingerprint);
+
+public enum BrowseDecision
+{
+    Deny,
+    Allow,
+
+    /// <summary>Allowed, and from now on without asking ("Always allow").</summary>
+    AllowAlways,
 }
 
 /// <summary>Who asks this device to join its direct network (see <see cref="IIncomingTransferHandler.ApproveDirectConnectionAsync"/>).</summary>

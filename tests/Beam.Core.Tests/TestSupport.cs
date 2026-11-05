@@ -97,6 +97,21 @@ public sealed class TestHandler : IIncomingTransferHandler
         return ApproveDirect(request);
     }
 
+    /// <summary>What the "user" answers when a trusted device asks to browse.</summary>
+    public Func<IncomingBrowseRequest, BrowseDecision> DecideBrowse { get; set; } = _ => BrowseDecision.Allow;
+
+    public List<IncomingBrowseRequest> BrowseRequests { get; } = new();
+
+    /// <summary>The browse question stays on screen until cancelled.</summary>
+    public bool NeverAnswerBrowse { get; set; }
+
+    public async Task<BrowseDecision> ApproveBrowseAsync(IncomingBrowseRequest request, CancellationToken cancellationToken)
+    {
+        lock (BrowseRequests) BrowseRequests.Add(request);
+        if (NeverAnswerBrowse) await Task.Delay(Timeout.Infinite, cancellationToken);
+        return DecideBrowse(request);
+    }
+
     public Task<IReadOnlyList<ConflictAction>> ResolveConflictsAsync(IncomingRequest request, IReadOnlyList<FileConflict> conflicts, CancellationToken cancellationToken)
     {
         lock (Conflicts) Conflicts.Add(conflicts);

@@ -43,6 +43,20 @@ public sealed class TrustedDevice
     public string Name { get; set; } = "";
 
     public DateTimeOffset AddedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>May browse this device's shared folders without being asked each time ("Always allow").</summary>
+    public bool AlwaysBrowse { get; set; }
+}
+
+/// <summary>A folder trusted devices may browse (Settings → Browsing).</summary>
+public sealed class SharedFolder
+{
+    /// <summary>Stable and opaque: what browsing devices name it by (never the path).</summary>
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+
+    public string Path { get; set; } = "";
 }
 
 public sealed class AppSettings
@@ -102,6 +116,17 @@ public sealed class AppSettings
     /// <summary>This device's backups to computers (a phone; one per computer).</summary>
     public List<BackupPlan> Backups { get; set; } = new();
 
+    /// <summary>Trusted devices may ask to browse <see cref="SharedFolders"/> (off until the user turns it on).</summary>
+    public bool BrowsingEnabled { get; set; }
+
+    /// <summary>Browsing devices may also add files to the shared folders (never change or delete any).</summary>
+    public bool BrowseAllowAdding { get; set; }
+
+    public List<SharedFolder> SharedFolders { get; set; } = new();
+
+    /// <summary>The default shared folders were offered once (so removing them all isn't undone).</summary>
+    public bool SharedFoldersSetUp { get; set; }
+
     /// <summary>Devices allowed to back up to this computer, each into its own folder.</summary>
     public List<BackupPartner> BackupPartners { get; set; } = new();
 
@@ -155,6 +180,11 @@ public sealed class AppSettings
             }
         }
 
+        SharedFolders = (SharedFolders ?? new())
+            .Where(f => !string.IsNullOrWhiteSpace(f.Id) && !string.IsNullOrWhiteSpace(f.Path))
+            .GroupBy(f => f.Id)
+            .Select(g => g.First())
+            .ToList();
         BackupPartners = (BackupPartners ?? new())
             .Where(p => !string.IsNullOrWhiteSpace(p.Fingerprint) && !string.IsNullOrWhiteSpace(p.Folder))
             .GroupBy(p => p.Fingerprint, StringComparer.OrdinalIgnoreCase)

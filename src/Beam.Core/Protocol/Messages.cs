@@ -34,6 +34,20 @@ public enum FrameType : byte
     BackupRequest = 16,
 
     BackupResponse = 17,
+
+    /// <summary>Adding a trusted device with its one-time code (connection purpose <see cref="ConnectionPurpose.Pair"/>), answered with <see cref="PairResponse"/>.</summary>
+    PairRequest = 18,
+
+    PairResponse = 19,
+
+    /// <summary>Browsing (connection purpose <see cref="ConnectionPurpose.Browse"/>): a request, answered with <see cref="BrowseResponse"/>.</summary>
+    BrowseRequest = 20,
+
+    /// <summary>A folder listing or an answer; up to 32 MB (a folder with very many files).</summary>
+    BrowseResponse = 21,
+
+    /// <summary>A piece of a file being downloaded or added, up to the file data size.</summary>
+    BrowseData = 22,
 }
 
 public static class ConnectionPurpose
@@ -49,6 +63,12 @@ public static class ConnectionPurpose
 
     /// <summary>One <see cref="BackupRequestMessage"/> (backup setup), answered with a <see cref="BackupResponseMessage"/>.</summary>
     public const string Backup = "backup";
+
+    /// <summary>One <see cref="PairRequestMessage"/> (the one-time code of "Add a trusted device"), answered with a <see cref="PairResponseMessage"/>.</summary>
+    public const string Pair = "pair";
+
+    /// <summary>A browsing session: <see cref="BrowseRequestMessage"/>s answered with <see cref="BrowseResponseMessage"/>s (and file data).</summary>
+    public const string Browse = "browse";
 }
 
 public static class DirectActions
@@ -367,6 +387,147 @@ public sealed class CancelMessage
 [JsonSerializable(typeof(DirectResponseMessage))]
 [JsonSerializable(typeof(BackupRequestMessage))]
 [JsonSerializable(typeof(BackupResponseMessage))]
+[JsonSerializable(typeof(PairRequestMessage))]
+[JsonSerializable(typeof(PairResponseMessage))]
+[JsonSerializable(typeof(BrowseRequestMessage))]
+[JsonSerializable(typeof(BrowseResponseMessage))]
 internal sealed partial class ProtocolJson : JsonSerializerContext
 {
+}
+
+/// <summary>"Add a trusted device": the one-time token of the code that was scanned.</summary>
+public sealed class PairRequestMessage
+{
+    public string? Token { get; set; }
+}
+
+/// <summary>Accepted: both devices now trust each other (<see cref="Name"/> is the shown device's).</summary>
+public sealed class PairResponseMessage
+{
+    public bool Ok { get; set; }
+
+    public string? Message { get; set; }
+
+    public string? Name { get; set; }
+}
+
+public static class BrowseActions
+{
+    /// <summary>Starts (or, with <see cref="BrowseRequestMessage.Session"/>, picks up again) a browsing session.</summary>
+    public const string Open = "open";
+
+    /// <summary>A shared folder's contents (<see cref="BrowseRequestMessage.Root"/>, <see cref="BrowseRequestMessage.Path"/>).</summary>
+    public const string List = "list";
+
+    /// <summary>A file, from <see cref="BrowseRequestMessage.Offset"/>: BrowseData frames, then a response with its SHA-256.</summary>
+    public const string Read = "read";
+
+    /// <summary>A small preview of a photo or video (JPEG, at most <see cref="BrowseRequestMessage.Max"/> pixels across).</summary>
+    public const string Thumbnail = "thumb";
+
+    /// <summary>Adds a file to a shared folder: this request, BrowseData frames, then <see cref="Commit"/>.</summary>
+    public const string Write = "write";
+
+    public const string Commit = "commit";
+}
+
+public static class BrowseReasons
+{
+    /// <summary>Only trusted devices may browse.</summary>
+    public const string NotTrusted = "not_trusted";
+
+    /// <summary>Browsing is off on that device.</summary>
+    public const string Off = "off";
+
+    public const string Declined = "declined";
+
+    /// <summary>The other device's user ended the visit just now.</summary>
+    public const string Stopped = "stopped";
+
+    public const string TimedOut = "timeout";
+
+    /// <summary>Not in a shared folder, or not there (any more).</summary>
+    public const string NotFound = "not_found";
+
+    /// <summary>Adding files isn't allowed.</summary>
+    public const string ReadOnly = "read_only";
+
+    public const string Failed = "failed";
+}
+
+public sealed class BrowseRequestMessage
+{
+    public string Action { get; set; } = "";
+
+    /// <summary>Open: a session given before (to carry on after a reconnect without asking again).</summary>
+    public string? Session { get; set; }
+
+    public string? Root { get; set; }
+
+    /// <summary>Inside the root, "/"-separated ("Camera/2026"); never absolute, never "..".</summary>
+    public string? Path { get; set; }
+
+    public long Offset { get; set; }
+
+    /// <summary>Write: the file's name, size and time.</summary>
+    public string? Name { get; set; }
+
+    public long Size { get; set; }
+
+    public long Modified { get; set; }
+
+    /// <summary>Commit: the added file's SHA-256 (hex).</summary>
+    public string? Hash { get; set; }
+
+    /// <summary>Thumbnail: the largest side, in pixels.</summary>
+    public int Max { get; set; }
+}
+
+public sealed class BrowseRoot
+{
+    public string Id { get; set; } = "";
+
+    public string Name { get; set; } = "";
+}
+
+public sealed class BrowseEntry
+{
+    public string Name { get; set; } = "";
+
+    public bool IsFolder { get; set; }
+
+    public long Size { get; set; }
+
+    /// <summary>Unix time in milliseconds.</summary>
+    public long Modified { get; set; }
+}
+
+public sealed class BrowseResponseMessage
+{
+    public bool Ok { get; set; }
+
+    /// <summary>For the user, when not <see cref="Ok"/>.</summary>
+    public string? Message { get; set; }
+
+    public string? Reason { get; set; }
+
+    /// <summary>Open: the session, to pick up again after a reconnect.</summary>
+    public string? Session { get; set; }
+
+    /// <summary>Open: the device's name, and whether files may be added.</summary>
+    public string? Name { get; set; }
+
+    public bool CanAdd { get; set; }
+
+    public List<BrowseRoot> Roots { get; set; } = new();
+
+    public List<BrowseEntry> Entries { get; set; } = new();
+
+    /// <summary>Read: the file's size before the data, its SHA-256 after.</summary>
+    public long Size { get; set; }
+
+    public string? Hash { get; set; }
+
+    /// <summary>Thumbnail: the JPEG, base64 (small).</summary>
+    public string? Image { get; set; }
 }

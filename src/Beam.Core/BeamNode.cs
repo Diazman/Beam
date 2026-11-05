@@ -41,6 +41,12 @@ public sealed class BeamNodeOptions
 
     /// <summary>The platform's photos, videos and chosen folders for backups (a phone's media library); null: folders by path only.</summary>
     public Backup.IBackupSources? BackupSources { get; init; }
+
+    /// <summary>The folders shared for browsing when it's first turned on (name, path); null: the usual desktop folders.</summary>
+    public Func<IReadOnlyList<(string Name, string Path)>>? DefaultSharedFolders { get; init; }
+
+    /// <summary>Makes small previews of pictures and videos for devices browsing this one; null: no previews.</summary>
+    public Browse.IBrowseThumbnails? BrowseThumbnails { get; init; }
 }
 
 /// <summary>
@@ -88,6 +94,9 @@ public sealed class BeamNode : IAsyncDisposable
             CreatePairingCode, selfKind is DeviceKinds.Desktop or DeviceKinds.Laptop,
             () => Transfers.Sessions.Any(s => !s.IsFinished));
         Backup = new Backup.BackupService(Transfers, Discovery, Settings, CreatePairingCode, options.BackupSources);
+        Trust = new Trust.TrustService(Transfers, Discovery, Settings, CreatePairingCode, Direct.Remember);
+        Browse = new Browse.BrowseService(Transfers, Discovery, Direct, Settings, _handler,
+            options.DefaultSharedFolders ?? DesktopSharedFolders, options.BrowseThumbnails);
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }
@@ -113,6 +122,12 @@ public sealed class BeamNode : IAsyncDisposable
     /// <summary>Automatic backups to a computer on the same Wi-Fi (on the phone), and taking them (on the computer).</summary>
     public Backup.BackupService Backup { get; }
 
+    /// <summary>Trusted devices: adding one by scanning its code (both sides then trust each other), and removing one.</summary>
+    public Trust.TrustService Trust { get; }
+
+    /// <summary>Browsing a trusted device's shared folders, and letting trusted devices browse this one's.</summary>
+    public Browse.BrowseService Browse { get; }
+
     /// <summary>Sending and receiving with phones through their web browser (started on demand).</summary>
     public PhoneLinkServer PhoneLink { get; }
 
@@ -126,6 +141,23 @@ public sealed class BeamNode : IAsyncDisposable
     }
 
     public static BeamNode Create(BeamNodeOptions options) => new(options);
+
+    /// <summary>Documents, Pictures, Videos, Music, Downloads and Desktop: the ones that exist.</summary>
+    private static IReadOnlyList<(string Name, string Path)> DesktopSharedFolders()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var list = new List<(string, string)>
+        {
+            ("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)),
+            ("Pictures", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)),
+            ("Videos", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos)),
+            ("Music", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)),
+            ("Downloads", string.IsNullOrEmpty(home) ? "" : Path.Combine(home, "Downloads")),
+            ("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
+        };
+        return list.Where(f => !string.IsNullOrEmpty(f.Item2) && Directory.Exists(f.Item2))
+            .DistinctBy(f => Path.GetFullPath(f.Item2), StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     /// <summary>Opens the network ports. Call after the user has seen the first-run explanation.</summary>
     public void Start()
@@ -460,5 +492,8 @@ public sealed class BeamNode : IAsyncDisposable
 
         public Task<bool> ApproveDirectConnectionAsync(IncomingDirectRequest request, CancellationToken cancellationToken) =>
             Inner?.ApproveDirectConnectionAsync(request, cancellationToken) ?? Task.FromResult(false);
+
+        public Task<BrowseDecision> ApproveBrowseAsync(IncomingBrowseRequest request, CancellationToken cancellationToken) =>
+            Inner?.ApproveBrowseAsync(request, cancellationToken) ?? Task.FromResult(BrowseDecision.Deny);
     }
 }
