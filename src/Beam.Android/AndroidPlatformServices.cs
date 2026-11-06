@@ -277,6 +277,12 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         }
     }
 
+    public string? ToLocalFolder(string picked)
+    {
+        var path = picked.StartsWith('/') ? picked : PathFromTreeUri(picked);
+        return path != null && Directory.Exists(path) ? path.TrimEnd('/') : null;
+    }
+
     private static string? PathFromTreeUri(string address)
     {
         try

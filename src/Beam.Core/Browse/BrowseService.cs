@@ -1,3 +1,4 @@
+using System.Net;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Beam.Core.Diagnostics;
@@ -68,6 +69,7 @@ public sealed partial class BrowseService
     private readonly Func<IReadOnlyList<(string Name, string Path)>> _defaultFolders;
     private readonly IBrowseThumbnails? _thumbnails;
     private readonly IExternalFiles? _external;
+    private readonly Func<string, bool> _heardNearby;
 
     // Sessions given to a device: its fingerprint and until when it may come back without being asked.
     private readonly ConcurrentDictionary<string, (string Fingerprint, long Until)> _sessions = new();
@@ -82,8 +84,10 @@ public sealed partial class BrowseService
     internal static TimeSpan ReadPause { get; set; }
 
     internal BrowseService(TransferService transfers, DiscoveryService discovery, DirectManager direct, SettingsStore settings,
-        IIncomingTransferHandler handler, Func<IReadOnlyList<(string Name, string Path)>> defaultFolders, IBrowseThumbnails? thumbnails)
+        IIncomingTransferHandler handler, Func<IReadOnlyList<(string Name, string Path)>> defaultFolders, IBrowseThumbnails? thumbnails,
+        Func<string, bool>? heardNearby = null)
     {
+        _heardNearby = heardNearby ?? (_ => false);
         _transfers = transfers;
         _discovery = discovery;
         _direct = direct;
@@ -94,6 +98,8 @@ public sealed partial class BrowseService
         _external = transfers.ExternalFiles;
         _transfers.BrowseHandler = HandleAsync;
         // Joined a browsing device's direct network: stay while it browses (no transfer runs to show it's in use).
+        _discovery.DeviceFound += (_, e) => RememberAddresses(e.Device);
+        _discovery.DeviceChanged += (_, e) => RememberAddresses(e.Device);
         _direct.InUseBy = fingerprint => _visits.Keys.Any(v => string.Equals(v.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -168,6 +174,27 @@ public sealed partial class BrowseService
     {
         foreach (var visit in _visits.Keys) Cancel(visit);
     }
+
+    /// <summary>A trusted device heard on the shared network: keep where, to reach it there next time.</summary>
+    internal void RememberAddresses(DeviceInfo device)
+    {
+        var addresses = device.Endpoints.Where(e => !_transfers.IsDirectAddress(e.Address)).Select(e => e.ToString()).ToList();
+        if (addresses.Count == 0) return;
+        var trusted = _settings.Current.TrustedDevices.FirstOrDefault(t => string.Equals(t.Fingerprint, device.Fingerprint, StringComparison.OrdinalIgnoreCase));
+        if (trusted == null || trusted.Addresses.Take(addresses.Count).SequenceEqual(addresses)) return;
+        _settings.Update(s =>
+        {
+            foreach (var t in s.TrustedDevices.Where(t => string.Equals(t.Fingerprint, device.Fingerprint, StringComparison.OrdinalIgnoreCase)))
+                t.Addresses = addresses.Concat(t.Addresses).Distinct().Take(4).ToList();
+        });
+    }
+
+    internal bool HeardNearby(string deviceId) => _heardNearby(deviceId);
+
+    internal IReadOnlyList<IPEndPoint> RememberedAddresses(string fingerprint) =>
+        _settings.Current.TrustedDevices.FirstOrDefault(t => string.Equals(t.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))?.Addresses
+            .Select(a => IPEndPoint.TryParse(a, out var e) ? e : null).OfType<IPEndPoint>().ToList()
+        ?? (IReadOnlyList<IPEndPoint>)Array.Empty<IPEndPoint>();
 
     private void StopAll()
     {
@@ -409,22 +436,7 @@ public sealed partial class BrowseService
             await channel.SendAsync(FrameType.BrowseResponse, new BrowseResponseMessage { Ok = true, Size = size }, token).ConfigureAwait(false);
             // The hash covers the whole file, also the part the other side already has (it hashes its copy the same way).
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            var buffer = new byte[ChunkSize];
-            long position = 0;
-            while (position < size)
-            {
-                var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, size - position)), token).ConfigureAwait(false);
-                if (read == 0) break; // the file got shorter while being read: the hash won't match, and the other side says so
-                hash.AppendData(buffer, 0, read);
-                if (position + read > offset)
-                {
-                    var skip = (int)Math.Max(0, offset - position);
-                    await channel.SendDataAsync(FrameType.BrowseData, buffer.AsMemory(skip, read - skip), token).ConfigureAwait(false);
-                    if (ReadPause > TimeSpan.Zero) await Task.Delay(ReadPause, token).ConfigureAwait(false);
-                }
-
-                position += read;
-            }
+            var position = await BrowseStreaming.SendAsync(channel, stream, offset, size, hash, null, ReadPause, token).ConfigureAwait(false);
 
             await channel.SendAsync(FrameType.BrowseResponse, new BrowseResponseMessage
             {
@@ -493,19 +505,12 @@ public sealed partial class BrowseService
         try
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            await using (var file = new FileStream(part, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.Asynchronous))
+            await using (var writer = new PipelinedFileWriter(
+                             new FileStream(part, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.Asynchronous), name))
             {
                 await channel.SendAsync(FrameType.BrowseResponse, new BrowseResponseMessage { Ok = true }, token).ConfigureAwait(false);
-                long received = 0;
-                while (received < request.Size)
-                {
-                    var frame = await channel.ReadAsync(TimeSpan.FromMinutes(2), token).ConfigureAwait(false);
-                    if (frame.Type != FrameType.BrowseData || received + frame.Payload.Length > request.Size)
-                        throw new ProtocolException("Unexpected data while adding a file.");
-                    await file.WriteAsync(frame.Payload, token).ConfigureAwait(false);
-                    hash.AppendData(frame.Payload.Span);
-                    received += frame.Payload.Length;
-                }
+                await BrowseStreaming.ReceiveAsync(channel, writer, 0, request.Size, hash, null, TimeSpan.FromMinutes(2), token).ConfigureAwait(false);
+                await writer.CompleteAsync().ConfigureAwait(false);
             }
 
             var commit = await channel.ReadMessageAsync<BrowseRequestMessage>(FrameType.BrowseRequest, TimeSpan.FromMinutes(2), token).ConfigureAwait(false);
@@ -530,7 +535,7 @@ public sealed partial class BrowseService
             FileAdded?.Invoke(visit, target);
             await channel.SendAsync(FrameType.BrowseResponse, new BrowseResponseMessage { Ok = true, Name = Path.GetFileName(target) }, token).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && !token.IsCancellationRequested)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or LocalFileException && !token.IsCancellationRequested)
         {
             Log.Warn($"Browse: couldn't add a file ({ex.GetType().Name})");
             await RefuseAsync(channel, BrowseReasons.Failed, L.T("The file couldn't be saved on {0}.", settings.DeviceName), token).ConfigureAwait(false);

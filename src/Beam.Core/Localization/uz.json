@@ -675,7 +675,7 @@
   "The file arrived damaged. Try again.": "Fayl shikastlangan holda keldi. Qayta urinib ko'ring.",
   "The file couldn't be saved on {0}.": "Faylni {0} qurilmasiga saqlab bo'lmadi.",
   "Only trusted devices can browse each other. Add {0} as a trusted device first (Settings → Trusted devices).": "Faqat ishonchli qurilmalar bir-birini ko'ra oladi. Avval {0} ni ishonchli qurilma sifatida qo'shing (Sozlamalar → Ishonchli qurilmalar).",
-  "{0} isn't nearby. Both need to be on the same Wi-Fi. Without one, open Receive on {0} and keep the devices close: they then connect directly.": "{0} yaqin atrofda emas. Ikkalasi bir xil Wi-Fi tarmog'ida bo'lishi kerak. Tarmoq bo'lmasa, {0} da Qabul qilish sahifasini oching va qurilmalarni yaqin tuting: shunda ular to'g'ridan-to'g'ri ulanadi.",
+  "Couldn't reach {0}. Make sure Beam is open there and both are on the same Wi-Fi. Without Wi-Fi, open Receive on {0} and keep the devices close: they then connect directly.": "{0} bilan bog'lanib bo'lmadi. U yerda Beam ochiq ekanini va ikkalasi bir xil Wi-Fi tarmog'ida ekanini tekshiring. Wi-Fi bo'lmasa, {0} da Qabul qilish sahifasini oching va qurilmalarni yaqin tuting: shunda ular to'g'ridan-to'g'ri ulanadi.",
   "The file arrived damaged.": "Fayl shikastlangan holda keldi.",
   "The file couldn't be added.": "Faylni qo'shib bo'lmadi.",
   "This isn't a code for adding a trusted device. On the other device, open Settings → Trusted devices → Add a trusted device.": "Bu ishonchli qurilma qo'shish kodi emas. Boshqa qurilmada Sozlamalar → Ishonchli qurilmalar → Ishonchli qurilma qo'shish ni oching.",

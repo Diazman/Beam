@@ -157,11 +157,17 @@ internal sealed class TransferKeepAlive
     private WifiManager.WifiLock? _lowLatencyLock;
     private PowerManager.WakeLock? _wakeLock;
 
-    public TransferKeepAlive(Context context, TransferService transfers, AndroidDirectLink? link)
+    private readonly Beam.Core.Browse.BrowseService? _browse;
+
+    public TransferKeepAlive(Context context, TransferService transfers, AndroidDirectLink? link, Beam.Core.Browse.BrowseService? browse = null)
     {
         _context = context;
         _transfers = transfers;
         _link = link;
+        _browse = browse;
+        // Being browsed: files are read and sent from here with no transfer of this phone's own, so Wi-Fi's power
+        // saving (which slows sending down a lot) has to be kept off for the visit too.
+        if (browse != null) browse.VisitsChanged += Update;
         transfers.SessionStarted += _ => Update();
         transfers.SessionFinished += _ => Update();
         if (link != null) link.JoinedChanged += Update;
@@ -181,7 +187,7 @@ internal sealed class TransferKeepAlive
     {
         lock (_gate)
         {
-            var transferring = _transfers.Sessions.Any(s => !s.IsFinished);
+            var transferring = _transfers.Sessions.Any(s => !s.IsFinished) || _browse?.Visits.Count > 0;
             var active = transferring || _link?.IsJoined == true;
             if (active && _running)
             {

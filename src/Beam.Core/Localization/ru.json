@@ -775,7 +775,7 @@
   "The file arrived damaged. Try again.": "Файл пришёл повреждённым. Попробуйте ещё раз.",
   "The file couldn't be saved on {0}.": "Не удалось сохранить файл на {0}.",
   "Only trusted devices can browse each other. Add {0} as a trusted device first (Settings → Trusted devices).": "Просматривать друг друга могут только доверенные устройства. Сначала добавьте {0} как доверенное устройство (Настройки → Доверенные устройства).",
-  "{0} isn't nearby. Both need to be on the same Wi-Fi. Without one, open Receive on {0} and keep the devices close: they then connect directly.": "{0} не рядом. Оба устройства должны быть в одной сети Wi-Fi. Если её нет, откройте «Получить» на {0} и держите устройства рядом: тогда они подключатся напрямую.",
+  "Couldn't reach {0}. Make sure Beam is open there and both are on the same Wi-Fi. Without Wi-Fi, open Receive on {0} and keep the devices close: they then connect directly.": "Не удалось связаться с {0}. Убедитесь, что там открыт Beam и оба устройства в одной сети Wi-Fi. Без Wi-Fi откройте «Получить» на {0} и держите устройства рядом: тогда они подключатся напрямую.",
   "The file arrived damaged.": "Файл пришёл повреждённым.",
   "The file couldn't be added.": "Не удалось добавить файл.",
   "This isn't a code for adding a trusted device. On the other device, open Settings → Trusted devices → Add a trusted device.": "Это не код для добавления доверенного устройства. На другом устройстве откройте Настройки → Доверенные устройства → Добавить доверенное устройство.",

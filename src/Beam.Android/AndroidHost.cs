@@ -99,7 +99,7 @@ internal static class AndroidHost
 
         _node.Transfers.SessionFinished += AddToMediaLibrary;
         BackupNotices.Attach(_node, new AndroidPlatformServices()); // also when there is no screen
-        _keepAlive = new TransferKeepAlive(Context, _node.Transfers, _directLink);
+        _keepAlive = new TransferKeepAlive(Context, _node.Transfers, _directLink, _node.Browse);
         AcquireMulticastLock();
     }
 

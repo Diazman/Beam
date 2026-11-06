@@ -202,15 +202,15 @@ public sealed partial class SettingsViewModel
     {
         var picked = await _ui.PickFolderAsync(L.T("Choose a folder to share with your trusted devices"), null);
         if (string.IsNullOrEmpty(picked)) return;
-        if (!Directory.Exists(picked))
+        // Phones give a content:// address for the picked folder: browsing needs the folder itself.
+        if (_platform.ToLocalFolder(picked) is not { } folder)
         {
-            // Phones give content:// addresses for picked folders; browsing needs a real folder path.
             await _main.ShowDialogAsync(new ConfirmViewModel(L.T("Can't share this folder"),
                 L.T("Beam can only share folders on this device's own storage. Choose another one."), L.T("OK"), ""));
             return;
         }
 
-        _node.Browse.AddFolder(picked);
+        _node.Browse.AddFolder(folder);
     }
 
     private void RemoveSharedFolder(SharedFolderViewModel folder) => _node.Browse.RemoveFolder(folder.Folder.Id);

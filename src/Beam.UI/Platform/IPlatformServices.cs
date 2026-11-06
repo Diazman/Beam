@@ -145,5 +145,11 @@ public interface IPlatformServices
     }
 
     /// <summary>Lets the user pass Beam's log on, for troubleshooting (desktop: opens the log folder).</summary>
+    /// <summary>
+    /// The folder path of what the folder picker gave (phones give content:// addresses), for sharing it with
+    /// trusted devices; null when it isn't a folder on this device's own storage.
+    /// </summary>
+    string? ToLocalFolder(string picked) => Directory.Exists(picked) ? picked : null;
+
     void ShareLog(string logDirectory) => OpenFolder(logDirectory);
 }

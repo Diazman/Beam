@@ -342,6 +342,23 @@ public class BrowseTests
     }
 
     [Fact]
+    public void AWholeDriveCanBeShared()
+    {
+        // C:\ on Windows, / elsewhere: the root ends with its separator already.
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        Assert.True(Files.SafePath.IsInside(root, Path.Combine(root, "Users")));
+        Assert.True(Files.SafePath.IsInside("/data/", "/data/a"));
+        Assert.False(Files.SafePath.IsInside("/data", "/database"));
+        Assert.False(Files.SafePath.IsInside("/data", "/data"));
+
+        if (OperatingSystem.IsWindows()) return; // the temp folder is under the hidden AppData there (refused, rightly)
+        using var dir = new TempDir();
+        var settings = new AppSettings { SharedFolders = { new SharedFolder { Id = "drive", Name = "Drive", Path = root } } };
+        var relative = Path.GetRelativePath(root, dir.Path).Replace(Path.DirectorySeparatorChar, '/');
+        Assert.Equal(Path.GetFullPath(dir.Path), BrowseService.Resolve(settings, "drive", relative));
+    }
+
+    [Fact]
     public async Task LinksLeadingOutAreNeitherListedNorFollowed()
     {
         if (OperatingSystem.IsWindows()) return; // links need extra rights there
@@ -629,5 +646,67 @@ public class BrowseTests
         Assert.Equal(TransferPath.Direct, session.Path);
         Assert.Equal(TestFiles.Hash(Path.Combine(folder, "a.jpg")), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "a.jpg")));
         Assert.Single(pc.Handler.BrowseRequests); // asked once, also for the download's connection
+    }
+
+    [Fact]
+    public async Task ATrustedDeviceNotHeardLatelyIsReachedWhereItWas()
+    {
+        await using var pc = Pc();
+        await using var phone = Phone();
+        await TrustAsync(phone, pc); // its address comes with the code
+        Share(pc);
+
+        // Opened from Settings: no address known from discovery right now.
+        var bare = new DeviceInfo { Id = pc.Node.Identity.DeviceId, Name = "Office PC", Fingerprint = pc.Node.Identity.Fingerprint };
+        await using var visit = await phone.Node.Browse.OpenAsync(bare, CancellationToken.None);
+
+        Assert.Equal(TransferPath.Network, visit.Path);
+        Assert.Single(visit.Roots);
+    }
+
+    [Fact]
+    public async Task WithoutWiFiOrBluetoothNoDirectLinkIsTried()
+    {
+        var air = new FakeDirectAir();
+        var phoneLink = (FakeDirectAir.FakeLink)air.Link(DirectRoles.Host | DirectRoles.Join);
+        var pcLink = (FakeDirectAir.FakeLink)air.Link(DirectRoles.Host | DirectRoles.JoinComputers);
+        await using var phone = new TestNode("Galaxy", directLink: phoneLink, kind: DeviceKinds.Phone);
+        await using var pc = new TestNode("Laptop", directLink: pcLink, kind: DeviceKinds.Laptop);
+        air.ConnectDirectOnly(phone.Node, pc.Node);
+        phone.Trust(pc);
+        pc.Trust(phone);
+        Share(pc);
+        using var dead = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        dead.Start();
+        var deadPort = ((System.Net.IPEndPoint)dead.LocalEndpoint).Port;
+        dead.Stop();
+
+        var started = DateTime.UtcNow;
+        var ex = await Assert.ThrowsAsync<TransferException>(() => phone.Node.Browse.OpenAsync(pc.AsDevice(deadPort), CancellationToken.None));
+
+        Assert.Contains("Couldn't reach Laptop", ex.Message);
+        Assert.Equal(0, phoneLink.HostCalls + phoneLink.JoinCalls + pcLink.HostCalls + pcLink.JoinCalls);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(15), "said so quickly");
+    }
+
+    [Fact]
+    public async Task LargeDownloadsStreamIntact()
+    {
+        await using var pc = Pc();
+        await using var phone = Phone();
+        await TrustAsync(phone, pc);
+        var (folder, root) = Share(pc);
+        TestFiles.Write(Path.Combine(folder, "video.mp4"), 64L * 1024 * 1024, 7);
+        await using var visit = await phone.Node.Browse.OpenAsync(pc.AsDevice(), CancellationToken.None);
+        var item = (await visit.ListAsync(root, "", CancellationToken.None)).Single(i => i.Name == "video.mp4");
+
+        var started = DateTime.UtcNow;
+        var session = visit.Download(new[] { item });
+        await Wait.ForFinishAsync(session);
+        var seconds = (DateTime.UtcNow - started).TotalSeconds;
+
+        Assert.Equal(TransferState.Completed, session.State);
+        Assert.Equal(TestFiles.Hash(Path.Combine(folder, "video.mp4")), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "video.mp4")));
+        Console.WriteLine($"Browse download: 64 MB in {seconds:0.0} s ({64 / seconds:0} MB/s)");
     }
 }

@@ -82,7 +82,9 @@ public static class SafePath
 
     public static bool IsInside(string root, string candidate)
     {
-        var normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
+        // A drive or file-system root (C:\ or /) already ends with its separator: adding another matched nothing in it.
+        var trimmed = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var normalizedRoot = Path.EndsInDirectorySeparator(trimmed) ? trimmed : trimmed + Path.DirectorySeparatorChar;
         var full = Path.GetFullPath(candidate);
         var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
             ? StringComparison.OrdinalIgnoreCase

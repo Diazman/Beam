@@ -205,9 +205,22 @@ public sealed class BrowseSession : IAsyncDisposable
     {
         var transfers = _service.Transfers;
         var current = _service.Discovery.Find(Device.Id) ?? Device;
-        var lan = current.Endpoints.Where(e => !transfers.IsDirectAddress(e.Address)).ToList();
+        var lan = LanEndpoints(current);
+        if (lan.Count == 0)
+        {
+            // Not heard on the network lately (or never on this one): ask, at the addresses it had before too.
+            _service.Discovery.Refresh();
+            foreach (var known in _service.RememberedAddresses(_fingerprint)) _service.Discovery.Query(known.Address);
+            var deadline = Environment.TickCount64 + 3000;
+            while (Environment.TickCount64 < deadline && _service.Discovery.Find(Device.Id) is not { Endpoints.Count: > 0 })
+                await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+            current = _service.Discovery.Find(Device.Id) ?? current;
+        }
+
+        // Where it is heard now first, then where it was before (the certificate is checked either way).
+        lan = LanEndpoints(current).Concat(_service.RememberedAddresses(_fingerprint).Where(e => !transfers.IsDirectAddress(e.Address)))
+            .DistinctBy(e => e.ToString()).ToList();
         PeerConnection? connection = null;
-        TransferException? failure = null;
         if (lan.Count > 0)
         {
             try
@@ -215,15 +228,18 @@ public sealed class BrowseSession : IAsyncDisposable
                 connection = await SecureTransport.ConnectAsync(transfers.Identity, transfers.CreateHello(ConnectionPurpose.Browse), lan, _fingerprint, Name,
                     cancellationToken).ConfigureAwait(false);
                 Path = TransferPath.Network;
+                _service.RememberAddresses(current with { Fingerprint = _fingerprint, Endpoints = new[] { connection.RemoteEndPoint } });
             }
             catch (TransferException ex) when (ex.Error.Kind == TransferErrorKind.ConnectFailed)
             {
-                failure = ex;
+                Log.Info($"Browse: {Name} didn't answer on the network ({lan.Count} address(es))");
             }
         }
 
-        if (connection == null && _service.Direct.CanSendDirectlyTo(current))
+        // Without the network: a direct link, when the device is heard over Bluetooth (else it can't be set up).
+        if (connection == null && _service.Direct.CanSendDirectlyTo(current) && (_link != null || _service.HeardNearby(Device.Id)))
         {
+            Log.Info($"Browse: connecting to {Name} directly");
             _link ??= _service.Direct.OpenLink(current);
             var endpoint = await _service.Direct.ConnectLinkAsync(_link, cancellationToken).ConfigureAwait(false);
             connection = await SecureTransport.ConnectAsync(transfers.Identity, transfers.CreateHello(ConnectionPurpose.Browse), new[] { endpoint },
@@ -232,8 +248,8 @@ public sealed class BrowseSession : IAsyncDisposable
         }
 
         if (connection == null)
-            throw failure ?? new TransferException(TransferErrorKind.ConnectFailed,
-                L.T("{0} isn't nearby. Both need to be on the same Wi-Fi. Without one, open Receive on {0} and keep the devices close: they then connect directly.", Name));
+            throw new TransferException(TransferErrorKind.ConnectFailed,
+                L.T("Couldn't reach {0}. Make sure Beam is open there and both are on the same Wi-Fi. Without Wi-Fi, open Receive on {0} and keep the devices close: they then connect directly.", Name));
 
         try
         {
@@ -259,6 +275,9 @@ public sealed class BrowseSession : IAsyncDisposable
             throw;
         }
     }
+
+    private List<IPEndPoint> LanEndpoints(DeviceInfo device) =>
+        device.Endpoints.Where(e => !_service.Transfers.IsDirectAddress(e.Address)).ToList();
 
     /// <summary>Lost: the next request reconnects (another way, if this one is gone).</summary>
     private async Task DropAsync(PeerConnection? connection)
@@ -402,25 +421,22 @@ public sealed class BrowseSession : IAsyncDisposable
                 }
 
                 if (offset > start.Size) offset = 0; // changed meanwhile: from the start
-                await using (var file = new FileStream(part, offset == 0 ? FileMode.Create : FileMode.Open, FileAccess.Write, FileShare.None, 1,
-                                 FileOptions.Asynchronous))
+                // Hashed as it arrives (after what the part file already holds), written to disk behind the reader.
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                await BrowseStreaming.HashPrefixAsync(part, offset, hash, token).ConfigureAwait(false);
+                var file = new FileStream(part, offset == 0 ? FileMode.Create : FileMode.Open, FileAccess.Write, FileShare.None, 1, FileOptions.Asynchronous);
+                file.SetLength(offset);
+                file.Seek(offset, SeekOrigin.Begin);
+                await using (var writer = new PipelinedFileWriter(file, item.Name))
                 {
-                    file.Seek(offset, SeekOrigin.Begin);
-                    var received = offset;
-                    while (received < start.Size)
-                    {
-                        var frame = await connection.Channel.ReadAsync(TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
-                        if (frame.Type != FrameType.BrowseData || received + frame.Payload.Length > start.Size)
-                            throw new ProtocolException("Unexpected data while downloading.");
-                        await file.WriteAsync(frame.Payload, token).ConfigureAwait(false);
-                        received += frame.Payload.Length;
-                        transfer.AddTransferred(frame.Payload.Length);
-                    }
+                    await BrowseStreaming.ReceiveAsync(connection.Channel, writer, offset, start.Size, hash, n => transfer.AddTransferred(n),
+                        TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
+                    await writer.CompleteAsync().ConfigureAwait(false);
                 }
 
                 var end = await connection.Channel.ReadMessageAsync<BrowseResponseMessage>(FrameType.BrowseResponse, TimeSpan.FromSeconds(60), token)
                     .ConfigureAwait(false);
-                if (!end.Ok || !string.Equals(end.Hash, await HashAsync(part, token).ConfigureAwait(false), StringComparison.OrdinalIgnoreCase))
+                if (!end.Ok || !string.Equals(end.Hash, Convert.ToHexString(hash.GetHashAndReset()), StringComparison.OrdinalIgnoreCase))
                 {
                     File.Delete(part);
                     transfer.FileFailed(item.Name, L.T("The file arrived damaged."));
@@ -453,12 +469,6 @@ public sealed class BrowseSession : IAsyncDisposable
                 transfer.SetState(TransferState.Transferring);
             }
         }
-    }
-
-    private static async Task<string> HashAsync(string path, CancellationToken token)
-    {
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.SequentialScan | FileOptions.Asynchronous);
-        return Convert.ToHexString(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false));
     }
 
     private async Task UploadAsync(TransferSession transfer, string root, string folder, IReadOnlyList<string> paths)
@@ -547,20 +557,16 @@ public sealed class BrowseSession : IAsyncDisposable
         }
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[256 * 1024];
         long sent = 0;
         try
         {
             await using var stream = file.OpenRead();
-            while (sent < file.Size)
+            var through = await BrowseStreaming.SendAsync(channel, stream, 0, file.Size, hash, n =>
             {
-                var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, file.Size - sent)), token).ConfigureAwait(false);
-                if (read == 0) throw new IOException("The file got shorter while it was sent.");
-                hash.AppendData(buffer, 0, read);
-                await channel.SendDataAsync(FrameType.BrowseData, buffer.AsMemory(0, read), token).ConfigureAwait(false);
-                sent += read;
-                transfer.AddTransferred(read);
-            }
+                sent += n;
+                transfer.AddTransferred(n);
+            }, null, token).ConfigureAwait(false);
+            if (through < file.Size) throw new IOException("The file got shorter while it was sent.");
         }
         catch
         {

@@ -101,6 +101,12 @@ public sealed class TrustService
         if (!response.Ok) throw new TransferException(TransferErrorKind.Declined, response.Message ?? L.T("{0} didn't accept.", code.Name));
         var name = string.IsNullOrWhiteSpace(response.Name) ? code.Name : AppSettings.NormalizeDeviceName(response.Name);
         var device = Trust(code.Fingerprint, code.DeviceId, name, code.ToDevice().Kind);
+        var addresses = endpoints.Select(e => e.ToString()).Take(4).ToList();
+        _settings.Update(s =>
+        {
+            foreach (var t in s.TrustedDevices.Where(t => string.Equals(t.Fingerprint, code.Fingerprint, StringComparison.OrdinalIgnoreCase)))
+                t.Addresses = addresses;
+        });
         foreach (var endpoint in endpoints) _discovery.AddUnicastTarget(endpoint.Address);
         _discovery.Refresh();
         Log.Info($"Trust: {name} ({code.DeviceId}) and this device trust each other now (its code was scanned)");
@@ -157,7 +163,11 @@ public sealed class TrustService
         {
             // A device trusted before (re-installed: a new certificate, the same id) keeps its browsing choice.
             var before = s.TrustedDevices.FirstOrDefault(t => string.Equals(t.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
-            if (before != null) device.AlwaysBrowse = before.AlwaysBrowse;
+            if (before != null)
+            {
+                device.AlwaysBrowse = before.AlwaysBrowse;
+                device.Addresses = before.Addresses;
+            }
             s.TrustedDevices.RemoveAll(t => string.Equals(t.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase) || t.DeviceId == deviceId);
             s.TrustedDevices.Add(device);
         });

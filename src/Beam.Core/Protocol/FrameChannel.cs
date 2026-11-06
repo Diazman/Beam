@@ -84,6 +84,17 @@ public sealed class FrameChannel
         return WriteAsync(buffer.AsMemory(0, HeaderSize + payloadLength), cancellationToken);
     }
 
+    /// <summary>
+    /// Sends <paramref name="payloadLength"/> bytes as one frame of <paramref name="type"/>, without a copy:
+    /// <paramref name="buffer"/> has <see cref="HeaderSize"/> free bytes at the start, then the data.
+    /// </summary>
+    public Task SendDataAsync(FrameType type, byte[] buffer, int payloadLength, CancellationToken cancellationToken)
+    {
+        if (payloadLength > MaxPayload(type)) throw new ArgumentOutOfRangeException(nameof(payloadLength));
+        WriteHeader(buffer, type, payloadLength);
+        return WriteAsync(buffer.AsMemory(0, HeaderSize + payloadLength), cancellationToken);
+    }
+
     /// <summary>Sends <paramref name="data"/> as one frame of <paramref name="type"/> (a copy; for browsing's data frames).</summary>
     public Task SendDataAsync(FrameType type, ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
     {

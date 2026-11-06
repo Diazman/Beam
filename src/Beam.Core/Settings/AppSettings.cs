@@ -46,6 +46,12 @@ public sealed class TrustedDevice
 
     /// <summary>May browse this device's shared folders without being asked each time ("Always allow").</summary>
     public bool AlwaysBrowse { get; set; }
+
+    /// <summary>
+    /// Where it was last heard on a shared network ("192.168.1.20:47821", newest first, at most 4), to reach it there
+    /// before it is heard again. Only a hint: every connection still checks its certificate.
+    /// </summary>
+    public List<string> Addresses { get; set; } = new();
 }
 
 /// <summary>A folder trusted devices may browse (Settings → Browsing).</summary>

@@ -96,7 +96,7 @@ public sealed class BeamNode : IAsyncDisposable
         Backup = new Backup.BackupService(Transfers, Discovery, Settings, CreatePairingCode, options.BackupSources);
         Trust = new Trust.TrustService(Transfers, Discovery, Settings, CreatePairingCode, Direct.Remember);
         Browse = new Browse.BrowseService(Transfers, Discovery, Direct, Settings, _handler,
-            options.DefaultSharedFolders ?? DesktopSharedFolders, options.BrowseThumbnails);
+            options.DefaultSharedFolders ?? DesktopSharedFolders, options.BrowseThumbnails, Nearby.IsNearby);
         _connection = Settings.Current.Connection;
         Settings.Changed += OnSettingsChanged;
     }
