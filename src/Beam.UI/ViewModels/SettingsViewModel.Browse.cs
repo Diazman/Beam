@@ -200,6 +200,22 @@ public sealed partial class SettingsViewModel
 
     private async Task AddSharedFolderAsync()
     {
+        // Phones: the storage and its usual folders by name first (Android's picker refuses the storage and Download).
+        var offered = _platform.ShareableFolders;
+        if (offered.Count > 0)
+        {
+            var shared = _node.Settings.Current.SharedFolders;
+            var choice = await _main.ShowDialogAsync(new ShareFolderViewModel(offered,
+                path => shared.Any(f => string.Equals(f.Path.TrimEnd('/'), path.TrimEnd('/'), StringComparison.Ordinal))));
+            if (choice is not string chosen) return;
+            if (chosen != ShareFolderViewModel.OtherFolder)
+            {
+                var name = offered.First(f => f.Path == chosen).Name;
+                _node.Browse.AddFolder(chosen, name);
+                return;
+            }
+        }
+
         var picked = await _ui.PickFolderAsync(L.T("Choose a folder to share with your trusted devices"), null);
         if (string.IsNullOrEmpty(picked)) return;
         // Phones give a content:// address for the picked folder: browsing needs the folder itself.

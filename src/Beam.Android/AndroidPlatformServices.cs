@@ -277,6 +277,47 @@ internal sealed class AndroidPlatformServices : IPlatformServices
         }
     }
 
+    public IReadOnlyList<(string Name, string Path)> ShareableFolders
+    {
+        get
+        {
+            var list = new List<(string, string)>();
+            void Add(string name, string? path)
+            {
+                if (!string.IsNullOrEmpty(path) && Directory.Exists(path) && !list.Any(f => f.Item2 == path)) list.Add((name, path));
+            }
+
+            // The storage itself, then its usual folders (Android's picker refuses the storage and Download).
+            Add(L.T("Whole phone storage"), AndroidEnvironment.ExternalStorageDirectory?.AbsolutePath);
+            foreach (var (name, type) in new[]
+                     {
+                         ("Download", AndroidEnvironment.DirectoryDownloads), ("Camera", AndroidEnvironment.DirectoryDcim),
+                         ("Pictures", AndroidEnvironment.DirectoryPictures), ("Movies", AndroidEnvironment.DirectoryMovies),
+                         ("Music", AndroidEnvironment.DirectoryMusic), ("Documents", AndroidEnvironment.DirectoryDocuments),
+                     })
+                Add(name, AndroidEnvironment.GetExternalStoragePublicDirectory(type!)?.AbsolutePath);
+
+            // Memory cards: their roots (from the app's own folder on each, /storage/XXXX-XXXX/Android/data/…).
+            try
+            {
+                foreach (var dir in Context.GetExternalFilesDirs(null) ?? Array.Empty<Java.IO.File>())
+                {
+                    var path = dir?.AbsolutePath;
+                    var cut = path?.IndexOf("/Android/data/", StringComparison.Ordinal) ?? -1;
+                    if (path == null || cut <= 0) continue;
+                    var root = path[..cut];
+                    if (root != AndroidEnvironment.ExternalStorageDirectory?.AbsolutePath) Add(L.T("Memory card"), root);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"No memory cards listed ({ex.GetType().Name})");
+            }
+
+            return list;
+        }
+    }
+
     public string? ToLocalFolder(string picked)
     {
         var path = picked.StartsWith('/') ? picked : PathFromTreeUri(picked);

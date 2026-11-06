@@ -27,6 +27,7 @@ public sealed class ViewLocator : IDataTemplate
         [typeof(ConnectionHelpViewModel)] = () => new ConnectionHelpView(),
         [typeof(BackupCodeViewModel)] = () => new BackupCodeView(),
         [typeof(TrustCodeViewModel)] = () => new TrustCodeView(),
+        [typeof(ShareFolderViewModel)] = () => new ShareFolderView(),
         [typeof(BrowseRequestViewModel)] = () => new BrowseRequestView(),
         [typeof(BrowseViewModel)] = () => new BrowseView(),
     };

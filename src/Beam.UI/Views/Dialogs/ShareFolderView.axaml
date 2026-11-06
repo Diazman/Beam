@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:dlg="using:Beam.App.ViewModels.Dialogs"
+             x:Class="Beam.App.Views.Dialogs.ShareFolderView"
+             x:DataType="dlg:ShareFolderViewModel"
+             Classes="dialogBody w420">
+  <StackPanel Spacing="12">
+    <TextBlock Classes="dialogTitle" Text="{l:T 'Share a folder'}" />
+    <TextBlock Classes="secondary" TextWrapping="Wrap"
+               Text="{l:T 'Trusted devices you allow can see and download what is in it, with every folder inside.'}" />
+    <Border Classes="card" Padding="0">
+      <ItemsControl ItemsSource="{Binding Folders}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="dlg:ShareFolderChoice">
+            <Button Classes="row" Command="{Binding ChooseCommand}">
+              <Grid ColumnDefinitions="Auto,*">
+                <PathIcon Data="{StaticResource IconFolder}" Width="18" Height="18" Foreground="{DynamicResource TextSecondaryBrush}" />
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Classes="caption" Text="{Binding Details}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </Border>
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="{l:T 'Cancel'}" MinWidth="96" Command="{Binding CancelCommand}" />
+      <Button Content="{l:T 'Another folder…'}" Command="{Binding OtherCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -748,5 +748,10 @@
   "The code expired. Show a new one when the other device is ready.": "Kodun süresi doldu. Diğer cihaz hazır olduğunda yenisini gösterin.",
   "{0} selected": "{0} seçildi",
   "Downloading {0} items to {1}. See Transfers.": "{0} öğe {1} klasörüne indiriliyor. Aktarımlar'a bakın.",
-  "Adding {0} files to this folder. See Transfers.": "{0} dosya bu klasöre ekleniyor. Aktarımlar'a bakın."
+  "Adding {0} files to this folder. See Transfers.": "{0} dosya bu klasöre ekleniyor. Aktarımlar'a bakın.",
+  "Whole phone storage": "Tüm telefon depolaması",
+  "Memory card": "Hafıza kartı",
+  "Shared already": "Zaten paylaşılıyor",
+  "Trusted devices you allow can see and download what is in it, with every folder inside.": "İzin verdiğiniz güvenilen cihazlar içindekileri, içindeki tüm klasörlerle birlikte görebilir ve indirebilir.",
+  "Another folder…": "Başka bir klasör…"
 }

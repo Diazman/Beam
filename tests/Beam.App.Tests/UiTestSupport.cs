@@ -153,6 +153,13 @@ public sealed class FakePlatform : IPlatformServices
 
     public bool SupportsBackup { get; set; }
 
+    /// <summary>Folders a phone offers by name for sharing (see <see cref="IPlatformServices.ShareableFolders"/>).</summary>
+    public List<(string Name, string Path)> Shareable { get; } = new();
+
+    public IReadOnlyList<(string Name, string Path)> ShareableFolders => Shareable;
+
+    public string? ToLocalFolder(string picked) => Directory.Exists(picked) ? picked : null;
+
     /// <summary>Whether background backups are scheduled (the last call).</summary>
     public bool? BackupsScheduled { get; private set; }
 

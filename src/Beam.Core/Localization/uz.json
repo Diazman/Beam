@@ -748,5 +748,10 @@
   "The code expired. Show a new one when the other device is ready.": "Kodning muddati tugadi. Boshqa qurilma tayyor bo'lganda yangisini ko'rsating.",
   "{0} selected": "{0} ta tanlandi",
   "Downloading {0} items to {1}. See Transfers.": "{0} ta element {1} ga yuklab olinmoqda. Uzatishlarga qarang.",
-  "Adding {0} files to this folder. See Transfers.": "{0} ta fayl bu jildga qo'shilmoqda. Uzatishlarga qarang."
+  "Adding {0} files to this folder. See Transfers.": "{0} ta fayl bu jildga qo'shilmoqda. Uzatishlarga qarang.",
+  "Whole phone storage": "Telefonning butun xotirasi",
+  "Memory card": "Xotira kartasi",
+  "Shared already": "Allaqachon ulashilgan",
+  "Trusted devices you allow can see and download what is in it, with every folder inside.": "Siz ruxsat bergan ishonchli qurilmalar undagi narsalarni, ichidagi barcha jildlar bilan birga ko'rishi va yuklab olishi mumkin.",
+  "Another folder…": "Boshqa jild…"
 }

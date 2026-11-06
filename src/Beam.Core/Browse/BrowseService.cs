@@ -486,18 +486,12 @@ public sealed partial class BrowseService
             return;
         }
 
-        try
+        // The folder's own storage (on Android "/" is the read-only system partition with nothing free); unknown: the write says.
+        var free = DiskSpace.GetAvailableBytes(folder);
+        if (free >= 0 && request.Size > free - 64L * 1024 * 1024)
         {
-            var free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))!).AvailableFreeSpace;
-            if (request.Size > free - 64L * 1024 * 1024)
-            {
-                await RefuseAsync(channel, BrowseReasons.Failed, L.T("There isn't enough free space on {0}.", settings.DeviceName), token).ConfigureAwait(false);
-                return;
-            }
-        }
-        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
-        {
-            // can't tell: the write itself will say
+            await RefuseAsync(channel, BrowseReasons.Failed, L.T("There isn't enough free space on {0}.", settings.DeviceName), token).ConfigureAwait(false);
+            return;
         }
 
         var part = Path.Combine(folder, "." + name + "." + DirectSession.NewToken()[..8] + ".beam-part");

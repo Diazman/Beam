@@ -151,5 +151,11 @@ public interface IPlatformServices
     /// </summary>
     string? ToLocalFolder(string picked) => Directory.Exists(picked) ? picked : null;
 
+    /// <summary>
+    /// Phones: folders offered for sharing by name (the whole storage, Download…), including those the system's folder
+    /// picker won't let apps choose. Empty: only the picker.
+    /// </summary>
+    IReadOnlyList<(string Name, string Path)> ShareableFolders => Array.Empty<(string, string)>();
+
     void ShareLog(string logDirectory) => OpenFolder(logDirectory);
 }

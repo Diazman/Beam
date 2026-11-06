@@ -187,4 +187,39 @@ public class BrowseUiTests
         phone.Screenshot("browse-settings-phone");
         Assert.Empty(phone.TextOutsideWindow());
     }
+
+    [AvaloniaFact]
+    public async Task APhoneSharesItsStorageOrDownloadByName()
+    {
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        await phone.InitializeAsync();
+        phone.ViewModel.IsSettingsPage = true;
+        phone.ViewModel.Settings.BrowsingEnabled = true;
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.BrowsingEnabled, "on");
+        var storage = phone.SharedFolder("storage");
+        var download = phone.SharedFolder("storage/Download");
+        phone.Platform.Shareable.Add(("Whole phone storage", storage));
+        phone.Platform.Shareable.Add(("Download", download));
+        phone.Platform.Shareable.Add(("Pictures", phone.SharedFolder("Pictures"))); // shared already (the defaults)
+
+        phone.ViewModel.Settings.AddSharedFolderCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ShareFolderViewModel, "the list");
+        var dialog = (ShareFolderViewModel)phone.ViewModel.Dialog!;
+        Assert.Equal(new[] { "Whole phone storage", "Download", "Pictures" }, dialog.Folders.Select(f => f.Name));
+        Assert.False(dialog.Folders[2].ChooseCommand.CanExecute(null));
+        await UiHarness.PumpAsync(100);
+        phone.Screenshot("browse-share-folder-phone");
+        Assert.Empty(phone.TextOutsideWindow());
+
+        dialog.Folders[0].ChooseCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.SharedFolders.Any(f => f.Path == storage), "storage shared");
+        Assert.Equal("Whole phone storage", phone.Node.Settings.Current.SharedFolders.Single(f => f.Path == storage).Name);
+
+        // "Another folder…": the system's picker, as before.
+        phone.Ui.FolderToPick = phone.SharedFolder("Other");
+        phone.ViewModel.Settings.AddSharedFolderCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ShareFolderViewModel, "the list again");
+        ((ShareFolderViewModel)phone.ViewModel.Dialog!).OtherCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.SharedFolders.Any(f => f.Name == "Other"), "picked folder shared");
+    }
 }
