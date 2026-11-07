@@ -753,5 +753,8 @@
   "Memory card": "Hafıza kartı",
   "Shared already": "Zaten paylaşılıyor",
   "Trusted devices you allow can see and download what is in it, with every folder inside.": "İzin verdiğiniz güvenilen cihazlar içindekileri, içindeki tüm klasörlerle birlikte görebilir ve indirebilir.",
-  "Another folder…": "Başka bir klasör…"
+  "Another folder…": "Başka bir klasör…",
+  "Beam no longer has “All files access”: your trusted devices see only photos, videos and music, and other folders look empty.": "Beam'in artık “Tüm dosyalara erişim” izni yok: güvenilen cihazlarınız yalnızca fotoğraf, video ve müzikleri görür, diğer klasörler boş görünür.",
+  "Your folders may look empty to {0}": "Klasörleriniz {0} cihazına boş görünebilir",
+  "Beam no longer has “All files access”. Allow it in Settings → Browsing.": "Beam'in artık “Tüm dosyalara erişim” izni yok. Ayarlar → Göz atma bölümünden izin verin."
 }

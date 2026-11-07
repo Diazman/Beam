@@ -34,6 +34,7 @@ public sealed partial class MainViewModel
     private const string VisitNotificationTag = "browse-visits";
     private BrowseViewModel? _browse;
     private Page _beforeBrowse = Page.Home;
+    private bool _warnedAllFiles;
 
     /// <summary>The Browse page while it is open.</summary>
     public BrowseViewModel? Browse => _browse;
@@ -83,6 +84,14 @@ public sealed partial class MainViewModel
             _platform.CancelNotification(VisitNotificationTag);
             return;
         }
+
+        if (_platform.IsPhone && !_warnedAllFiles && !_platform.HasPermission(AppPermission.AllFiles) && (_warnedAllFiles = true))
+            _platform.ShowNotification(L.T("Your folders may look empty to {0}", current[0].DeviceName),
+                L.T("Beam no longer has “All files access”. Allow it in Settings → Browsing."), () => Dispatcher.UIThread.Post(() =>
+                {
+                    _ui.BringToFront();
+                    Navigate(Page.Settings);
+                }));
 
         // Also outside Beam (phones): who is browsing, and Stop.
         var names = string.Join(", ", current.Select(v => v.DeviceName));

@@ -222,4 +222,24 @@ public class BrowseUiTests
         ((ShareFolderViewModel)phone.ViewModel.Dialog!).OtherCommand.Execute(null);
         await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.SharedFolders.Any(f => f.Name == "Other"), "picked folder shared");
     }
+
+    [AvaloniaFact]
+    public async Task APhoneWithoutAllFilesAccessSaysSoAndOffersIt()
+    {
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
+        await phone.InitializeAsync();
+        phone.ViewModel.IsSettingsPage = true;
+        phone.ViewModel.Settings.BrowsingEnabled = true;
+        await UiHarness.WaitForAsync(() => phone.Node.Settings.Current.BrowsingEnabled, "on");
+        Assert.False(phone.ViewModel.Settings.NeedsAllFiles);
+
+        // Turned off in Android's settings since.
+        phone.Platform.Granted.Remove(AppPermission.AllFiles);
+        phone.ViewModel.IsHomePage = true;
+        phone.ViewModel.IsSettingsPage = true;
+        Assert.True(phone.ViewModel.Settings.NeedsAllFiles);
+
+        phone.ViewModel.Settings.AllowAllFilesCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => !phone.ViewModel.Settings.NeedsAllFiles, "allowed again");
+    }
 }

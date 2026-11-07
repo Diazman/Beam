@@ -380,6 +380,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         _page = page;
         if (page == Page.Phone) Phone.OnShown();
         if (page == Page.Receive) Receive.OnShown();
+        if (page == Page.Settings) Settings.RefreshPermissions(); // back from Android's settings, maybe
         if (page == Page.Home)
         {
             Node.Nearby.SetLooking(true);

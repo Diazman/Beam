@@ -440,6 +440,7 @@ public class BrowseTests
 
         Assert.Equal(TransferState.Completed, session.State);
         Assert.Equal(TestFiles.Hash(Path.Combine(folder, "a.jpg")), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "a.jpg")));
+        Assert.True(session.IsBrowse); // reconnects by itself: no "Connect directly" offered
         Assert.Equal(TestFiles.Hash(Path.Combine(folder, "Trip", "b.jpg")), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "Trip", "b.jpg")));
         Assert.Empty(Directory.GetFiles(phone.ReceiveFolder, "*.beam-part", SearchOption.AllDirectories));
         Assert.Single(pc.Handler.BrowseRequests); // the download's own connection carried on the visit: not asked again

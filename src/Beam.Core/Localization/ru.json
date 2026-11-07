@@ -865,5 +865,8 @@
   "Memory card": "Карта памяти",
   "Shared already": "Уже открыта",
   "Trusted devices you allow can see and download what is in it, with every folder inside.": "Доверенные устройства, которым вы разрешите, смогут видеть и скачивать её содержимое со всеми вложенными папками.",
-  "Another folder…": "Другая папка…"
+  "Another folder…": "Другая папка…",
+  "Beam no longer has “All files access”: your trusted devices see only photos, videos and music, and other folders look empty.": "У Beam больше нет «Доступа ко всем файлам»: ваши доверенные устройства видят только фото, видео и музыку, а другие папки выглядят пустыми.",
+  "Your folders may look empty to {0}": "Ваши папки могут выглядеть пустыми для {0}",
+  "Beam no longer has “All files access”. Allow it in Settings → Browsing.": "У Beam больше нет «Доступа ко всем файлам». Разрешите его в Настройки → Просмотр."
 }

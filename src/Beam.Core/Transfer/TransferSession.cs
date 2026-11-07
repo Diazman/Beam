@@ -120,6 +120,12 @@ public sealed class TransferSession
     /// <summary>A backup (sent by a device's backup, or received from a backup partner): runs without asking anyone.</summary>
     public bool IsBackup { get; internal set; }
 
+    /// <summary>
+    /// Downloaded or added while browsing another device: it reconnects by itself, the shared Wi-Fi or a direct link
+    /// as it can, so the user isn't offered to switch it.
+    /// </summary>
+    public bool IsBrowse { get; internal set; }
+
     public bool IsText => Text != null;
 
     /// <summary>Receiver: full local paths of the top-level items that were saved.</summary>

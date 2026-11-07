@@ -389,14 +389,21 @@ public sealed partial class BrowseService
             var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = Hidden, RecurseSubdirectories = false };
             foreach (var info in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", options))
             {
-                if (IsHiddenName(info.Name) || info.LinkTarget != null) continue;
-                entries.Add(new BrowseEntry
+                if (IsHiddenName(info.Name) || IsLink(info)) continue;
+                try
                 {
-                    Name = info.Name,
-                    IsFolder = info is DirectoryInfo,
-                    Size = info is FileInfo file ? file.Length : 0,
-                    Modified = new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
-                });
+                    entries.Add(new BrowseEntry
+                    {
+                        Name = info.Name,
+                        IsFolder = info is DirectoryInfo,
+                        Size = info is FileInfo file ? file.Length : 0,
+                        Modified = new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
+                    });
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // one item that can't be read: the others are still listed
+                }
                 if (entries.Count >= MaxEntries) break;
             }
         }
@@ -543,7 +550,22 @@ public sealed partial class BrowseService
         }
     }
 
-    private const FileAttributes Hidden = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint;
+    // Not ReparsePoint: OneDrive (and other cloud folders) mark every file that way. Links, which could lead out of a
+    // shared folder, are told apart by their LinkTarget and refused separately.
+    private const FileAttributes Hidden = FileAttributes.Hidden | FileAttributes.System;
+
+    /// <summary>A symbolic link or junction (could lead out of the shared folder); one that can't be told counts as one.</summary>
+    private static bool IsLink(FileSystemInfo info)
+    {
+        try
+        {
+            return info.LinkTarget != null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
 
     /// <summary>Dot-files and dot-folders (Android, Linux, macOS) and Beam's own unfinished files stay out of sight.</summary>
     private static bool IsHiddenName(string name) => name.StartsWith('.') || name.EndsWith(".beam-part", StringComparison.OrdinalIgnoreCase);
@@ -579,7 +601,7 @@ public sealed partial class BrowseService
             current = Path.Combine(current, segment);
             FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
             if (!info.Exists) return null;
-            if ((info.Attributes & Hidden) != 0 || info.LinkTarget != null) return null;
+            if ((info.Attributes & Hidden) != 0 || IsLink(info)) return null;
         }
 
         return SafePath.IsInside(full, current) ? current : null;

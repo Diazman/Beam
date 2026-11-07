@@ -753,5 +753,8 @@
   "Memory card": "Xotira kartasi",
   "Shared already": "Allaqachon ulashilgan",
   "Trusted devices you allow can see and download what is in it, with every folder inside.": "Siz ruxsat bergan ishonchli qurilmalar undagi narsalarni, ichidagi barcha jildlar bilan birga ko'rishi va yuklab olishi mumkin.",
-  "Another folder…": "Boshqa jild…"
+  "Another folder…": "Boshqa jild…",
+  "Beam no longer has “All files access”: your trusted devices see only photos, videos and music, and other folders look empty.": "Beam'da endi “Barcha fayllarga kirish” yo'q: ishonchli qurilmalaringiz faqat rasm, video va musiqani ko'radi, boshqa jildlar bo'sh ko'rinadi.",
+  "Your folders may look empty to {0}": "Jildlaringiz {0} uchun bo'sh ko'rinishi mumkin",
+  "Beam no longer has “All files access”. Allow it in Settings → Browsing.": "Beam'da endi “Barcha fayllarga kirish” yo'q. Unga Sozlamalar → Ko'rish bo'limida ruxsat bering."
 }

@@ -120,6 +120,13 @@
                 <ToggleSwitch Grid.Column="1" IsChecked="{Binding BrowseAllowAdding}" Margin="16,0,0,0" />
               </Grid>
             </StackPanel>
+            <Border Classes="notice warning" IsVisible="{Binding NeedsAllFiles}">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock TextWrapping="Wrap" FontSize="13" VerticalAlignment="Center"
+                           Text="{l:T 'Beam no longer has “All files access”: your trusted devices see only photos, videos and music, and other folders look empty.'}" />
+                <Button Grid.Column="1" Classes="link" Content="{l:T 'Allow'}" Command="{Binding AllowAllFilesCommand}" VerticalAlignment="Center" Margin="12,0,0,0" />
+              </Grid>
+            </Border>
             <Border Classes="notice error" IsVisible="{Binding HasTrustMessage}">
               <TextBlock Text="{Binding TrustMessage}" TextWrapping="Wrap" FontSize="13" />
             </Border>

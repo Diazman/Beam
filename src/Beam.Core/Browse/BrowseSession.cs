@@ -136,6 +136,7 @@ public sealed class BrowseSession : IAsyncDisposable
         transfer.SetDescription(items.Select(i => i.Name).ToList());
         transfer.DestinationFolder = _service.ReceiveFolder;
         transfer.SetState(TransferState.Preparing);
+        transfer.IsBrowse = true;
         _service.Transfers.RegisterExternal(transfer);
         Began();
         _ = Task.Run(async () =>
@@ -153,6 +154,7 @@ public sealed class BrowseSession : IAsyncDisposable
         var external = _service.Transfers.ExternalFiles;
         transfer.SetDescription(paths.Select(p => external != null && external.TryGet(p, out var f) ? f.Name : System.IO.Path.GetFileName(p)).ToList());
         transfer.SetState(TransferState.Preparing);
+        transfer.IsBrowse = true;
         _service.Transfers.RegisterExternal(transfer);
         Began();
         _ = Task.Run(async () =>

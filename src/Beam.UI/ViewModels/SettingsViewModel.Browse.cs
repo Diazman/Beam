@@ -80,6 +80,16 @@ public sealed partial class SettingsViewModel
         private set => SetProperty(ref _isAddingTrusted, value);
     }
 
+    /// <summary>
+    /// A phone shares folders without Android's "All files access" (turned off in Android's settings since): others
+    /// would see only photos, videos and music there, other folders looking empty.
+    /// </summary>
+    public bool NeedsAllFiles => _platform.IsPhone && _node.Settings.Current.BrowsingEnabled && !_platform.HasPermission(AppPermission.AllFiles);
+
+    public AsyncCommand AllowAllFilesCommand { get; private set; } = null!;
+
+    internal void RefreshPermissions() => OnPropertyChanged(nameof(NeedsAllFiles));
+
     public AsyncCommand AddTrustedCommand { get; private set; } = null!;
 
     public AsyncCommand AddSharedFolderCommand { get; private set; } = null!;
@@ -87,6 +97,11 @@ public sealed partial class SettingsViewModel
     private void InitBrowse()
     {
         AddTrustedCommand = new AsyncCommand(AddTrustedAsync);
+        AllowAllFilesCommand = new AsyncCommand(async () =>
+        {
+            await _platform.RequestPermissionAsync(AppPermission.AllFiles);
+            OnPropertyChanged(nameof(NeedsAllFiles));
+        });
         AddSharedFolderCommand = new AsyncCommand(AddSharedFolderAsync);
     }
 
@@ -94,6 +109,7 @@ public sealed partial class SettingsViewModel
     {
         OnPropertyChanged(nameof(BrowsingEnabled));
         OnPropertyChanged(nameof(BrowseAllowAdding));
+        OnPropertyChanged(nameof(NeedsAllFiles));
         static string Key(SharedFolder f) => $"{f.Id}|{f.Name}|{f.Path}";
         if (!SharedFolders.Select(f => Key(f.Folder)).SequenceEqual(settings.SharedFolders.Select(Key)))
         {
