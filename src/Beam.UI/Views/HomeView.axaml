@@ -4,18 +4,19 @@
              xmlns:l="using:Beam.App.Localization"
              x:Class="Beam.App.Views.HomeView"
              x:DataType="vm:HomeViewModel">
+  <!-- Send: 1. what to send, 2. who to send it to, 3. Send. -->
   <Grid RowDefinitions="*,Auto">
     <ScrollViewer Grid.Row="0">
-      <StackPanel Classes="page" Spacing="28">
+      <StackPanel Classes="page" Spacing="26" MaxWidth="880" HorizontalAlignment="Stretch">
 
         <!-- Header -->
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Spacing="4">
-            <TextBlock Classes="h1" Text="{l:T 'Send files'}" />
+            <TextBlock Classes="h1" Text="{l:T 'Send'}" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
-                       Text="{l:T 'Send files and folders directly to a nearby computer. No cables, accounts, or internet needed.', Phone='Send files directly to a nearby computer. No cables, accounts, or internet needed.'}" />
+                       Text="{l:T 'Send files straight to a nearby device. No cables, accounts or internet needed.'}" />
           </StackPanel>
-          <Button Grid.Column="1" Classes="chip nameChip" VerticalAlignment="Top" Margin="16,2,0,0"
+          <Button Grid.Column="1" Classes="chip nameChip" VerticalAlignment="Top" Margin="16,4,0,0"
                   Command="{Binding EditNameCommand}"
                   ToolTip.Tip="{Binding VisibilityText}">
             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -23,17 +24,148 @@
                 <Ellipse Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding IsDiscoverable}" />
                 <Ellipse Fill="{DynamicResource TextTertiaryBrush}" IsVisible="{Binding !IsDiscoverable}" />
               </Panel>
-              <TextBlock Classes="caption" Text="{l:T 'This computer:'}" VerticalAlignment="Center" />
               <TextBlock Text="{Binding LocalDeviceName}" FontWeight="SemiBold" VerticalAlignment="Center"
                          MaxWidth="200" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </Button>
         </Grid>
 
-        <!-- Step 1: nearby computers -->
+        <!-- A transfer running: how it goes, without leaving Send -->
+        <Button Classes="row" Padding="0" Command="{Binding Main.ShowActivityCommand}" IsVisible="{Binding Main.HasCurrentTransfer}">
+          <Border Classes="card" Padding="16,12">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+              <Border Classes="iconBadge brand" Width="34" Height="34" CornerRadius="17" Grid.RowSpan="2">
+                <PathIcon Data="{Binding Main.CurrentTransfer.Icon}" Width="14" Height="14" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Main.CurrentTransfer.ItemTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="caption" Text="{Binding Main.CurrentTransfer.StatusText}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Classes="caption" Text="{Binding Main.ActivitySummary}" VerticalAlignment="Center"
+                         Foreground="{DynamicResource AccentTextBrush}" />
+              <ProgressBar Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="12,8,0,0" Maximum="100"
+                           Value="{Binding Main.CurrentTransfer.Progress}" IsIndeterminate="{Binding Main.CurrentTransfer.IsIndeterminate}" />
+            </Grid>
+          </Border>
+        </Button>
+
+        <!-- 1. What -->
+        <StackPanel Spacing="12">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="overline" Text="{l:T 'FILES'}" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasItems}">
+              <Button Classes="subtle" Command="{Binding ChooseFilesCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
+                  <TextBlock Text="{l:T 'Add files'}" />
+                </StackPanel>
+              </Button>
+              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
+                  <TextBlock Text="{l:T 'Add folder'}" />
+                </StackPanel>
+              </Button>
+              <Button Classes="subtle" Content="{l:T 'Clear'}" Command="{Binding ClearCommand}" />
+            </StackPanel>
+          </Grid>
+
+          <!-- Drop zone: the first thing to do -->
+          <Panel IsVisible="{Binding ShowDropZone}" MinHeight="210">
+            <Rectangle RadiusX="20" RadiusY="20" Stroke="{DynamicResource DropZoneStrokeBrush}"
+                       StrokeThickness="1.5" StrokeDashArray="6,5" Fill="{DynamicResource CardBrush}" />
+            <Rectangle RadiusX="20" RadiusY="20" Fill="{DynamicResource AccentWashBrush}" IsHitTestVisible="False" />
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Margin="24">
+              <Border Classes="iconBadge brand" Width="56" Height="56" CornerRadius="28" HorizontalAlignment="Center">
+                <PathIcon Data="{StaticResource IconUpload}" Width="24" Height="24" />
+              </Border>
+              <TextBlock Classes="h2" Text="{l:T 'Drop files or folders here'}" HorizontalAlignment="Center" IsVisible="{Binding IsDesktop}" />
+              <TextBlock Classes="h2" Text="{l:T 'Choose what to send'}" HorizontalAlignment="Center" IsVisible="{Binding !IsDesktop}" />
+              <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Command="{Binding ChooseFilesCommand}" Margin="4">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource IconFile}" Width="14" Height="14" />
+                    <TextBlock Text="{l:T 'Choose files'}" />
+                  </StackPanel>
+                </Button>
+                <Button Command="{Binding ChooseFolderCommand}" Margin="4">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+                    <TextBlock Text="{l:T 'Choose a folder'}" />
+                  </StackPanel>
+                </Button>
+                <Button Command="{Binding SendTextCommand}" Margin="4" ToolTip.Tip="{l:T 'Send a message or a link to the chosen device'}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource IconEdit}" Width="14" Height="14" />
+                    <TextBlock Text="{l:T 'Send text or link'}" />
+                  </StackPanel>
+                </Button>
+              </WrapPanel>
+            </StackPanel>
+          </Panel>
+
+          <!-- Text or a link shared to Beam from another app -->
+          <Border Classes="card" Padding="16,12,10,12" IsVisible="{Binding HasSharedText}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <Border Classes="iconBadge" Width="36" Height="36" CornerRadius="10" VerticalAlignment="Top">
+                <Panel>
+                  <PathIcon Data="{StaticResource IconLink}" Width="16" Height="16" IsVisible="{Binding SharedTextIsLink}" />
+                  <PathIcon Data="{StaticResource IconEdit}" Width="16" Height="16" IsVisible="{Binding !SharedTextIsLink}" />
+                </Panel>
+              </Border>
+              <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="caption" Text="{l:T 'Link to send'}" IsVisible="{Binding SharedTextIsLink}" />
+                <TextBlock Classes="caption" Text="{l:T 'Text to send'}" IsVisible="{Binding !SharedTextIsLink}" />
+                <TextBlock Text="{Binding SharedText}" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <Button Grid.Column="2" Classes="icon" Command="{Binding ClearSharedTextCommand}"
+                      AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Top">
+                <PathIcon Data="{StaticResource IconClose}" />
+              </Button>
+            </Grid>
+          </Border>
+
+          <!-- Chosen files -->
+          <Border Classes="card" Padding="0" IsVisible="{Binding HasItems}">
+            <StackPanel>
+              <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PendingItemViewModel">
+                    <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,10,10,10">
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Classes="iconBadge neutral" Width="36" Height="36" CornerRadius="10">
+                          <PathIcon Data="{Binding Icon}" Width="16" Height="16" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                          <TextBlock Classes="caption" Text="{Binding Details}" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Classes="icon" Command="{Binding RemoveCommand}"
+                                AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Center">
+                          <PathIcon Data="{StaticResource IconClose}" />
+                        </Button>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid ColumnDefinitions="*,Auto" Margin="16,8,8,8">
+                <TextBlock Classes="caption" Text="{Binding ItemsSummary}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="{l:T 'Send a message or a link to the chosen device'}">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{StaticResource IconEdit}" Width="12" Height="12" />
+                    <TextBlock Text="{l:T 'Send text or link'}" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 2. Who -->
         <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-            <TextBlock Classes="h2" Text="{l:T 'Nearby devices'}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <TextBlock Classes="overline" Text="{l:T 'TO'}" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="link" Content="{l:T 'Can\'t find a device?'}"
                     Command="{Binding ConnectByAddressCommand}" VerticalAlignment="Center" />
             <Button Grid.Column="2" Classes="icon" Command="{Binding ScanCodeCommand}" IsVisible="{Binding CanScanCodes}"
@@ -47,17 +179,6 @@
           </Grid>
 
           <TextBlock Classes="caption" Text="{Binding DeviceHint}" IsVisible="{Binding HasDeviceHint}" Margin="0,-4,0,0" />
-
-          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding CanConnectDirectly}">
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="{l:T 'Send directly'}" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="{l:T 'When you press Send, this device starts a direct Wi-Fi link and the chosen devices join it. Files go only over that link; if it can\'t be set up, Beam tells you why. Off: over the Wi-Fi network.'}" />
-            </StackPanel>
-            <ToggleSwitch Grid.Column="1" IsChecked="{Binding PreferDirect}" OnContent="" OffContent="" VerticalAlignment="Center" Margin="16,0,0,0" />
-          </Grid>
-
-          <TextBlock Classes="caption" Text="{Binding DiscoveryStatus}" IsVisible="{Binding HasDiscoveryStatus}" TextWrapping="Wrap" />
 
           <Border Classes="notice" IsVisible="{Binding HasBluetoothNotice}">
             <Grid ColumnDefinitions="*,Auto">
@@ -80,23 +201,19 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DeviceViewModel">
                 <Button Classes="device" Classes.selected="{Binding IsSelected}"
-                        Width="184" Height="128" Margin="0,0,12,12"
+                        Width="262" Height="76" Margin="0,0,12,12"
                         Command="{Binding SelectCommand}"
                         ToolTip.Tip="{Binding Name}">
-                  <Grid RowDefinitions="Auto,*,Auto,Auto">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <PathIcon Classes="deviceIcon" Data="{Binding Icon}" Width="30" Height="30"
-                                HorizontalAlignment="Left" />
-                      <Border Grid.Column="1" Width="20" Height="20" CornerRadius="10"
-                              Background="{DynamicResource AccentBrush}" VerticalAlignment="Top"
-                              IsVisible="{Binding IsSelected}">
-                        <PathIcon Data="{StaticResource IconCheck}" Width="12" Height="12" Foreground="White" />
-                      </Border>
-                    </Grid>
-                    <TextBlock Grid.Row="2" Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Row="3" Classes="caption" Text="{Binding Subtitle}" Margin="0,2,0,0"
-                               TextTrimming="CharacterEllipsis" />
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <PathIcon Classes="deviceIcon" Data="{Binding Icon}" Width="28" Height="28" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Margin="14,0,6,0" VerticalAlignment="Center" Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="caption" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Border Grid.Column="2" Width="22" Height="22" CornerRadius="11" VerticalAlignment="Center"
+                            Background="{DynamicResource AccentGradientBrush}" IsVisible="{Binding IsSelected}">
+                      <PathIcon Data="{StaticResource IconCheck}" Width="13" Height="13" Foreground="White" />
+                    </Border>
                   </Grid>
                 </Button>
               </DataTemplate>
@@ -104,154 +221,55 @@
           </ItemsControl>
 
           <!-- A trusted device is chosen: browse its shared folders -->
-          <Button Classes="link" Command="{Binding BrowseCommand}" IsVisible="{Binding CanBrowse}" HorizontalAlignment="Left" Margin="-6,-6,0,0">
+          <Button Classes="link" Command="{Binding BrowseCommand}" IsVisible="{Binding CanBrowse}" HorizontalAlignment="Left" Margin="-6,-8,0,0">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
               <TextBlock Text="{Binding BrowseText}" />
             </StackPanel>
           </Button>
 
-          <!-- Searching state -->
+          <!-- Searching -->
           <Border Classes="card" IsVisible="{Binding HasNoDevices}" Padding="20">
             <Grid ColumnDefinitions="Auto,*">
-              <Panel Width="64" Height="64" VerticalAlignment="Top" Margin="-4,-4,0,0">
+              <Panel Width="56" Height="56" VerticalAlignment="Top">
                 <Ellipse Classes="pulse" Fill="{DynamicResource AccentBrush}" />
-                <Border Classes="iconBadge" Width="40" Height="40" CornerRadius="20">
-                  <PathIcon Data="{StaticResource IconWifi}" />
+                <Border Classes="iconBadge brand" Width="40" Height="40" CornerRadius="20">
+                  <PathIcon Data="{StaticResource IconDevices}" />
                 </Border>
               </Panel>
-              <StackPanel Grid.Column="1" Margin="16,2,0,0" Spacing="4">
+              <StackPanel Grid.Column="1" Margin="14,4,0,0" Spacing="4">
                 <TextBlock Classes="h3" Text="{l:T 'Looking for nearby devices…'}" />
                 <TextBlock Classes="secondary" TextWrapping="Wrap"
-                           Text="{l:T 'Open Beam on the other computer. It will appear here automatically.'}" />
+                           Text="{l:T 'Open Beam on the other device. It appears here by itself.'}" />
                 <StackPanel IsVisible="{Binding ShowSearchHint}" Spacing="8" Margin="0,10,0,0">
                   <TextBlock Classes="caption" TextWrapping="Wrap"
                              Text="{l:T 'Still nothing? Make sure both computers are connected to the same Wi-Fi or network, and that Beam was allowed through Windows Firewall. You can also connect using the other computer\'s address.', Phone='Still nothing? Make sure the phone and the computer are on the same Wi-Fi, and that Beam was allowed through Windows Firewall on the computer. You can also connect using the computer\'s address.'}" />
-                  <Button Content="{l:T 'Connect by address'}" Command="{Binding ConnectByAddressCommand}" />
+                  <Button Content="{l:T 'Connect by address'}" Command="{Binding ConnectByAddressCommand}" HorizontalAlignment="Left" />
                 </StackPanel>
                 <Button Classes="accent" Content="{l:T 'Scan the computer\'s code'}" Command="{Binding ScanCodeCommand}"
-                        IsVisible="{Binding CanScanCodes}" Margin="0,10,0,0" />
+                        IsVisible="{Binding CanScanCodes}" Margin="0,10,0,0" HorizontalAlignment="Left" />
               </StackPanel>
             </Grid>
           </Border>
-        </StackPanel>
 
-        <!-- Step 2: files -->
-        <StackPanel Spacing="12">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="h2" Text="{l:T 'Files to send'}" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasItems}">
-              <Button Classes="subtle" Command="{Binding ChooseFilesCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
-                  <TextBlock Text="{l:T 'Add files'}" />
-                </StackPanel>
-              </Button>
-              <Button Classes="subtle" Command="{Binding ChooseFolderCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{StaticResource IconAdd}" Width="12" Height="12" />
-                  <TextBlock Text="{l:T 'Add folder'}" />
-                </StackPanel>
-              </Button>
-              <Button Classes="subtle" Content="{l:T 'Clear'}" Command="{Binding ClearCommand}" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowDropZone}">
-              <Button Classes="subtle" Command="{Binding SendTextCommand}" ToolTip.Tip="{l:T 'Send a message or a link to the chosen device'}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{StaticResource IconEdit}" Width="12" Height="12" />
-                  <TextBlock Text="{l:T 'Send text or link'}" />
-                </StackPanel>
-              </Button>
-            </StackPanel>
+          <TextBlock Classes="caption" Text="{Binding DiscoveryStatus}" IsVisible="{Binding HasDiscoveryStatus}" TextWrapping="Wrap" />
+
+          <!-- Sending directly is chosen in Settings → Connection; said here so it's never a surprise. -->
+          <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding ShowsDirectNote}">
+            <PathIcon Data="{StaticResource IconLink}" Width="14" Height="14" Foreground="{DynamicResource AccentGradientBrush}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="caption" Margin="8,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Text="{l:T 'Sending directly: the chosen devices connect to this one, without the Wi-Fi router.'}" />
+            <Button Grid.Column="2" Classes="link" Content="{l:T 'Change'}" Command="{Binding OpenConnectionSettingsCommand}" VerticalAlignment="Center" />
           </Grid>
-
-          <!-- Drop zone -->
-          <Panel IsVisible="{Binding ShowDropZone}" MinHeight="180">
-            <Rectangle RadiusX="12" RadiusY="12" Stroke="{DynamicResource DropZoneStrokeBrush}"
-                       StrokeThickness="1.5" StrokeDashArray="5,4" Fill="{DynamicResource CardBrush}" />
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="24">
-              <Border Classes="iconBadge" Width="48" Height="48" CornerRadius="24" HorizontalAlignment="Center">
-                <PathIcon Data="{StaticResource IconUpload}" Width="22" Height="22" />
-              </Border>
-              <TextBlock Classes="h3" Text="{l:T 'Drag files or folders here'}" HorizontalAlignment="Center" IsVisible="{Binding IsDesktop}" />
-              <TextBlock Classes="caption" Text="{l:T 'or'}" HorizontalAlignment="Center" IsVisible="{Binding IsDesktop}" />
-              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                <Button Command="{Binding ChooseFilesCommand}">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <PathIcon Data="{StaticResource IconFile}" Width="14" Height="14" />
-                    <TextBlock Text="{l:T 'Choose files'}" />
-                  </StackPanel>
-                </Button>
-                <Button Command="{Binding ChooseFolderCommand}">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
-                    <TextBlock Text="{l:T 'Choose a folder'}" />
-                  </StackPanel>
-                </Button>
-              </StackPanel>
-            </StackPanel>
-          </Panel>
-
-          <!-- Text or a link shared to Beam from another app -->
-          <Border Classes="card" Padding="16,12,10,12" IsVisible="{Binding HasSharedText}">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-              <Border Classes="iconBadge" Width="34" Height="34" CornerRadius="8" VerticalAlignment="Top">
-                <Panel>
-                  <PathIcon Data="{StaticResource IconLink}" Width="16" Height="16" IsVisible="{Binding SharedTextIsLink}" />
-                  <PathIcon Data="{StaticResource IconEdit}" Width="16" Height="16" IsVisible="{Binding !SharedTextIsLink}" />
-                </Panel>
-              </Border>
-              <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
-                <TextBlock Classes="caption" Text="{l:T 'Link to send'}" IsVisible="{Binding SharedTextIsLink}" />
-                <TextBlock Classes="caption" Text="{l:T 'Text to send'}" IsVisible="{Binding !SharedTextIsLink}" />
-                <TextBlock Text="{Binding SharedText}" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
-              </StackPanel>
-              <Button Grid.Column="2" Classes="icon" Command="{Binding ClearSharedTextCommand}"
-                      AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Top">
-                <PathIcon Data="{StaticResource IconClose}" />
-              </Button>
-            </Grid>
-          </Border>
-
-          <!-- Selected items -->
-          <Border Classes="card" Padding="0" IsVisible="{Binding HasItems}">
-            <StackPanel>
-              <ItemsControl ItemsSource="{Binding Items}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:PendingItemViewModel">
-                    <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,10,10,10">
-                      <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Classes="iconBadge neutral" Width="34" Height="34" CornerRadius="8">
-                          <PathIcon Data="{Binding Icon}" Width="16" Height="16" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
-                          <TextBlock Classes="caption" Text="{Binding Details}" />
-                        </StackPanel>
-                        <Button Grid.Column="2" Classes="icon" Command="{Binding RemoveCommand}"
-                                AutomationProperties.Name="{l:T 'Remove from the list'}" ToolTip.Tip="{l:T 'Remove from the list'}" VerticalAlignment="Center">
-                          <PathIcon Data="{StaticResource IconClose}" />
-                        </Button>
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock Classes="caption" Text="{Binding ItemsSummary}" Margin="16,10" />
-            </StackPanel>
-          </Border>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
 
-    <!-- Action bar -->
-    <Border Grid.Row="1" Background="{DynamicResource CardBrush}"
-            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="36,14">
-      <Grid ColumnDefinitions="*,Auto">
-        <StackPanel VerticalAlignment="Center" Margin="0,0,16,0" Spacing="2">
-          <TextBlock Text="{Binding SendSummary}" TextTrimming="CharacterEllipsis"
-                     Classes.secondary="{Binding !CanSend}" FontWeight="Normal" />
-        </StackPanel>
+    <!-- 3. Send -->
+    <Border Grid.Row="1" Classes="actionBar">
+      <Grid ColumnDefinitions="*,Auto" MaxWidth="880" HorizontalAlignment="Stretch">
+        <TextBlock Text="{Binding SendSummary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,16,0"
+                   Classes.secondary="{Binding !CanSend}" />
         <Button Grid.Column="1" Classes="accent large" Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <PathIcon Data="{StaticResource IconSend}" Width="14" Height="14" />

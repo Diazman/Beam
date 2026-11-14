@@ -90,6 +90,7 @@ public sealed partial class MainViewModel
                 L.T("Beam no longer has “All files access”. Allow it in Settings → Browsing."), () => Dispatcher.UIThread.Post(() =>
                 {
                     _ui.BringToFront();
+                    Settings.Section = SettingsSection.Sharing;
                     Navigate(Page.Settings);
                 }));
 

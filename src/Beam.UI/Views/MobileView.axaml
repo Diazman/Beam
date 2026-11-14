@@ -24,7 +24,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <ContentControl Content="{Binding CurrentPage}" />
+        <ContentControl Classes="pageHost" Content="{Binding CurrentPage}" />
       </DockPanel>
 
       <Border Grid.Row="1" Classes="bottomBar">
@@ -33,8 +33,15 @@
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
           <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Receive'}"
                        Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
-          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Transfers'}"
-                       Tag="{StaticResource IconUpload}" IsChecked="{Binding IsTransfersPage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Devices'}"
+                       Tag="{StaticResource IconDevices}" IsChecked="{Binding IsDevicesPage}" />
+          <Panel>
+            <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Activity'}"
+                         Tag="{StaticResource IconActivity}" IsChecked="{Binding IsActivityPage}" />
+            <Border Classes="navBadge" Margin="0,2,10,0" IsVisible="{Binding HasActiveTransfers}">
+              <TextBlock Text="{Binding ActiveTransferBadge}" />
+            </Border>
+          </Panel>
           <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Settings'}"
                        Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
         </UniformGrid>

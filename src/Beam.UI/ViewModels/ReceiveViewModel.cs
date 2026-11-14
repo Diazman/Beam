@@ -111,6 +111,15 @@ public sealed class ReceiveViewModel : ObservableObject
 
     // ---- Code (when they can't find each other) ----
 
+    /// <summary>"Not showing up on the other device?" is open (the address, the code, how others reach this device).</summary>
+    public bool ShowsHelp
+    {
+        get => _showsHelp;
+        set => SetProperty(ref _showsHelp, value);
+    }
+
+    private bool _showsHelp;
+
     public bool ShowsCode => _showsCode;
 
     public string CodeButtonText => _showsCode ? L.T("Hide the code") : L.T("Can't find each other? Show a code");

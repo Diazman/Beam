@@ -12,10 +12,10 @@ namespace Beam.App.Tests;
 public class LanguageUiTests
 {
     [AvaloniaTheory]
-    [InlineData("tr", "Dosya gönder")]
-    [InlineData("ru", "Отправка файлов")]
-    [InlineData("uz", "Fayl yuborish")]
-    public async Task ScreensAreTranslated(string language, string sendFilesTitle)
+    [InlineData("tr")]
+    [InlineData("ru")]
+    [InlineData("uz")]
+    public async Task ScreensAreTranslated(string language)
     {
         try
         {
@@ -32,7 +32,9 @@ public class LanguageUiTests
             await UiHarness.WaitForAsync(() => !app.ViewModel.Home.IsMeasuring, "sizes");
             await UiHarness.PumpAsync(100);
 
-            Assert.Contains(sendFilesTitle, app.VisibleTexts());
+            const string intro = "Send files straight to a nearby device. No cables, accounts or internet needed.";
+            Assert.NotEqual(intro, L.T(intro));
+            Assert.Contains(L.T(intro), app.VisibleTexts());
             Assert.Contains("Diaz's Laptop", app.ViewModel.Home.SendSummary);
             Assert.DoesNotContain("Send ", app.ViewModel.Home.SendSummary);
             app.Screenshot($"language-{language}-home");
@@ -45,14 +47,25 @@ public class LanguageUiTests
             app.Screenshot($"language-{language}-home-small");
 
             app.ViewModel.Navigate(Page.Settings);
+            app.ViewModel.Settings.Section = SettingsSection.General;
             await UiHarness.PumpAsync(100);
             Assert.Contains(L.T("Language"), app.VisibleTexts());
             Assert.NotEqual("Language", L.T("Language"));
             app.Screenshot($"language-{language}-settings");
 
-            app.ViewModel.Navigate(Page.History);
+            app.ViewModel.Navigate(Page.Activity);
             await UiHarness.PumpAsync(100);
-            app.Screenshot($"language-{language}-history");
+            app.Screenshot($"language-{language}-activity");
+
+            app.ViewModel.Navigate(Page.Devices);
+            await UiHarness.PumpAsync(100);
+            Assert.Contains(L.T("Add a trusted device"), app.VisibleTexts());
+            app.Screenshot($"language-{language}-devices");
+
+            app.ViewModel.Navigate(Page.Receive);
+            await UiHarness.PumpAsync(100);
+            Assert.Contains(L.T("Ready to receive"), app.VisibleTexts());
+            app.Screenshot($"language-{language}-receive");
         }
         finally
         {

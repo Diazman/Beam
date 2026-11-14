@@ -20,18 +20,46 @@ public class PhoneLayoutTests
         app.ViewModel.Home.Devices[0].SelectCommand.Execute(null);
         app.ViewModel.Home.AddPaths(new[] { app.CreateFile("IMG_2041.jpg", 2_400_000), app.CreateFile("Notes.pdf", 300_000, 2) });
         await UiHarness.PumpAsync(100);
-        Assert.Contains("Send files", app.VisibleTexts());
+        Assert.Contains("Send", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("phone-1-send");
 
-        app.ViewModel.IsTransfersPage = true;
+        app.ViewModel.IsReceivePage = true;
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Ready to receive", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-2-receive");
+
+        app.ViewModel.IsDevicesPage = true;
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Diaz's Laptop", app.VisibleTexts());
+        Assert.Contains("Add a trusted device", app.VisibleTexts());
+        Assert.DoesNotContain("No Beam app on the other device?", app.VisibleTexts()); // computers only
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-3-devices");
+
+        app.ViewModel.IsActivityPage = true;
         await UiHarness.PumpAsync(100);
         Assert.Contains("No transfers yet", app.VisibleTexts());
-        Assert.DoesNotContain("History", app.VisibleTexts()); // one tab for running and past transfers
-        app.Screenshot("phone-2-transfers-empty");
+        Assert.DoesNotContain("HISTORY", app.VisibleTexts()); // one tab for running and past transfers
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-4-activity-empty");
 
+        // Settings: the list of sections, then one section; Back returns to the list.
         app.ViewModel.IsSettingsPage = true;
         await UiHarness.PumpAsync(100);
-        app.Screenshot("phone-4-settings");
+        Assert.Contains("Shared folders", app.VisibleTexts());
+        Assert.DoesNotContain("Appearance", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-5-settings");
+        app.ViewModel.Settings.Section = SettingsSection.General;
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Appearance", app.VisibleTexts());
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-6-settings-general");
+        Assert.True(app.ViewModel.GoBack());
+        Assert.Equal(SettingsSection.None, app.ViewModel.Settings.Section);
+        Assert.True(app.ViewModel.IsSettingsPage);
     }
 
     [AvaloniaFact]
@@ -43,14 +71,14 @@ public class PhoneLayoutTests
         var file = app.CreateFile("Holiday.mp4", 3_000_000);
         await app.ViewModel.StartSendAsync(laptop.AsDevice(), new[] { file });
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.Any(t => t.IsFinished), "transfer");
-        app.ViewModel.IsTransfersPage = true;
+        app.ViewModel.IsActivityPage = true;
         await UiHarness.PumpAsync(100);
         Assert.Equal(TransferState.Completed, app.ViewModel.Transfers[0].State);
         await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 1, "in the history");
         await UiHarness.PumpAsync(100);
-        Assert.Contains("History", app.VisibleTexts());
+        Assert.Contains("HISTORY", app.VisibleTexts());
         Assert.Contains("Diaz's Laptop", string.Join(" ", app.VisibleTexts()));
-        app.Screenshot("phone-5-transfers");
+        app.Screenshot("phone-7-activity");
     }
 
     [AvaloniaFact]
@@ -75,6 +103,7 @@ public class PhoneLayoutTests
             app.Screenshot("phone-uz-send");
 
             app.ViewModel.IsSettingsPage = true;
+            app.ViewModel.Settings.Section = SettingsSection.General;
             await UiHarness.PumpAsync(100);
             var texts = app.VisibleTexts();
             Assert.Contains(Core.Localization.L.T("Let nearby devices find this phone"), texts);
@@ -102,6 +131,15 @@ public class PhoneBehaviourTests
         await using var app = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true);
         await app.InitializeAsync();
         app.ViewModel.IsSettingsPage = true;
+        Assert.True(app.ViewModel.GoBack());
+        Assert.True(app.ViewModel.IsHomePage);
+
+        // A page under Devices goes back to Devices; a Settings section to the list of sections.
+        app.ViewModel.IsSettingsPage = true;
+        app.ViewModel.Settings.Section = SettingsSection.About;
+        Assert.True(app.ViewModel.GoBack());
+        Assert.True(app.ViewModel.IsSettingsPage);
+        Assert.Equal(SettingsSection.None, app.ViewModel.Settings.Section);
         Assert.True(app.ViewModel.GoBack());
         Assert.True(app.ViewModel.IsHomePage);
 

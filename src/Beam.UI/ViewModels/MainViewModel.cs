@@ -14,18 +14,27 @@ using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels;
 
+/// <summary>
+/// Where the user is. Four destinations (Send, Receive, Devices, Activity) and Settings, the same on the desktop
+/// and on phones; the others are opened from one of them and belong to it.
+/// </summary>
 public enum Page
 {
+    /// <summary>Send: files, a device, Send.</summary>
     Home,
     Receive,
-    Phone,
-    History,
+
+    /// <summary>Nearby and trusted devices, adding one, browsing one, sharing with a web browser.</summary>
+    Devices,
+
+    /// <summary>Transfers running now, and the history.</summary>
+    Activity,
     Settings,
 
-    /// <summary>Phones only: the list of transfers (the desktop shows it beside the current page).</summary>
-    Transfers,
+    /// <summary>Under Devices: sharing with a device that has no Beam app, through its web browser.</summary>
+    Phone,
 
-    /// <summary>A trusted device's shared folders (opened from Send or Settings; not in the navigation).</summary>
+    /// <summary>Under Devices: a trusted device's shared folders.</summary>
     Browse,
 }
 
@@ -43,7 +52,6 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
     private readonly DispatcherTimer _progressTimer;
     private readonly DateTime _startedAt = DateTime.UtcNow;
     private Page _page = Page.Home;
-    private TransfersPage? _transfersPage;
     private DialogViewModel? _dialog;
     private bool _isDragOver;
 
@@ -61,6 +69,8 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         Receive = new ReceiveViewModel(node, this);
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
+        Activity = new ActivityViewModel(this);
+        Devices = new DevicesViewModel(node, platform, this);
 
         ClearFinishedCommand = new RelayCommand(ClearFinished);
         DismissDialogCommand = new RelayCommand(() => Dialog?.Dismiss());
@@ -115,13 +125,18 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
 
     public SettingsViewModel Settings { get; }
 
+    /// <summary>Transfers running now and the history (the Activity destination).</summary>
+    public ActivityViewModel Activity { get; }
+
+    public DevicesViewModel Devices { get; }
+
     public object CurrentPage => _page switch
     {
         Page.Phone => Phone,
         Page.Receive => Receive,
-        Page.History => History,
+        Page.Devices => Devices,
+        Page.Activity => Activity,
         Page.Settings => Settings,
-        Page.Transfers => _transfersPage ??= new TransfersPage(this),
         Page.Browse when _browse != null => _browse,
         _ => Home,
     };
@@ -146,6 +161,17 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         }
     }
 
+    /// <summary>Devices, or a page opened from it (web browser sharing, browsing a device): the rail shows Devices.</summary>
+    public bool IsDevicesPage
+    {
+        get => _page is Page.Devices or Page.Phone or Page.Browse;
+        set
+        {
+            if (value && _page is not (Page.Devices or Page.Phone or Page.Browse)) Navigate(Page.Devices);
+        }
+    }
+
+    /// <summary>Sharing with a web browser (a page under Devices).</summary>
     public bool IsPhonePage
     {
         get => _page == Page.Phone;
@@ -155,12 +181,12 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         }
     }
 
-    public bool IsHistoryPage
+    public bool IsActivityPage
     {
-        get => _page == Page.History;
+        get => _page == Page.Activity;
         set
         {
-            if (value) Navigate(Page.History);
+            if (value) Navigate(Page.Activity);
         }
     }
 
@@ -173,15 +199,6 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         }
     }
 
-    public bool IsTransfersPage
-    {
-        get => _page == Page.Transfers;
-        set
-        {
-            if (value) Navigate(Page.Transfers);
-        }
-    }
-
     public ObservableCollection<TransferViewModel> Transfers { get; } = new();
 
     public bool HasTransfers => Transfers.Count > 0;
@@ -191,6 +208,23 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
     public int ActiveTransferCount => Transfers.Count(t => t.IsActive);
 
     public bool HasActiveTransfers => ActiveTransferCount > 0;
+
+    /// <summary>The transfer shown on Send while it runs (the newest one still going).</summary>
+    public TransferViewModel? CurrentTransfer => Transfers.FirstOrDefault(t => !t.IsFinished);
+
+    public bool HasCurrentTransfer => CurrentTransfer != null;
+
+    /// <summary>Next to it: "View" or "2 more · View".</summary>
+    public string ActivitySummary => ActiveTransferCount > 1
+        ? L.T("{0} more · View", ActiveTransferCount - 1)
+        : L.T("View");
+
+    /// <summary>The count on Activity in the navigation ("9+" past nine).</summary>
+    public string ActiveTransferBadge => ActiveTransferCount > 9 ? "9+" : ActiveTransferCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    public RelayCommand ShowActivityCommand => _showActivity ??= new RelayCommand(() => Navigate(Page.Activity));
+
+    private RelayCommand? _showActivity;
 
     public DialogViewModel? Dialog
     {
@@ -366,6 +400,14 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
             return true;
         }
 
+        if (_page == Page.Phone)
+        {
+            Navigate(Page.Devices); // a page under Devices: back to it
+            return true;
+        }
+
+        if (_page == Page.Settings && Settings.GoBack()) return true; // a section open (phones): back to the list
+
         Navigate(Page.Home);
         return true;
     }
@@ -380,6 +422,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         _page = page;
         if (page == Page.Phone) Phone.OnShown();
         if (page == Page.Receive) Receive.OnShown();
+        if (page == Page.Devices) Devices.OnShown();
         if (page == Page.Settings) Settings.RefreshPermissions(); // back from Android's settings, maybe
         if (page == Page.Home)
         {
@@ -391,9 +434,9 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         OnPropertyChanged(nameof(IsHomePage));
         OnPropertyChanged(nameof(IsPhonePage));
         OnPropertyChanged(nameof(IsReceivePage));
-        OnPropertyChanged(nameof(IsHistoryPage));
+        OnPropertyChanged(nameof(IsDevicesPage));
+        OnPropertyChanged(nameof(IsActivityPage));
         OnPropertyChanged(nameof(IsSettingsPage));
-        OnPropertyChanged(nameof(IsTransfersPage));
     }
 
     /// <summary>
@@ -643,6 +686,10 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         if (!anyActive) _progressTimer.Stop();
         OnPropertyChanged(nameof(ActiveTransferCount));
         OnPropertyChanged(nameof(HasActiveTransfers));
+        OnPropertyChanged(nameof(ActiveTransferBadge));
+        OnPropertyChanged(nameof(CurrentTransfer));
+        OnPropertyChanged(nameof(HasCurrentTransfer));
+        OnPropertyChanged(nameof(ActivitySummary));
     }
 
     private void Dismiss(TransferViewModel vm)
@@ -663,6 +710,11 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         OnPropertyChanged(nameof(HasTransfers));
         OnPropertyChanged(nameof(HasFinishedTransfers));
         OnPropertyChanged(nameof(ActiveTransferCount));
+        OnPropertyChanged(nameof(HasActiveTransfers));
+        OnPropertyChanged(nameof(ActiveTransferBadge));
+        OnPropertyChanged(nameof(CurrentTransfer));
+        OnPropertyChanged(nameof(HasCurrentTransfer));
+        OnPropertyChanged(nameof(ActivitySummary));
         OnPropertyChanged(nameof(HasActiveTransfers));
     }
 
@@ -717,19 +769,4 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
             onClick?.Invoke();
         }));
     }
-}
-
-/// <summary>Phones: running transfers and the history in one tab.</summary>
-public sealed class TransfersPage : ObservableObject
-{
-    public TransfersPage(MainViewModel main)
-    {
-        Main = main;
-        main.Transfers.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
-        main.History.Items.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
-    }
-
-    public MainViewModel Main { get; }
-
-    public bool IsEmpty => Main.Transfers.Count == 0 && Main.History.Items.Count == 0;
 }

@@ -91,12 +91,12 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 
 ## Trusted devices and browsing
 
-- **Adding a trusted device** – one device shows a code (Settings → Trusted devices → Add a trusted device) and the
+- **Adding a trusted device** – one device shows a code (Devices → Add a trusted device) and the
   other scans it, while both are on the same Wi-Fi. The code works once, for one device, for 10 minutes, and stops
   working after a few wrong tries. The two devices then store each other's name, identifier and encryption-key
   fingerprint, and trust each other: files between them are accepted without asking. On a phone, adding a trusted
   device first needs the phone's own lock (fingerprint, face, PIN, pattern or password); Beam never sees it.
-- **Browsing is off until you switch it on** (Settings → Browsing). Then only your **trusted devices** can ask to see
+- **Browsing is off until you switch it on** (Settings → Shared folders). Then only your **trusted devices** can ask to see
   the **folders you share** there (to start with: the usual Documents, Pictures, Videos, Music and Downloads folders
   on a computer; Camera, Pictures, Movies, Music, Download and Documents on a phone; you can remove or add any).
   Nothing outside them is ever shown: no other folders, no hidden or system files, no links leading elsewhere.
@@ -110,9 +110,9 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
   devices check each other's key, and every file is checked after it arrives. Beam keeps no record of what was
   looked at; downloads and added files appear in Transfers and History like any transfer.
 
-## Devices without the app (Browser page)
+## Devices without the app (sharing through a web browser)
 
-On Windows, "Connect with the browser" on the Browser page runs a small web page on your local network that a phone
+On Windows, "Share through a web browser" (Devices → "No Beam app on the other device?") runs a small web page on your local network that a phone
 can open by scanning the code Beam shows. The link contains a random secret that changes every time, and the page
 stops after 30 minutes without use. Files a phone sends are saved only if you accept them. Beam sees the phone's
 local network address and the type of phone (from its browser) to show who is connecting; neither is stored or

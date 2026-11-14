@@ -13,6 +13,33 @@
                  Text="{l:T 'Send files directly between your computers and phones nearby. Open Beam on both, pick a device, and drop in your files.', Phone='Send files between this phone and nearby computers. Open Beam on both, pick a computer and choose your files.'}" />
     </StackPanel>
 
+    <!-- How it works, in three lines: the three places a new user needs. -->
+    <Border Classes="details" Padding="14,12">
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Classes="iconBadge brand" Width="28" Height="28" CornerRadius="14">
+            <PathIcon Data="{StaticResource IconSend}" Width="12" Height="12" />
+          </Border>
+          <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="{l:T 'Send: drop in files, pick a device, press Send.'}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Classes="iconBadge brand" Width="28" Height="28" CornerRadius="14">
+            <PathIcon Data="{StaticResource IconDownload}" Width="12" Height="12" />
+          </Border>
+          <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="{l:T 'Receive: keep Beam open; you are asked before anything arrives.'}" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*">
+          <Border Classes="iconBadge brand" Width="28" Height="28" CornerRadius="14">
+            <PathIcon Data="{StaticResource IconDevices}" Width="12" Height="12" />
+          </Border>
+          <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                     Text="{l:T 'Devices: the ones nearby and the ones you trust.'}" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
     <StackPanel Spacing="6">
       <TextBlock Classes="h3" Text="{l:T 'Name this computer', Phone='Name this phone'}" />
       <TextBox Name="NameBox" Text="{Binding DeviceName}" MaxLength="{Binding MaxNameLength}" Watermark="{l:T 'e.g. Diaz\'s PC', Phone='e.g. Diaz\'s phone'}" />

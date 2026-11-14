@@ -150,7 +150,7 @@ encrypted by Beam (plain HTTP on the LAN).
 
 ## Trusted devices and browsing
 
-- **`Trust/TrustService`:** Settings → Trusted devices → Add a trusted device shows a `PairingCode` with a
+- **`Trust/TrustService`:** Devices → Add a trusted device shows a `PairingCode` with a
   `TrustToken` (the same one-time rules as backups); the device that scans it connects to the code's certificate
   (`ConnectionPurpose.Pair`, LAN only) and both store the other as a `TrustedDevice` (and `DirectManager.Remember`,
   so Bluetooth and direct links know it).
@@ -171,6 +171,22 @@ encrypted by Beam (plain HTTP on the LAN).
   again, Remove) and Browsing (switch, shared folders, Allow adding files); `BrowseViewModel` is the Browse page;
   `MainViewModel.Browse` holds the question and the "… is browsing" bar with Stop. Phones confirm the owner
   before adding a trusted device, switching browsing on or allowing adding files, and ask for All files access.
+
+## User interface
+
+Avalonia, one set of views for the desktop (`MainWindow`: a navigation rail) and phones (`MobileView`: a bottom tab bar),
+with the same structure on both:
+
+- **Send** (`HomeView`): what to send (drop zone, files, text), who to send it to (nearby devices), the Send button; a
+  card with the running transfer. **Receive** (`ReceiveView`): ready to receive as this device's name; addresses and the
+  pairing code under "Not showing up on the other device?". **Devices** (`DevicesView`): nearby and trusted devices
+  (Send, Browse, stop trusting), Add a trusted device, Connect by address, and sharing through a web browser
+  (`PhoneView`, a page under Devices). **Activity** (`ActivityView`): transfers now and the history. **Settings**
+  (`SettingsView`): sections General, Receiving, Shared folders, Backup, Connection, About (a list beside the open one on
+  the desktop; on phones the list, then the section).
+- **Design system** (`Styles/Colors.axaml`, `Styles/Controls.axaml`, `Styles/Icons.axaml`): colour tokens for the light
+  theme and the default deep-navy dark theme, the brand gradient (electric blue → cyan) for primary buttons, progress,
+  selection and the current destination; one type scale, card and control style. Views use these names only.
 
 ## Security model
 

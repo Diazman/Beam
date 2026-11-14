@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Beam.App.Views;
 
-public partial class HistoryView : UserControl
+public partial class ActivityView : UserControl
 {
-    public HistoryView()
+    public ActivityView()
     {
         InitializeComponent();
     }

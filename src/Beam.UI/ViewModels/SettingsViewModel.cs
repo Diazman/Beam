@@ -39,6 +39,8 @@ public sealed class TrustedDeviceViewModel
     /// <summary>It browses this device's shared folders without being asked ("Ask again" undoes that).</summary>
     public bool AlwaysBrowse => Device.AlwaysBrowse;
 
+    public string StopTrustingText => L.T("Stop trusting {0}", Name);
+
     public RelayCommand BrowseCommand { get; }
 
     public RelayCommand AskAgainCommand { get; }
@@ -278,7 +280,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                          nameof(ReceiveFolder), nameof(UsesDefaultFolder), nameof(StartWithWindows), nameof(CloseToTray),
                          nameof(Discoverable), nameof(NotificationsEnabled), nameof(NotifyOnIncomingRequest),
                          nameof(NotifyOnTransferFinished), nameof(NotifyOnDeviceFound), nameof(SelectedTheme), nameof(SelectedLanguage),
-                         nameof(LanguageNeedsRestart), nameof(LocalAddresses),
+                         nameof(LanguageNeedsRestart), nameof(LocalAddresses), nameof(PreferDirect),
                      })
             {
                 OnPropertyChanged(name);

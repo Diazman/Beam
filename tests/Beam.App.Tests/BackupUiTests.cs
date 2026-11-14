@@ -1,3 +1,4 @@
+using Beam.App.ViewModels;
 using Avalonia.Headless.XUnit;
 using Beam.App.Platform;
 using Beam.App.ViewModels.Dialogs;
@@ -21,6 +22,7 @@ public class BackupUiTests
 
         // The computer: Settings → Backup → Add a phone shows a one-time code.
         pc.ViewModel.IsSettingsPage = true;
+        pc.ViewModel.Settings.Section = SettingsSection.Backup;
         await UiHarness.PumpAsync(100);
         Assert.Contains("Back up phones to this computer", pc.VisibleTexts());
         pc.ViewModel.Settings.Backup.AddPhoneCommand.Execute(null);
@@ -35,6 +37,7 @@ public class BackupUiTests
         code.Addresses = new List<string> { $"127.0.0.1:{pc.Node.Transfers.Port}" };
         phone.Platform.ScannedCode = code.AppendTo(null);
         phone.ViewModel.IsSettingsPage = true;
+        phone.ViewModel.Settings.Section = SettingsSection.Backup;
         await UiHarness.PumpAsync(100);
         Assert.Contains("Set up backup", phone.VisibleTexts().Concat(Buttons(phone)));
         phone.ViewModel.Settings.Backup.SetUpCommand.Execute(null);
@@ -170,6 +173,7 @@ public class BackupUiTests
         await phone.InitializeAsync();
         Assert.False(phone.ViewModel.Settings.Backup.IsAvailable);
         phone.ViewModel.IsSettingsPage = true;
+        phone.ViewModel.Settings.Section = SettingsSection.Backup;
         await UiHarness.PumpAsync(100);
         Assert.DoesNotContain("Backup", phone.VisibleTexts());
     }

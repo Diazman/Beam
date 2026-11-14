@@ -96,7 +96,7 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 24. Enable *Start Beam when I sign in*, sign out and in. ✅ Beam starts hidden in the tray, receiving works.
 25. Change name, receive folder, theme (Light/Dark/System), notification toggles. ✅ Applied immediately and kept after restart.
 26. Accept with *Always accept files from PC A*. ✅ Next transfer from A starts without asking; it's listed under
-    Settings → Trusted computers and can be removed.
+    Devices and can be removed.
 27. History lists every transfer with status; *Show* opens received files; *Clear history* asks first.
 28. Display scaling 100 % / 150 % / 200 % and window resizing to the minimum size. ✅ Text stays readable and nothing clips.
 29. Run `Beam.exe --send "C:\some\file.txt"` while Beam is running. ✅ The running window comes forward with the file added.
@@ -113,7 +113,7 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
     and the on/off switches are in that language; sizes use the local decimal separator ("7,63 MB"). Open the Phone
     page on a phone set to that language: ✅ the page is translated too. Back to *Use Windows language*.
 
-### Direct mode (Settings or the Send page: *Send directly*)
+### Direct mode (Settings → Connection: *Send directly*)
 35. PC ↔ PC on no shared network (one on Ethernet, the other on Wi-Fi elsewhere, or Wi-Fi off on one). Open Receive on
     B. ✅ A lists B over Bluetooth; Send directly → B asks once (unless paired) → B joins A's network → files arrive;
     both are back on their own networks afterwards.
@@ -146,9 +146,9 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 
 ### Trusted devices and browsing (a PC and a phone)
 
-1. PC: Settings → Trusted devices → Add a trusted device. Phone: same, then "Scan the other device's code instead",
+1. PC: Devices → Add a trusted device. Phone: same, then "Scan the other device's code instead",
    scan it (the phone asks for its lock first). Both list each other; scanning the same code again is refused.
-2. PC: Settings → Browsing on: Documents, Pictures, Videos, Music, Downloads and Desktop are listed. Phone: Send →
+2. PC: Settings → Shared folders on: Documents, Pictures, Videos, Music, Downloads and Desktop are listed. Phone: Send →
    choose the PC → "Browse Diaz's PC's files". The PC asks, with "Always allow … to browse my files"; allow.
 3. Phone: open Pictures (photos show previews), tick some files and a folder, Download: they arrive in Download/Beam
    and show in Transfers. The PC shows "… is browsing your shared folders" with Stop.
@@ -157,7 +157,7 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 5. PC: Stop: the phone can't carry on and says the PC ended browsing. Remove a shared folder while the phone
    browses it: it is gone at once. Switch Allow adding files on: "Add files here…" appears on the phone; adding a
    file with a name already there keeps both.
-6. Phone: Settings → Browsing on (fingerprint, then All files access) and browse the phone from the PC the same way.
+6. Phone: Settings → Shared folders on (fingerprint, then All files access) and browse the phone from the PC the same way.
 7. A device that isn't trusted: Send shows no Browse, and nothing it does reaches the question.
 
 ### Phones

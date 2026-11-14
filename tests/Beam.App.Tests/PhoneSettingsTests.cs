@@ -1,3 +1,4 @@
+using Beam.App.ViewModels;
 using Avalonia.Headless.XUnit;
 using Beam.App.Platform;
 using Beam.App.ViewModels.Dialogs;
@@ -16,6 +17,8 @@ public class PhoneSettingsTests
         await phone.InitializeAsync();
         var settings = phone.ViewModel.Settings;
         phone.ViewModel.IsSettingsPage = true;
+        Assert.Equal(SettingsSection.None, settings.Section); // phones: the list of sections first
+        settings.Section = SettingsSection.Receiving;
         await UiHarness.PumpAsync(100);
         Assert.Contains("Change…", phone.VisibleTexts());
         Assert.True(settings.UsesDefaultFolder);

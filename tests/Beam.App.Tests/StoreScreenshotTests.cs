@@ -89,7 +89,7 @@ public class StoreScreenshotTests
         app.Screenshot("3-transfer-progress", Folder);
         await UiHarness.WaitForAsync(() => app.ViewModel.Transfers.All(t => t.IsFinished), "finish", 120000);
 
-        app.ViewModel.Navigate(Page.History);
+        app.ViewModel.Navigate(Page.Activity);
         await UiHarness.PumpAsync(100);
         app.Screenshot("4-history", Folder);
         app.ViewModel.Navigate(Page.Settings);

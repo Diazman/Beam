@@ -122,7 +122,7 @@ public class UiFlowTests
         Assert.Contains(app.Platform.Calls, c => c.StartsWith("reveal:") && c.Contains("Holiday"));
 
         await UiHarness.WaitForAsync(() => app.ViewModel.History.Items.Count == 1, "history");
-        app.ViewModel.Navigate(Page.History);
+        app.ViewModel.Navigate(Page.Activity);
         await UiHarness.PumpAsync();
         await UiHarness.WaitForAsync(() => app.ViewModel.History.Items[0].CanShow, "the received file can be shown");
         app.Screenshot("07-history");

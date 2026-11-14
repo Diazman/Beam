@@ -123,7 +123,7 @@ public class TextUiTests
         await UiHarness.WaitForAsync(() => home.SelectedDevice != null, "auto-selected device");
 
         // Android hands a shared link to Beam like a command line: it waits on the Send screen.
-        phone.ViewModel.IsHistoryPage = true;
+        phone.ViewModel.IsActivityPage = true;
         phone.ViewModel.HandleCommandLine(new CommandLine(false, Array.Empty<string>(), SendText: "  https://example.com/recipe  "));
         await UiHarness.PumpAsync(100);
         Assert.True(phone.ViewModel.IsHomePage);

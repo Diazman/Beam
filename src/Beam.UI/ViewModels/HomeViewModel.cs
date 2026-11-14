@@ -58,14 +58,13 @@ public sealed class DeviceViewModel : ObservableObject
                 Beam.Core.Nearby.NearbyService.BluetoothPlatform => _device.Kind == DeviceKinds.Phone ? L.T("Phone") : L.T("Computer"),
                 _ => L.T("Computer"),
             };
-            if (_device.IsManual && _device.Endpoints.Count > 0 && _device.Platform != Beam.Core.Nearby.NearbyService.BluetoothPlatform
-                && _channels?.Invoke(_device) is not { Bluetooth: true }) return $"{platform} · {_device.AddressText}";
-            // One entry per device, whichever way it was found; how it can be reached is shown separately.
+            // Where it is, in words (no addresses: those are in Settings → Connection for who needs them).
+            if (_device.IsManual && _device.Platform != Beam.Core.Nearby.NearbyService.BluetoothPlatform
+                && _channels?.Invoke(_device) is not { Bluetooth: true }) return L.T("{0} · Added by address", platform);
             return _channels?.Invoke(_device) switch
             {
-                { LocalNetwork: true, Bluetooth: true } => L.T("{0} · Found over local network and Bluetooth", platform),
-                { LocalNetwork: true } => L.T("{0} · Found over local network", platform),
-                { Bluetooth: true } => L.T("{0} · Found over Bluetooth", platform),
+                { LocalNetwork: true } => L.T("{0} · On this Wi-Fi", platform),
+                { Bluetooth: true } => L.T("{0} · Nearby", platform),
                 _ => L.T("{0} · Nearby", platform),
             };
         }
@@ -176,7 +175,11 @@ public sealed class HomeViewModel : ObservableObject
         ScanCodeCommand = new AsyncCommand(ScanCodeAsync);
         BrowseCommand = new AsyncCommand(() => SelectedDevice is { } d ? _main.OpenBrowseAsync(d.Device) : Task.CompletedTask, () => CanBrowse);
         ConnectByAddressCommand = new AsyncCommand(ConnectByAddressAsync);
-        EditNameCommand = new RelayCommand(() => _main.Navigate(Page.Settings));
+        EditNameCommand = new RelayCommand(() =>
+        {
+            _main.Settings.Section = SettingsSection.General; // the name is there
+            _main.Navigate(Page.Settings);
+        });
         AllowBluetoothCommand = new AsyncCommand(async () => await _node.Nearby.RequestPermissionAsync());
         node.Nearby.Changed += () => Dispatcher.UIThread.Post(() =>
         {
@@ -211,6 +214,7 @@ public sealed class HomeViewModel : ObservableObject
             OnPropertyChanged(nameof(IsDiscoverable));
             OnPropertyChanged(nameof(VisibilityText));
             OnPropertyChanged(nameof(PreferDirect));
+            OnPropertyChanged(nameof(ShowsDirectNote));
             OnPropertyChanged(nameof(DiscoveryStatus));
             OnPropertyChanged(nameof(HasDiscoveryStatus));
             RefreshBrowse(); // trusted devices changed
@@ -223,6 +227,19 @@ public sealed class HomeViewModel : ObservableObject
 
     /// <summary>Folders, drag and drop: desktop only.</summary>
     public bool IsDesktop => !_main.IsPhone;
+
+    public MainViewModel Main => _main;
+
+    /// <summary>Send directly is on (Settings → Connection): said under the devices, so it's never a surprise.</summary>
+    public bool ShowsDirectNote => CanConnectDirectly && PreferDirect;
+
+    public RelayCommand OpenConnectionSettingsCommand => _openConnection ??= new RelayCommand(() =>
+    {
+        _main.Settings.Section = SettingsSection.Connection;
+        _main.Navigate(Page.Settings);
+    });
+
+    private RelayCommand? _openConnection;
 
     public string LocalDeviceName => _node.Settings.Current.DeviceName;
 
@@ -264,6 +281,7 @@ public sealed class HomeViewModel : ObservableObject
         if (value && _main.IsPhone && !await _main.EnsurePermissionAsync(Platform.AppPermission.NearbyDevices))
         {
             OnPropertyChanged(nameof(PreferDirect));
+            OnPropertyChanged(nameof(ShowsDirectNote));
             return;
         }
 
@@ -489,6 +507,16 @@ public sealed class HomeViewModel : ObservableObject
         device.IsSelected = true;
         _selected.Add(device);
         OnSelectionChanged();
+    }
+
+    /// <summary>Devices → Send: that device chosen (alone), ready for files.</summary>
+    public bool ChooseOnly(string deviceId)
+    {
+        _selectionIsAutomatic = false;
+        var device = Devices.FirstOrDefault(d => d.Id == deviceId);
+        if (device == null) return false;
+        SelectOnly(device);
+        return true;
     }
 
     private void SelectOnly(DeviceViewModel? device)

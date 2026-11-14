@@ -727,6 +727,7 @@ public sealed class BackupViewModel : ObservableObject
                 plan.Sources.RemoveAll(s => s.Kind is BackupSourceKinds.Photos or BackupSourceKinds.Videos);
             _node.Backup.Save(plan);
             Reload();
+            _main.Settings.Section = SettingsSection.Backup;
             _main.IsSettingsPage = true;
             await _main.ShowDialogAsync(new ConfirmViewModel(L.T("Backup is set up"),
                 L.T("This phone backs up to {0} by itself whenever both are on the same Wi-Fi. Only new and changed files are sent, encrypted, and only to {0}. Choose what is backed up in Settings → Backup.", plan.TargetName),

@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.App.Views.ActivityView"
+             x:DataType="vm:ActivityViewModel">
+  <!-- Activity: transfers now on top, the history below. -->
+  <ScrollViewer>
+    <StackPanel Classes="page" Spacing="22" MaxWidth="880" HorizontalAlignment="Stretch">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="4">
+          <TextBlock Classes="h1" Text="{l:T 'Activity'}" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{l:T 'Transfers in progress and what you sent and received lately.'}" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}" Command="{Binding Main.ClearFinishedCommand}"
+                IsVisible="{Binding Main.HasFinishedTransfers}" VerticalAlignment="Top" />
+      </Grid>
+
+      <!-- Nothing yet -->
+      <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" Spacing="10" Margin="0,48,0,0">
+        <Border Classes="iconBadge brand" Width="64" Height="64" CornerRadius="32" HorizontalAlignment="Center">
+          <PathIcon Data="{StaticResource IconActivity}" Width="26" Height="26" />
+        </Border>
+        <TextBlock Classes="h2" Text="{l:T 'No transfers yet'}" HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary" Text="{l:T 'Files you send or receive will be listed here.'}" HorizontalAlignment="Center"
+                   TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
+
+      <!-- Now -->
+      <StackPanel Spacing="10" IsVisible="{Binding HasCurrent}">
+        <TextBlock Classes="overline" Text="{l:T 'TRANSFERS'}" />
+        <ItemsControl ItemsSource="{Binding Main.Transfers}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="10" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:TransferViewModel">
+              <views:TransferCard />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- History -->
+      <StackPanel Spacing="10" IsVisible="{Binding HasHistory}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="overline" Text="{l:T 'HISTORY'}" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear history'}" Command="{Binding History.ClearCommand}" />
+        </Grid>
+        <Border Classes="card" Padding="0">
+          <ItemsControl ItemsSource="{Binding History.Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:HistoryItemViewModel">
+                <views:HistoryRow />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+        <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'Beam doesn\'t keep copies of the files: only this list.'}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

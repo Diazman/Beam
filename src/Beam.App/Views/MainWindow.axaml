@@ -15,37 +15,43 @@
 
 
   <Panel>
-    <Grid ColumnDefinitions="Auto,*,Auto">
-      <!-- Navigation rail -->
-      <Border Width="88"
+    <Grid ColumnDefinitions="Auto,*">
+      <!-- Navigation: the four destinations, Settings apart at the bottom -->
+      <Border Width="92"
               Background="{DynamicResource RailBackgroundBrush}"
               BorderBrush="{DynamicResource DividerBrush}"
               BorderThickness="0,0,1,0">
-        <StackPanel Margin="0,18,0,0" Spacing="4" HorizontalAlignment="Center">
-          <Image Source="avares://Beam.UI/Assets/beam.png" Width="34" Height="34" Margin="0,0,0,18"
-                 ToolTip.Tip="Beam" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
-                       Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Receive'}"
-                       Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Browser'}"
-                       Tag="{StaticResource IconGlobe}" IsChecked="{Binding IsPhonePage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'History'}"
-                       Tag="{StaticResource IconHistory}" IsChecked="{Binding IsHistoryPage}" />
-          <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Settings'}"
+        <DockPanel Margin="0,20,0,16">
+          <Image DockPanel.Dock="Top" Source="avares://Beam.UI/Assets/beam.png" Width="40" Height="40" HorizontalAlignment="Center"
+                 Margin="0,0,0,22" ToolTip.Tip="Beam" />
+          <RadioButton DockPanel.Dock="Bottom" Classes="nav" GroupName="nav" Content="{l:T 'Settings'}" HorizontalAlignment="Center"
                        Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
-        </StackPanel>
+          <StackPanel Spacing="6" HorizontalAlignment="Center">
+            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Send'}"
+                         Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
+            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Receive'}"
+                         Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
+            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Devices'}"
+                         Tag="{StaticResource IconDevices}" IsChecked="{Binding IsDevicesPage}" />
+            <Panel>
+              <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Activity'}"
+                           Tag="{StaticResource IconActivity}" IsChecked="{Binding IsActivityPage}" />
+              <Border Classes="navBadge" Margin="0,4,12,0" IsVisible="{Binding HasActiveTransfers}">
+                <TextBlock Text="{Binding ActiveTransferBadge}" />
+              </Border>
+            </Panel>
+          </StackPanel>
+        </DockPanel>
       </Border>
 
-      <!-- Current page -->
+      <!-- Current page; someone browsing this device shows above it, with Stop -->
       <DockPanel Grid.Column="1">
-        <!-- Someone is browsing this device: who, and Stop -->
         <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Visits}" IsVisible="{Binding HasVisits}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:BrowseVisitViewModel">
-              <Border Background="{DynamicResource AccentSoftBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
+              <Border Background="{DynamicResource AccentSoftBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="20,9">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                  <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                  <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource AccentGradientBrush}" VerticalAlignment="Center" />
                   <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="10,0" />
                   <Button Grid.Column="2" Content="{l:T 'Stop'}" Command="{Binding StopCommand}" VerticalAlignment="Center" />
                 </Grid>
@@ -53,38 +59,8 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <ContentControl Content="{Binding CurrentPage}" />
+        <ContentControl Classes="pageHost" Content="{Binding CurrentPage}" />
       </DockPanel>
-
-      <!-- Transfers panel (only while there are transfers) -->
-      <Border Grid.Column="2" Width="340"
-              IsVisible="{Binding HasTransfers}"
-              Background="{DynamicResource RailBackgroundBrush}"
-              BorderBrush="{DynamicResource DividerBrush}"
-              BorderThickness="1,0,0,0">
-        <DockPanel>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="20,24,14,12">
-            <TextBlock Classes="h2" Text="{l:T 'Transfers'}" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}"
-                    Command="{Binding ClearFinishedCommand}"
-                    IsVisible="{Binding HasFinishedTransfers}" />
-          </Grid>
-          <ScrollViewer>
-            <ItemsControl ItemsSource="{Binding Transfers}" Margin="14,0,14,14">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Spacing="10" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:TransferViewModel">
-                  <views:TransferCard />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </DockPanel>
-      </Border>
     </Grid>
 
     <!-- Shown while files are dragged over the window -->

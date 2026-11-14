@@ -1,77 +1,126 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    Beam's colours. One set of names for both themes: every view uses these, never a colour of its own.
+    Dark (the default) is Beam's signature: deep navy and near-black, with the electric blue → cyan of the logo.
+  -->
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
-      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F3F4F7" />
-      <SolidColorBrush x:Key="RailBackgroundBrush" Color="#EBEDF1" />
+      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F4F6FB" />
+      <SolidColorBrush x:Key="RailBackgroundBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="CardBorderBrush" Color="#E2E5EA" />
-      <SolidColorBrush x:Key="SubtleBrush" Color="#F4F5F8" />
-      <SolidColorBrush x:Key="HoverBrush" Color="#0A000000" />
-      <SolidColorBrush x:Key="DividerBrush" Color="#E7E9ED" />
-      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#14171C" />
-      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#565E6B" />
-      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7F8794" />
+      <SolidColorBrush x:Key="CardBorderBrush" Color="#E2E7F1" />
+      <SolidColorBrush x:Key="SubtleBrush" Color="#EEF2F9" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#0B0B1530" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#E6EAF2" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#0B1224" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4B5675" />
+      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7B86A3" />
       <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
-      <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8EFFE" />
-      <SolidColorBrush x:Key="AccentTextBrush" Color="#1D4FD8" />
-      <SolidColorBrush x:Key="SuccessBrush" Color="#15803D" />
-      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#E6F6EC" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#E7EFFF" />
+      <SolidColorBrush x:Key="AccentTextBrush" Color="#1D4ED8" />
+      <SolidColorBrush x:Key="AccentGlowBrush" Color="#332563EB" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#0F8A4B" />
+      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#E3F6EC" />
       <SolidColorBrush x:Key="WarningBrush" Color="#B45309" />
-      <SolidColorBrush x:Key="WarningSoftBrush" Color="#FDF3E3" />
+      <SolidColorBrush x:Key="WarningSoftBrush" Color="#FDF1DE" />
       <SolidColorBrush x:Key="DangerBrush" Color="#C42B2B" />
-      <SolidColorBrush x:Key="DangerSoftBrush" Color="#FCEBEB" />
-      <SolidColorBrush x:Key="OverlayBrush" Color="#59101318" />
-      <SolidColorBrush x:Key="DropZoneStrokeBrush" Color="#B9C1CD" />
+      <SolidColorBrush x:Key="DangerSoftBrush" Color="#FCE9E9" />
+      <SolidColorBrush x:Key="OverlayBrush" Color="#660B1224" />
+      <SolidColorBrush x:Key="DropZoneStrokeBrush" Color="#B8C3D9" />
       <SolidColorBrush x:Key="DialogBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
       <!-- Fluent button overrides: light, bordered secondary buttons -->
       <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F5F6F8" />
-      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#ECEEF2" />
-      <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#F5F6F8" />
-      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#D5DAE1" />
-      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#C3C9D2" />
-      <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#C3C9D2" />
-      <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#E4E7EB" />
-      <SolidColorBrush x:Key="ButtonForeground" Color="#14171C" />
-      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#14171C" />
-      <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#3A404A" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F3F6FC" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#E9EEF7" />
+      <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#F3F5FA" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#D3DAE8" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#BCC6DA" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#BCC6DA" />
+      <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#E3E7F0" />
+      <SolidColorBrush x:Key="ButtonForeground" Color="#0B1224" />
+      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#0B1224" />
+      <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#33405E" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#F6F8FC" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#EEF2F9" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#E2E7F1" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="#D3DAE8" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="#D3DAE8" />
+      <SolidColorBrush x:Key="ExpanderContentBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#E2E7F1" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
-      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#191A1E" />
-      <SolidColorBrush x:Key="RailBackgroundBrush" Color="#141518" />
-      <SolidColorBrush x:Key="CardBrush" Color="#232429" />
-      <SolidColorBrush x:Key="CardBorderBrush" Color="#33353C" />
-      <SolidColorBrush x:Key="SubtleBrush" Color="#2A2C32" />
-      <SolidColorBrush x:Key="HoverBrush" Color="#12FFFFFF" />
-      <SolidColorBrush x:Key="DividerBrush" Color="#2E3036" />
-      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F1F2F4" />
-      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A9AFB9" />
-      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7E8590" />
-      <SolidColorBrush x:Key="AccentBrush" Color="#4C8DFF" />
-      <SolidColorBrush x:Key="AccentSoftBrush" Color="#1D2A45" />
-      <SolidColorBrush x:Key="AccentTextBrush" Color="#7AAAFF" />
-      <SolidColorBrush x:Key="SuccessBrush" Color="#4ADE80" />
-      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#173022" />
+      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#0A0F1E" />
+      <SolidColorBrush x:Key="RailBackgroundBrush" Color="#070B16" />
+      <SolidColorBrush x:Key="CardBrush" Color="#111933" />
+      <SolidColorBrush x:Key="CardBorderBrush" Color="#1D2747" />
+      <SolidColorBrush x:Key="SubtleBrush" Color="#16203D" />
+      <SolidColorBrush x:Key="HoverBrush" Color="#14A9C1FF" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#1B2443" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#EEF2FF" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9EAACA" />
+      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6C789B" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#4F8CFF" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#16264F" />
+      <SolidColorBrush x:Key="AccentTextBrush" Color="#7FB4FF" />
+      <SolidColorBrush x:Key="AccentGlowBrush" Color="#404F8CFF" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#34D399" />
+      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#0F2E2A" />
       <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24" />
-      <SolidColorBrush x:Key="WarningSoftBrush" Color="#352A12" />
+      <SolidColorBrush x:Key="WarningSoftBrush" Color="#2E2614" />
       <SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
-      <SolidColorBrush x:Key="DangerSoftBrush" Color="#3A1D20" />
-      <SolidColorBrush x:Key="OverlayBrush" Color="#99000000" />
-      <SolidColorBrush x:Key="DropZoneStrokeBrush" Color="#4A4E57" />
-      <SolidColorBrush x:Key="DialogBrush" Color="#26272D" />
-      <SolidColorBrush x:Key="ButtonBackground" Color="#2D2F35" />
-      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#34373E" />
-      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#2A2C31" />
-      <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#26282D" />
-      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#3D4047" />
-      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#4A4E57" />
-      <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#4A4E57" />
-      <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#33353B" />
-      <SolidColorBrush x:Key="ButtonForeground" Color="#F1F2F4" />
-      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#F1F2F4" />
-      <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#C9CDD4" />
+      <SolidColorBrush x:Key="DangerSoftBrush" Color="#33161E" />
+      <SolidColorBrush x:Key="OverlayBrush" Color="#B3030611" />
+      <SolidColorBrush x:Key="DropZoneStrokeBrush" Color="#2E3B66" />
+      <SolidColorBrush x:Key="DialogBrush" Color="#101836" />
+      <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBackground" Color="#152043" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1B2851" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#131C3B" />
+      <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#111933" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#25325A" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#33437A" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#33437A" />
+      <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="#1B2443" />
+      <SolidColorBrush x:Key="ButtonForeground" Color="#EEF2FF" />
+      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#C9D3F0" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#111933" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#152043" />
+      <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#131C3B" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#1D2747" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="#25325A" />
+      <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="#25325A" />
+      <SolidColorBrush x:Key="ExpanderContentBackground" Color="#111933" />
+      <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#1D2747" />
+      <!-- Inputs and switches on navy -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#0E1530" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#111a3a" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#0E1530" />
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#2A3863" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#152043" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#25325A" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#111933" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
+
+  <!-- The brand gradient: electric blue → cyan (the logo, primary buttons, progress, selection). -->
+  <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#2F6BFF" />
+    <GradientStop Offset="1" Color="#14C8EC" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="AccentGradientHorizontalBrush" StartPoint="0%,50%" EndPoint="100%,50%">
+    <GradientStop Offset="0" Color="#2F6BFF" />
+    <GradientStop Offset="1" Color="#14C8EC" />
+  </LinearGradientBrush>
+  <!-- A faint wash of the gradient behind a hero area (Receive, the drop zone). -->
+  <LinearGradientBrush x:Key="AccentWashBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#262F6BFF" />
+    <GradientStop Offset="1" Color="#1414C8EC" />
+  </LinearGradientBrush>
+
   <Thickness x:Key="ButtonBorderThemeThickness">1</Thickness>
+  <!-- Corner radii: buttons and inputs 10, cards 16, dialogs 20 (set in Controls.axaml). -->
 </ResourceDictionary>

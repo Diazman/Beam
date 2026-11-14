@@ -109,7 +109,7 @@ public sealed class AppSettings
 
     public bool NotifyOnDeviceFound { get; set; }
 
-    public ThemePreference Theme { get; set; } = ThemePreference.System;
+    public ThemePreference Theme { get; set; } = ThemePreference.Dark; // Beam's deep navy look; light and "follow system" in Settings
 
     /// <summary>Same network (default) or a direct link; can also be switched during a transfer.</summary>
     public ConnectionMethod Connection { get; set; } = ConnectionMethod.SameNetwork;
