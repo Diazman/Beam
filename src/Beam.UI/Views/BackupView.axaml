@@ -1,0 +1,278 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.App.Views.BackupView"
+             x:DataType="vm:BackupViewModel">
+  <!--
+    Backup: how it stands first (and Back up now), what is backed up one level down. On a computer: the phones that
+    back up here, and where to.
+  -->
+  <ScrollViewer>
+    <StackPanel Classes="page" Spacing="22" MaxWidth="880" HorizontalAlignment="Stretch">
+      <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="{l:T 'Backup'}" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding IsPhone}"
+                   Text="{l:T 'Your photos, videos and folders, backed up to your own computer by themselves. Over your Wi-Fi, never the internet.'}" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding IsComputer}"
+                   Text="{l:T 'Your phones back up their photos, videos and folders here by themselves, over your Wi-Fi. Never the internet.'}" />
+      </StackPanel>
+        <views:SettingsGear Grid.Column="1" />
+      </Grid>
+
+      <!-- ================= A phone ================= -->
+      <!-- Not set up yet: what it is, and one button -->
+      <Border Classes="hero" IsVisible="{Binding ShowsSetUp}">
+        <Panel>
+          <Rectangle RadiusX="20" RadiusY="20" Fill="{DynamicResource AccentWashBrush}" Margin="-28" IsHitTestVisible="False" />
+          <StackPanel Spacing="12" HorizontalAlignment="Center" Margin="0,6">
+            <Border Classes="iconBadge brand" Width="64" Height="64" CornerRadius="32" HorizontalAlignment="Center">
+              <PathIcon Data="{StaticResource IconBackup}" Width="28" Height="28" />
+            </Border>
+            <TextBlock Classes="h2" Text="{l:T 'Back up this phone to your computer'}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+            <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="480" HorizontalAlignment="Center"
+                       Text="{l:T 'On the computer, open Beam → Backup → Add a phone, then scan the code shown there.'}" />
+            <Button Classes="accent large" Content="{l:T 'Set up backup'}" Command="{Binding SetUpCommand}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+          </StackPanel>
+        </Panel>
+      </Border>
+
+      <!-- Set up: how it stands -->
+      <Border Classes="hero" Padding="22" IsVisible="{Binding HasPlan}">
+        <StackPanel Spacing="14">
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="iconBadge brand" Width="48" Height="48" CornerRadius="24" VerticalAlignment="Top">
+              <PathIcon Data="{StaticResource IconBackup}" Width="22" Height="22" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="14,0,0,0" Spacing="2" VerticalAlignment="Center">
+              <TextBlock Classes="h2" Text="{Binding TargetText}" TextWrapping="Wrap" />
+              <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding StatusText}" />
+            </StackPanel>
+          </Grid>
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRunning}" />
+          <WrapPanel Orientation="Horizontal">
+            <Button Classes="accent" Content="{l:T 'Back up now'}" Command="{Binding BackUpNowCommand}" Margin="0,0,8,6" />
+            <Button Content="{l:T 'Stop backup'}" Command="{Binding StopCommand}" Margin="0,0,8,6" />
+          </WrapPanel>
+          <TextBlock Classes="caption" TextWrapping="Wrap"
+                     Text="{l:T 'Files go only to this computer, encrypted, over your Wi-Fi. Nothing is deleted on the computer when you delete it here.'}" />
+          <Separator />
+          <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+              <TextBlock Classes="h3" Text="{l:T 'Back up automatically'}" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Whenever this phone and the computer are on the same Wi-Fi. Mobile data is never used.'}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Automatic}" Margin="16,0,0,0" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- What is backed up: one level down -->
+      <Expander IsExpanded="{Binding ShowsChoices}" IsVisible="{Binding HasPlan}">
+        <Expander.Header>
+          <StackPanel Spacing="2">
+            <TextBlock Classes="h3" Text="{l:T 'What is backed up'}" />
+            <TextBlock Classes="caption" Text="{Binding ChoicesSummary}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Spacing="12" Margin="0,8,0,0">
+
+          <!-- From the whole phone: a switch each, and "Choose folders" (closed at first) -->
+          <ItemsControl ItemsSource="{Binding WholePhoneKinds}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:WholePhoneViewModel">
+                <StackPanel Spacing="6" Margin="0,4">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                      <TextBlock Text="{Binding Title}" />
+                      <TextBlock Classes="caption" TextWrapping="Wrap" Text="{Binding Caption}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsOn}" Margin="16,0,0,0" AutomationProperties.Name="{Binding Title}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOn}" Margin="16,0,0,0">
+                    <TextBlock Classes="caption" Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="link" Content="{Binding FoldersButtonText}" Command="{Binding ToggleFoldersCommand}"
+                            VerticalAlignment="Center" Margin="12,0,0,0" />
+                  </Grid>
+                  <StackPanel Spacing="2" Margin="16,0,0,0">
+                    <StackPanel.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="IsOn" />
+                        <Binding Path="ShowsFolders" />
+                      </MultiBinding>
+                    </StackPanel.IsVisible>
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+                    <TextBlock Classes="caption error" TextWrapping="Wrap" Text="{Binding LoadError}" IsVisible="{Binding HasLoadError}" />
+                    <CheckBox IsChecked="{Binding AllFolders}" MinHeight="32" IsVisible="{Binding !IsLoading}">
+                      <TextBlock Text="{l:T 'All folders'}" FontWeight="SemiBold" />
+                    </CheckBox>
+                    <ItemsControl ItemsSource="{Binding Folders}" Margin="24,0,0,0">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FolderChoiceViewModel">
+                          <StackPanel>
+                          <Grid ColumnDefinitions="*,Auto">
+                            <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" MinHeight="32" HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Stretch">
+                              <Grid ColumnDefinitions="Auto,Auto,Auto" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxWidth="190"
+                                           ToolTip.Tip="{Binding Name}" />
+                                <TextBlock Grid.Column="1" Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                <Border Grid.Column="2" Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center" Margin="6,0,0,0">
+                                  <TextBlock Text="{l:T 'New'}" FontSize="11" />
+                                </Border>
+                              </Grid>
+                            </CheckBox>
+                            <Button Grid.Column="1" Classes="link" Content="{Binding ChildrenButtonText}" Command="{Binding ToggleChildrenCommand}"
+                                    IsVisible="{Binding IsOther}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                          </Grid>
+                            <!-- "Other folders" opened: each of them -->
+                            <ItemsControl ItemsSource="{Binding Children}" IsVisible="{Binding ShowsChildren}" Margin="24,0,0,0">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FolderChoiceViewModel">
+                                  <Grid ColumnDefinitions="*,Auto">
+                            <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" MinHeight="32" HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Stretch">
+                              <Grid ColumnDefinitions="Auto,Auto,Auto" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxWidth="190"
+                                           ToolTip.Tip="{Binding Name}" />
+                                <TextBlock Grid.Column="1" Classes="caption" Text="{Binding Details}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                <Border Grid.Column="2" Classes="badge" IsVisible="{Binding IsNew}" VerticalAlignment="Center" Margin="6,0,0,0">
+                                  <TextBlock Text="{l:T 'New'}" FontSize="11" />
+                                </Border>
+                              </Grid>
+                            </CheckBox>
+                            <Button Grid.Column="1" Classes="link" Content="{Binding ChildrenButtonText}" Command="{Binding ToggleChildrenCommand}"
+                                    IsVisible="{Binding IsOther}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                          </Grid>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Separator />
+          <!-- Folders chosen one by one: a switch each, and the kinds of files to take from it -->
+          <StackPanel Spacing="2">
+            <TextBlock Classes="h3" Text="{l:T 'Folders'}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap" Text="{l:T 'Back up chosen kinds of files from one folder.'}" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Sources}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:BackupSourceViewModel">
+                <StackPanel Spacing="6" Margin="0,4">
+                  <Grid ColumnDefinitions="*,Auto,Auto">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="caption" Text="{Binding Details}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" OnContent="" OffContent="" VerticalAlignment="Center"
+                                  Margin="12,0,0,0" AutomationProperties.Name="{Binding Title}" />
+                    <Button Grid.Column="2" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                  </Grid>
+                  <!-- A folder: which kinds of its files. Closed: what is chosen, and a button to change it. Open: a
+                       checkbox each (the documents under "Documents", "Other" last), indented under the folder. -->
+                  <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsFolder}" Margin="16,0,0,0">
+                    <TextBlock Classes="caption" Text="{Binding KindsSummary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="link" Content="{Binding KindsButtonText}" Command="{Binding ToggleKindsCommand}"
+                            VerticalAlignment="Center" Margin="12,0,0,0" />
+                  </Grid>
+                  <CheckBox IsChecked="{Binding AllTypes}" IsVisible="{Binding ShowsKinds}" Margin="16,0,0,0" MinHeight="32">
+                    <TextBlock Text="{l:T 'All file types'}" FontWeight="SemiBold" />
+                  </CheckBox>
+                  <ItemsControl ItemsSource="{Binding FileKinds}" IsVisible="{Binding ShowsKinds}" Margin="16,0,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:FileKindViewModel">
+                        <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEditable}" Classes.child="{Binding IsChild}" MinHeight="32">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                            <TextBlock Classes="caption" Text="{Binding Details}" IsVisible="{Binding HasDetails}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </CheckBox>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Classes="caption error" TextWrapping="Wrap" IsVisible="{Binding HasNoKinds}" Margin="16,0,0,0"
+                             Text="{l:T 'Nothing is backed up from this folder. Tick at least one kind of file.'}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="{l:T 'Add a folder…'}" Command="{Binding AddFolderCommand}" HorizontalAlignment="Left" />
+          <Separator />
+          <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+              <TextBlock Classes="h3" Text="{l:T 'Keep the phone\'s folder names'}" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Off: files are sorted on the computer into Photos, Videos, Documents and other folders by kind. On: they keep the folders they are in on this phone.'}" />
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding KeepFolderNames}" Margin="16,0,0,0" />
+          </Grid>
+        </StackPanel>
+      </Expander>
+
+      <Border Classes="notice error" IsVisible="{Binding HasMessage}">
+        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="13" />
+      </Border>
+
+      <!-- ================= A computer ================= -->
+      <!-- The computer: phones that back up here -->
+      <Border Classes="hero" Padding="22" IsVisible="{Binding IsComputer}">
+        <StackPanel Spacing="16">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="h3" Text="{l:T 'Back up phones to this computer'}" />
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{l:T 'A phone you add backs up its photos, videos or folders here by itself whenever it is on the same Wi-Fi. Only phones you add can back up here.'}" />
+            <Button Classes="accent" Content="{l:T 'Add a phone…'}" Command="{Binding AddPhoneCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+          </StackPanel>
+          <StackPanel Spacing="8" IsVisible="{Binding HasPartners}">
+            <Separator />
+            <ItemsControl ItemsSource="{Binding Partners}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BackupPartnerViewModel">
+                  <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                    <PathIcon Data="{StaticResource IconShield}" Width="16" Height="16" Foreground="{DynamicResource SuccessBrush}" />
+                    <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Name}" />
+                      <TextBlock Classes="caption" Text="{Binding Details}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Details}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                      <Button Content="{l:T 'Open folder'}" Command="{Binding OpenCommand}" />
+                      <Button Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" />
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <Separator />
+          <StackPanel Spacing="6">
+            <TextBlock Classes="h3" Text="{l:T 'Save backups to'}" />
+            <Grid ColumnDefinitions="Auto,*">
+              <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource TextSecondaryBrush}" />
+              <TextBlock Grid.Column="1" Text="{Binding BackupFolder}" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding BackupFolder}" VerticalAlignment="Center" />
+            </Grid>
+            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <Button Content="{l:T 'Change…'}" Command="{Binding ChangeFolderCommand}" Margin="0,0,8,6" />
+              <Button Content="{l:T 'Open folder'}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,6" />
+            </WrapPanel>
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{l:T 'Each phone gets its own folder here. Nothing is deleted here when it is deleted on the phone.'}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

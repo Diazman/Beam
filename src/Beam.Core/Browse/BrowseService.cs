@@ -124,7 +124,7 @@ public sealed partial class BrowseService
 
     /// <summary>
     /// Switches browsing on or off. The first time it is on, the usual folders are shared (the user changes them in
-    /// Settings → Browsing). Off ends every visit.
+    /// Files → What you share). Off ends every visit.
     /// </summary>
     public void SetEnabled(bool enabled)
     {
@@ -236,7 +236,7 @@ public sealed partial class BrowseService
             // Not even told whether browsing is on: only trusted devices learn anything.
             Log.Warn($"Browse: refused \"{name}\" ({hello.DeviceId}): not a trusted device");
             await RefuseAsync(channel, BrowseReasons.NotTrusted,
-                L.T("{0} doesn't trust this device. Add each other as trusted devices first (Settings → Trusted devices).", settings.DeviceName), token).ConfigureAwait(false);
+                L.T("{0} doesn't trust this device. Add each other as trusted devices first (Files → Add a trusted device).", settings.DeviceName), token).ConfigureAwait(false);
             return;
         }
 
@@ -249,7 +249,7 @@ public sealed partial class BrowseService
         if (!settings.BrowsingEnabled)
         {
             await RefuseAsync(channel, BrowseReasons.Off,
-                L.T("Browsing is off on {0}. Turn it on there: Settings → Browsing.", settings.DeviceName), token).ConfigureAwait(false);
+                L.T("Browsing is off on {0}. Turn it on there: Files → What you share.", settings.DeviceName), token).ConfigureAwait(false);
             return;
         }
 

@@ -57,10 +57,15 @@ public class LanguageUiTests
             await UiHarness.PumpAsync(100);
             app.Screenshot($"language-{language}-activity");
 
-            app.ViewModel.Navigate(Page.Devices);
+            app.ViewModel.Navigate(Page.Files);
             await UiHarness.PumpAsync(100);
             Assert.Contains(L.T("Add a trusted device"), app.VisibleTexts());
-            app.Screenshot($"language-{language}-devices");
+            app.Screenshot($"language-{language}-files");
+
+            app.ViewModel.Navigate(Page.Backup);
+            await UiHarness.PumpAsync(100);
+            Assert.Contains(L.T("Back up phones to this computer"), app.VisibleTexts());
+            app.Screenshot($"language-{language}-backup");
 
             app.ViewModel.Navigate(Page.Receive);
             await UiHarness.PumpAsync(100);

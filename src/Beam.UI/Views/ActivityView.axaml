@@ -9,12 +9,11 @@
   <ScrollViewer>
     <StackPanel Classes="page" Spacing="22" MaxWidth="880" HorizontalAlignment="Stretch">
       <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Spacing="4">
-          <TextBlock Classes="h1" Text="{l:T 'Activity'}" />
-          <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{l:T 'Transfers in progress and what you sent and received lately.'}" />
-        </StackPanel>
-        <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}" Command="{Binding Main.ClearFinishedCommand}"
-                IsVisible="{Binding Main.HasFinishedTransfers}" VerticalAlignment="Top" />
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="{l:T 'Activity'}" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{l:T 'Transfers in progress and what you sent and received lately.'}" />
+      </StackPanel>
+        <views:SettingsGear Grid.Column="1" />
       </Grid>
 
       <!-- Nothing yet -->
@@ -29,7 +28,11 @@
 
       <!-- Now -->
       <StackPanel Spacing="10" IsVisible="{Binding HasCurrent}">
-        <TextBlock Classes="overline" Text="{l:T 'TRANSFERS'}" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="overline" Text="{l:T 'TRANSFERS'}" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="link" Content="{l:T 'Clear finished'}" Command="{Binding Main.ClearFinishedCommand}"
+                  IsVisible="{Binding Main.HasFinishedTransfers}" />
+        </Grid>
         <ItemsControl ItemsSource="{Binding Main.Transfers}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>

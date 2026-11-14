@@ -54,7 +54,7 @@ public sealed class TrustedDevice
     public List<string> Addresses { get; set; } = new();
 }
 
-/// <summary>A folder trusted devices may browse (Settings → Browsing).</summary>
+/// <summary>A folder trusted devices may browse (Files → What you share).</summary>
 public sealed class SharedFolder
 {
     /// <summary>Stable and opaque: what browsing devices name it by (never the path).</summary>

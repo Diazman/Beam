@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
              xmlns:l="using:Beam.App.Localization"
              x:Class="Beam.App.Views.HomeView"
              x:DataType="vm:HomeViewModel">
@@ -10,7 +11,7 @@
       <StackPanel Classes="page" Spacing="26" MaxWidth="880" HorizontalAlignment="Stretch">
 
         <!-- Header -->
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto">
           <StackPanel Spacing="4">
             <TextBlock Classes="h1" Text="{l:T 'Send'}" />
             <TextBlock Classes="secondary" TextWrapping="Wrap"
@@ -28,6 +29,7 @@
                          MaxWidth="200" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </Button>
+          <views:SettingsGear Grid.Column="2" />
         </Grid>
 
         <!-- A transfer running: how it goes, without leaving Send -->

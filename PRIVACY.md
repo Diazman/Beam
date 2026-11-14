@@ -62,7 +62,7 @@ internet.
 If you set it up, Beam backs up the photos, videos or folders you choose from your Android phone to your own
 computer, **directly over your Wi-Fi**, never over the internet or mobile data, and never to anyone else.
 
-- **Setting it up** – the computer shows a code (Settings → Backup → Add a phone) that the phone scans. The code
+- **Setting it up** – the computer shows a code (Backup → Add a phone) that the phone scans. The code
   works once, for one phone, for 10 minutes, and stops working after a few wrong tries. With it, the phone and
   the computer exchange the fingerprints of their encryption keys: from then on, the phone sends backups only to
   that computer, and the computer accepts backups only from that phone. Another device on your Wi-Fi can't take
@@ -91,7 +91,7 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 
 ## Trusted devices and browsing
 
-- **Adding a trusted device** – one device shows a code (Devices → Add a trusted device) and the
+- **Adding a trusted device** – one device shows a code (Files → Add a trusted device) and the
   other scans it, while both are on the same Wi-Fi. The code works once, for one device, for 10 minutes, and stops
   working after a few wrong tries. The two devices then store each other's name, identifier and encryption-key
   fingerprint, and trust each other: files between them are accepted without asking. On a phone, adding a trusted
@@ -112,7 +112,7 @@ computer, **directly over your Wi-Fi**, never over the internet or mobile data, 
 
 ## Devices without the app (sharing through a web browser)
 
-On Windows, "Share through a web browser" (Devices → "No Beam app on the other device?") runs a small web page on your local network that a phone
+On Windows, "Share through a web browser" (Files → "No Beam app on the other device?") runs a small web page on your local network that a phone
 can open by scanning the code Beam shows. The link contains a random secret that changes every time, and the page
 stops after 30 minutes without use. Files a phone sends are saved only if you accept them. Beam sees the phone's
 local network address and the type of phone (from its browser) to show who is connecting; neither is stored or
@@ -181,7 +181,7 @@ Microsoft Store, Google Play or Apple's App Store are handled by those stores un
 
 - Hide your device from others (Settings).
 - Remove trusted or paired devices (Settings).
-- Stop backups, or remove a phone that backs up to your computer (Settings → Backup).
+- Stop backups, or remove a phone that backs up to your computer (Backup).
 - Clear the transfer history (History on Windows, Transfers on Android and iPhone).
 - Deny or revoke permissions at any time in the phone's settings; Beam keeps working over Wi-Fi without them
   (without notifications or direct connections).

@@ -126,7 +126,7 @@ encrypted by Beam (plain HTTP on the LAN).
 
 `Backup/BackupService` (one per node) backs a phone up to a computer over the shared network.
 
-- **Setup (once):** Settings → Backup → Add a phone on the computer shows a `PairingCode` with a `BackupToken`
+- **Setup (once):** Backup → Add a phone on the computer shows a `PairingCode` with a `BackupToken`
   (32 random bytes, one phone, 10 minutes, dropped after 5 wrong tries, compared in fixed time). The phone connects
   to the code's certificate only (`ConnectionPurpose.Backup`), sends `BackupRequest{setup, token}`, and on success
   stores a `BackupPlan` pinned to that certificate. The computer stores a `BackupPartner` (the phone's certificate
@@ -150,7 +150,7 @@ encrypted by Beam (plain HTTP on the LAN).
 
 ## Trusted devices and browsing
 
-- **`Trust/TrustService`:** Devices → Add a trusted device shows a `PairingCode` with a
+- **`Trust/TrustService`:** Files → Add a trusted device shows a `PairingCode` with a
   `TrustToken` (the same one-time rules as backups); the device that scans it connects to the code's certificate
   (`ConnectionPurpose.Pair`, LAN only) and both store the other as a `TrustedDevice` (and `DirectManager.Remember`,
   so Bluetooth and direct links know it).
@@ -179,11 +179,13 @@ with the same structure on both:
 
 - **Send** (`HomeView`): what to send (drop zone, files, text), who to send it to (nearby devices), the Send button; a
   card with the running transfer. **Receive** (`ReceiveView`): ready to receive as this device's name; addresses and the
-  pairing code under "Not showing up on the other device?". **Devices** (`DevicesView`): nearby and trusted devices
-  (Send, Browse, stop trusting), Add a trusted device, Connect by address, and sharing through a web browser
-  (`PhoneView`, a page under Devices). **Activity** (`ActivityView`): transfers now and the history. **Settings**
-  (`SettingsView`): sections General, Receiving, Shared folders, Backup, Connection, About (a list beside the open one on
-  the desktop; on phones the list, then the section).
+  pairing code under "Not showing up on the other device?". **Files** (`FilesView`): the trusted devices (Browse, Send,
+  stop trusting), Add a trusted device, what this device shares (the switch, the folders, adding files, who is browsing
+  now), and sharing through a web browser (`PhoneView`, a page under Files). **Backup** (`BackupView`): on a phone the
+  status and Back up now first, what is backed up one level down; on a computer the phones that back up here and where.
+  **Activity** (`ActivityView`): transfers now and the history. **Settings** (`SettingsView`): General, Receiving,
+  Connection, About (a list beside the open one on the desktop; on phones the list, then the section), from the rail on
+  the desktop and a gear in the page headers on phones.
 - **Design system** (`Styles/Colors.axaml`, `Styles/Controls.axaml`, `Styles/Icons.axaml`): colour tokens for the light
   theme and the default deep-navy dark theme, the brand gradient (electric blue → cyan) for primary buttons, progress,
   selection and the current destination; one type scale, card and control style. Views use these names only.

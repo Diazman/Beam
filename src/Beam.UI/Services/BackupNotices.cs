@@ -34,7 +34,7 @@ public static class BackupNotices
         // "All folders" off and a folder appeared (a new app's photos): it isn't backed up until the user ticks it.
         node.Backup.NewFolders += (target, kind, names) => platform.ShowNotification(
             L.Plural(names.Count, "New folder on this phone", "New folders on this phone"),
-            L.T("{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Settings → Backup → Choose folders.",
+            L.T("{0} ({1}) isn't backed up to {2}. To back it up, tick it in Beam: Backup → What is backed up.",
                 string.Join(", ", names), KindName(kind), target));
 
         node.Transfers.SessionFinished += session =>

@@ -124,7 +124,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Settings → Backup.</summary>
+    /// <summary>Backup.</summary>
     public BackupViewModel Backup { get; }
 
     public int MaxNameLength => AppSettings.MaxDeviceNameLength;

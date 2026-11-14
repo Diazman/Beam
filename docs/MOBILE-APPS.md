@@ -28,7 +28,7 @@ The APK is `artifacts/android/com.diazman.beam-Signed.apk`. To sign it with your
 `-p:AndroidKeyStore=true -p:AndroidSigningKeyStore=beam.keystore -p:AndroidSigningKeyAlias=beam -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD -p:AndroidSigningKeyPass=env:ANDROID_KEY_PASSWORD`
 and set those two environment variables.
 
-**Backups.** Settings → Backup sets up automatic backups to a computer (scan the code from the computer's Settings →
+**Backups.** Backup sets up automatic backups to a computer (scan the code from the computer's Settings →
 Backup → Add a phone). Android runs `BackupJobService` about every 15 minutes on Wi-Fi; Google Play's review asks
 why the app reads photos, videos and music (the answer: to back them up to the user's own computer, chosen by the
 user). "Documents" uses `MANAGE_EXTERNAL_STORAGE` ("All files access"): Play Console asks for a declaration form

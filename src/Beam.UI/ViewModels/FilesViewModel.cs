@@ -58,18 +58,18 @@ public sealed class DeviceRowViewModel
 }
 
 /// <summary>
-/// Devices: everything about other devices in one place. Nearby and trusted devices (send to one, browse a trusted
-/// one's shared folders, stop trusting it), adding a trusted device, connecting by address, scanning a code, and
+/// Files: browsing the shared folders of trusted devices, and sharing this device's own folders with them. The trusted
+/// devices (Browse, Send, stop trusting), adding one, what this device shares (and who is browsing it now), and
 /// sharing with a device that has no Beam app through its web browser.
 /// </summary>
-public sealed class DevicesViewModel : ObservableObject
+public sealed class FilesViewModel : ObservableObject
 {
     private readonly BeamNode _node;
     private readonly IPlatformServices _platform;
     private readonly MainViewModel _main;
     private bool _rebuildQueued;
 
-    public DevicesViewModel(BeamNode node, IPlatformServices platform, MainViewModel main)
+    public FilesViewModel(BeamNode node, IPlatformServices platform, MainViewModel main)
     {
         _node = node;
         _platform = platform;
@@ -99,6 +99,12 @@ public sealed class DevicesViewModel : ObservableObject
 
     public bool IsAddingTrusted => _main.Settings.IsAddingTrusted;
 
+    /// <summary>What this device shares with trusted devices (the switch, the folders, adding files).</summary>
+    public SettingsViewModel Settings => _main.Settings;
+
+    /// <summary>Who is browsing this device now (with Stop).</summary>
+    public MainViewModel Main => _main;
+
     /// <summary>Sharing with a device that has no Beam app, through its web browser (computers).</summary>
     public bool CanShareWithBrowser => !_platform.IsPhone;
 
@@ -117,23 +123,20 @@ public sealed class DevicesViewModel : ObservableObject
         });
     }
 
-    /// <summary>Nearby devices first (trusted ones among them marked), then trusted devices that aren't nearby now.</summary>
+    /// <summary>The trusted devices: the ones nearby now first.</summary>
     private void Rebuild()
     {
         var rows = new List<DeviceRowViewModel>();
-        var trusted = _main.Settings.TrustedDevices.ToList();
-        foreach (var device in _main.Home.Devices)
+        foreach (var trusted in _main.Settings.TrustedDevices)
         {
-            var info = device.Device;
-            var match = trusted.FirstOrDefault(t => t.Device.DeviceId == info.Id
-                                                    || string.Equals(t.Device.Fingerprint, info.Fingerprint, StringComparison.OrdinalIgnoreCase));
-            if (match != null) trusted.Remove(match);
-            rows.Add(new DeviceRowViewModel(info.Id, device.Name, device.Icon, StatusOf(info), true, match, Send, Browse));
+            var nearby = _main.Home.Devices.FirstOrDefault(d => d.Id == trusted.Device.DeviceId
+                                                               || string.Equals(d.Device.Fingerprint, trusted.Device.Fingerprint, StringComparison.OrdinalIgnoreCase));
+            rows.Add(nearby != null
+                ? new DeviceRowViewModel(nearby.Id, nearby.Name, nearby.Icon, StatusOf(nearby.Device), true, trusted, Send, Browse)
+                : new DeviceRowViewModel(trusted.Device.DeviceId, trusted.Name, Icons.Get("IconDevices"), L.T("Not nearby right now"), false, trusted, Send, Browse));
         }
 
-        foreach (var device in trusted)
-            rows.Add(new DeviceRowViewModel(device.Device.DeviceId, device.Name, Icons.Get("IconDevices"),
-                L.T("Not nearby right now"), false, device, Send, Browse));
+        rows = rows.OrderBy(r => r.IsNearby ? 0 : 1).ToList();
 
         // Rebuilt only when something shown changed (keeps a menu that is open from closing).
         static string Key(DeviceRowViewModel r) => $"{r.Id}|{r.Name}|{r.Status}|{r.IsNearby}|{r.IsTrusted}|{r.AlwaysBrowse}";

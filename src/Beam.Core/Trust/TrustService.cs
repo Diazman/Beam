@@ -74,7 +74,7 @@ public sealed class TrustService
     {
         if (string.IsNullOrEmpty(code.TrustToken))
             throw new TransferException(TransferErrorKind.Protocol,
-                L.T("This isn't a code for adding a trusted device. On the other device, open Settings → Trusted devices → Add a trusted device."));
+                L.T("This isn't a code for adding a trusted device. On the other device, open Files → Add a trusted device."));
         if (string.Equals(code.Fingerprint, _transfers.Identity.Fingerprint, StringComparison.OrdinalIgnoreCase))
             throw new TransferException(TransferErrorKind.Protocol, L.T("This is this device's own code."));
         var endpoints = code.ToDevice().Endpoints.Concat(_discovery.Find(code.DeviceId)?.Endpoints ?? Array.Empty<IPEndPoint>())
@@ -144,7 +144,7 @@ public sealed class TrustService
             await connection.Channel.SendAsync(FrameType.PairResponse, new PairResponseMessage
             {
                 Ok = false,
-                Message = L.T("This code isn't valid any more. Show a new one on the other device (Settings → Trusted devices → Add a trusted device) and scan it."),
+                Message = L.T("This code isn't valid any more. Show a new one on the other device (Files → Add a trusted device) and scan it."),
             }, token).ConfigureAwait(false);
             return;
         }

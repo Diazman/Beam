@@ -15,7 +15,7 @@ using Beam.Core.Transfer;
 namespace Beam.App.ViewModels;
 
 /// <summary>
-/// Where the user is. Four destinations (Send, Receive, Devices, Activity) and Settings, the same on the desktop
+/// Where the user is. Five destinations (Send, Receive, Files, Backup, Activity) and Settings, the same on the desktop
 /// and on phones; the others are opened from one of them and belong to it.
 /// </summary>
 public enum Page
@@ -24,17 +24,20 @@ public enum Page
     Home,
     Receive,
 
-    /// <summary>Nearby and trusted devices, adding one, browsing one, sharing with a web browser.</summary>
-    Devices,
+    /// <summary>Browsing trusted devices' shared folders, and sharing this device's (with a web browser too).</summary>
+    Files,
+
+    /// <summary>Backing a phone up to a computer, and taking phones' backups on a computer.</summary>
+    Backup,
 
     /// <summary>Transfers running now, and the history.</summary>
     Activity,
     Settings,
 
-    /// <summary>Under Devices: sharing with a device that has no Beam app, through its web browser.</summary>
+    /// <summary>Under Files: sharing with a device that has no Beam app, through its web browser.</summary>
     Phone,
 
-    /// <summary>Under Devices: a trusted device's shared folders.</summary>
+    /// <summary>Under Files: a trusted device's shared folders.</summary>
     Browse,
 }
 
@@ -70,7 +73,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         History = new HistoryViewModel(node.History, platform, this);
         Settings = new SettingsViewModel(node, platform, ui, this);
         Activity = new ActivityViewModel(this);
-        Devices = new DevicesViewModel(node, platform, this);
+        Files = new FilesViewModel(node, platform, this);
 
         ClearFinishedCommand = new RelayCommand(ClearFinished);
         DismissDialogCommand = new RelayCommand(() => Dialog?.Dismiss());
@@ -128,13 +131,20 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
     /// <summary>Transfers running now and the history (the Activity destination).</summary>
     public ActivityViewModel Activity { get; }
 
-    public DevicesViewModel Devices { get; }
+    public FilesViewModel Files { get; }
+
+    /// <summary>The Backup destination (the phone's backup, or the phones backing up to this computer).</summary>
+    public BackupViewModel Backup => Settings.Backup;
+
+    /// <summary>Backup is offered here (computers, and Android phones; not iPhones yet).</summary>
+    public bool HasBackup => Settings.Backup.IsAvailable;
 
     public object CurrentPage => _page switch
     {
         Page.Phone => Phone,
         Page.Receive => Receive,
-        Page.Devices => Devices,
+        Page.Files => Files,
+        Page.Backup => Settings.Backup,
         Page.Activity => Activity,
         Page.Settings => Settings,
         Page.Browse when _browse != null => _browse,
@@ -161,17 +171,26 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         }
     }
 
-    /// <summary>Devices, or a page opened from it (web browser sharing, browsing a device): the rail shows Devices.</summary>
-    public bool IsDevicesPage
+    /// <summary>Files, or a page opened from it (web browser sharing, browsing a device): the navigation shows Files.</summary>
+    public bool IsFilesPage
     {
-        get => _page is Page.Devices or Page.Phone or Page.Browse;
+        get => _page is Page.Files or Page.Phone or Page.Browse;
         set
         {
-            if (value && _page is not (Page.Devices or Page.Phone or Page.Browse)) Navigate(Page.Devices);
+            if (value && _page is not (Page.Files or Page.Phone or Page.Browse)) Navigate(Page.Files);
         }
     }
 
-    /// <summary>Sharing with a web browser (a page under Devices).</summary>
+    public bool IsBackupPage
+    {
+        get => _page == Page.Backup;
+        set
+        {
+            if (value && HasBackup) Navigate(Page.Backup);
+        }
+    }
+
+    /// <summary>Sharing with a web browser (a page under Files).</summary>
     public bool IsPhonePage
     {
         get => _page == Page.Phone;
@@ -180,6 +199,13 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
             if (value) Navigate(Page.Phone);
         }
     }
+
+    /// <summary>Phones: the Settings gear shows on the five main pages (Settings has no tab there).</summary>
+    public bool ShowsSettingsButton => _page is Page.Home or Page.Receive or Page.Files or Page.Backup or Page.Activity;
+
+    public RelayCommand OpenSettingsCommand => _openSettings ??= new RelayCommand(() => Navigate(Page.Settings));
+
+    private RelayCommand? _openSettings;
 
     public bool IsActivityPage
     {
@@ -402,7 +428,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
 
         if (_page == Page.Phone)
         {
-            Navigate(Page.Devices); // a page under Devices: back to it
+            Navigate(Page.Files); // a page under Files: back to it
             return true;
         }
 
@@ -414,6 +440,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
 
     public void Navigate(Page page)
     {
+        if (page == Page.Backup && !HasBackup) return; // not offered here (iPhones)
         if (_page == Page.Settings && page != Page.Settings) Settings.SaveName();
         if (_page == page) return;
         if (_page == Page.Receive && page != Page.Receive) Receive.OnHidden();
@@ -422,7 +449,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         _page = page;
         if (page == Page.Phone) Phone.OnShown();
         if (page == Page.Receive) Receive.OnShown();
-        if (page == Page.Devices) Devices.OnShown();
+        if (page == Page.Files) Files.OnShown();
         if (page == Page.Settings) Settings.RefreshPermissions(); // back from Android's settings, maybe
         if (page == Page.Home)
         {
@@ -434,7 +461,10 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         OnPropertyChanged(nameof(IsHomePage));
         OnPropertyChanged(nameof(IsPhonePage));
         OnPropertyChanged(nameof(IsReceivePage));
-        OnPropertyChanged(nameof(IsDevicesPage));
+        OnPropertyChanged(nameof(IsFilesPage));
+        OnPropertyChanged(nameof(IsBackupPage));
+        OnPropertyChanged(nameof(ShowsSettingsButton));
+        OnPropertyChanged(nameof(HasBackup));
         OnPropertyChanged(nameof(IsActivityPage));
         OnPropertyChanged(nameof(IsSettingsPage));
     }
@@ -627,7 +657,7 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         if (session.IsBackup && !ShowsBackup(session))
         {
             // A backup gets a card only once it has files to send: the hourly checks that find everything already
-            // backed up stay out of sight (their status is in Settings → Backup).
+            // backed up stay out of sight (their status is in Backup).
             void OnChanged(TransferSession s)
             {
                 if (!ShowsBackup(s) && !s.IsFinished) return;

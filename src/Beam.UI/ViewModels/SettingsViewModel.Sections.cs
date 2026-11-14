@@ -10,8 +10,6 @@ public enum SettingsSection
     None,
     General,
     Receiving,
-    Sharing,
-    Backup,
     Connection,
     About,
 }
@@ -38,15 +36,13 @@ public sealed partial class SettingsViewModel
         set
         {
             _ = Section;
-            // Backup isn't offered everywhere (iPhones): its section can't be opened there.
-            if (value == SettingsSection.Backup && !Backup.IsAvailable) value = _platform.IsPhone ? SettingsSection.None : SettingsSection.General;
             if (_section == value) return;
             if (_section == SettingsSection.General) SaveName();
             _section = value;
             foreach (var name in new[]
                      {
                          nameof(Section), nameof(ShowsList), nameof(ShowsSection), nameof(SectionTitle), nameof(IsGeneral), nameof(IsReceiving),
-                         nameof(IsSharing), nameof(IsBackup), nameof(IsConnection), nameof(IsAbout),
+                         nameof(IsConnection), nameof(IsAbout),
                      })
                 OnPropertyChanged(name);
         }
@@ -64,8 +60,6 @@ public sealed partial class SettingsViewModel
     {
         SettingsSection.General => L.T("General"),
         SettingsSection.Receiving => L.T("Receiving"),
-        SettingsSection.Sharing => L.T("Shared folders"),
-        SettingsSection.Backup => L.T("Backup"),
         SettingsSection.Connection => L.T("Connection"),
         SettingsSection.About => L.T("About"),
         _ => L.T("Settings"),
@@ -81,18 +75,6 @@ public sealed partial class SettingsViewModel
     {
         get => Section == SettingsSection.Receiving;
         set { if (value) Section = SettingsSection.Receiving; }
-    }
-
-    public bool IsSharing
-    {
-        get => Section == SettingsSection.Sharing;
-        set { if (value) Section = SettingsSection.Sharing; }
-    }
-
-    public bool IsBackup
-    {
-        get => Section == SettingsSection.Backup;
-        set { if (value) Section = SettingsSection.Backup; }
     }
 
     public bool IsConnection

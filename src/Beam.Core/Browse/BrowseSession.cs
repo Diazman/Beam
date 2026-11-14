@@ -26,7 +26,7 @@ public sealed partial class BrowseService
                                                                            || string.Equals(t.Fingerprint, device.Fingerprint, StringComparison.OrdinalIgnoreCase));
         if (trusted == null)
             throw new TransferException(TransferErrorKind.Declined,
-                L.T("Only trusted devices can browse each other. Add {0} as a trusted device first (Settings → Trusted devices).", device.Name));
+                L.T("Only trusted devices can browse each other. Add {0} as a trusted device first (Files → Add a trusted device).", device.Name));
         var session = new BrowseSession(this, device, trusted.Fingerprint);
         try
         {

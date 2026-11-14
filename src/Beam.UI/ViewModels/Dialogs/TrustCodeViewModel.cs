@@ -19,7 +19,7 @@ public enum TrustCodeResult
 }
 
 /// <summary>
-/// Settings → Trusted devices → Add a trusted device: this device's one-time code, for the other device to scan. Both
+/// Files → Add a trusted device: this device's one-time code, for the other device to scan. Both
 /// trust each other once it has. The code works once, for 10 minutes; closing the dialog ends it.
 /// </summary>
 public sealed class TrustCodeViewModel : DialogViewModel

@@ -9,7 +9,7 @@ namespace Beam.App.Tests;
 
 public class BrowseUiTests
 {
-    /// <summary>The phone adds the PC as a trusted device by scanning its code (Settings → Trusted devices on both).</summary>
+    /// <summary>The phone adds the PC as a trusted device by scanning its code (Files on both).</summary>
     private static async Task TrustAsync(UiHarness pc, UiHarness phone)
     {
         pc.ViewModel.IsSettingsPage = true;
@@ -57,7 +57,7 @@ public class BrowseUiTests
         await UiHarness.PumpAsync(100);
         pc.Screenshot("browse-settings");
 
-        // The phone opens Browse from Settings → Trusted devices; the PC asks.
+        // The phone opens Browse from Files; the PC asks.
         phone.ViewModel.Settings.TrustedDevices.Single().BrowseCommand.Execute(null);
         await UiHarness.WaitForAsync(() => pc.ViewModel.Dialog is BrowseRequestViewModel, "the PC asks");
         var request = (BrowseRequestViewModel)pc.ViewModel.Dialog!;

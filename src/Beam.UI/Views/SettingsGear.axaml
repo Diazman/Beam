@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             x:Class="Beam.App.Views.SettingsGear"
+             Classes="settingsGear">
+  <!-- Phones: Settings, in the header of the main pages (the tab bar has the five destinations). -->
+  <Button Classes="icon" Width="40" Height="40" CornerRadius="20" Click="OnClick"
+          AutomationProperties.Name="{l:T 'Settings'}" ToolTip.Tip="{l:T 'Settings'}">
+    <PathIcon Data="{StaticResource IconSettings}" Width="20" Height="20" />
+  </Button>
+</UserControl>

@@ -124,7 +124,7 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 
 ### Backup (a Windows PC and an Android phone on the same Wi-Fi)
 
-1. PC: Settings → Backup → Add a phone. Phone: Settings → Backup → Set up backup, scan the code. Both say who the
+1. PC: Backup → Add a phone. Phone: Backup → Set up backup, scan the code. Both say who the
    other is; the PC lists the phone.
 2. Scan the same code again with another phone: refused. Close the dialog, scan a photo of the code: refused.
 3. Phone: allow photos and videos, add a folder and tick only PDF (Documents shows partly ticked). Back up now: the
@@ -146,7 +146,7 @@ tray, installer, Wi-Fi/hotspot behaviour). Use two PCs (A and B), build with `./
 
 ### Trusted devices and browsing (a PC and a phone)
 
-1. PC: Devices → Add a trusted device. Phone: same, then "Scan the other device's code instead",
+1. PC: Files → Add a trusted device. Phone: same, then "Scan the other device's code instead",
    scan it (the phone asks for its lock first). Both list each other; scanning the same code again is refused.
 2. PC: Settings → Shared folders on: Documents, Pictures, Videos, Music, Downloads and Desktop are listed. Phone: Send →
    choose the PC → "Browse Diaz's PC's files". The PC asks, with "Always allow … to browse my files"; allow.

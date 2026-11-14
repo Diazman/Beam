@@ -38,7 +38,7 @@ public sealed class PairingCode
     public string? Roles { get; set; }
 
     /// <summary>
-    /// Only in the code a computer shows to set up a backup (Settings → Backup → Add a phone): a one-time secret,
+    /// Only in the code a computer shows to set up a backup (Backup → Add a phone): a one-time secret,
     /// good for a few minutes, that lets the phone that scans it back up to this computer.
     /// </summary>
     [JsonPropertyName("b")]

@@ -12,7 +12,7 @@
       </Border>
       <TextBlock Classes="dialogTitle" Text="{l:T 'Add a trusted device'}" />
       <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding ShowsCode}"
-                 Text="{l:T 'On the other device, open Beam → Settings → Trusted devices → Add a trusted device, and scan this code. Both need to be on the same Wi-Fi for this.'}" />
+                 Text="{l:T 'On the other device, open Beam → Files → Add a trusted device, and scan this code. Both need to be on the same Wi-Fi for this.'}" />
     </StackPanel>
 
     <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->

@@ -413,7 +413,7 @@
                         Foreground="{DynamicResource TextTertiaryBrush}" />
             </Border>
             <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
-                              HorizontalAlignment="Center" FontSize="11.5"
+                              HorizontalAlignment="Center" FontSize="11.5" TextWrapping="Wrap" TextAlignment="Center"
                               Foreground="{DynamicResource TextTertiaryBrush}" />
           </StackPanel>
         </Border>
@@ -441,7 +441,7 @@
             <PathIcon Name="icon" Data="{TemplateBinding Tag}" Width="20" Height="20"
                       Foreground="{DynamicResource TextTertiaryBrush}" />
             <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
-                              HorizontalAlignment="Center" FontSize="11.5"
+                              HorizontalAlignment="Center" FontSize="11.5" TextWrapping="Wrap" TextAlignment="Center"
                               Foreground="{DynamicResource TextSecondaryBrush}" />
           </StackPanel>
         </Border>
@@ -573,6 +573,16 @@
         </KeyFrame>
       </Animation>
     </Style.Animations>
+  </Style>
+
+  <!-- Phones: the Settings gear in the header of the main pages (the desktop has Settings in the rail). -->
+  <Style Selector=":is(UserControl).settingsGear">
+    <Setter Property="IsVisible" Value="False" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="Margin" Value="8,-4,-8,0" />
+  </Style>
+  <Style Selector=".compact :is(UserControl).settingsGear">
+    <Setter Property="IsVisible" Value="True" />
   </Style>
 
   <!-- The bar at the bottom of a page with its main action (Send). -->

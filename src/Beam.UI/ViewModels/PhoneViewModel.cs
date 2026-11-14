@@ -24,7 +24,7 @@ public sealed class PhoneViewModel : ObservableObject
     private readonly IUiServices _ui;
     private readonly MainViewModel _main;
 
-    /// <summary>Back to Devices (this page is opened from there).</summary>
+    /// <summary>Back to Files (this page is opened from there).</summary>
     public RelayCommand BackCommand { get; }
     private readonly DispatcherTimer _idleTimer;
     private DateTime _lastActivity = DateTime.UtcNow;
@@ -39,7 +39,7 @@ public sealed class PhoneViewModel : ObservableObject
         _ui = ui;
         _main = main;
         CopyLinkCommand = new AsyncCommand(CopyLinkAsync);
-        BackCommand = new RelayCommand(() => _main.Navigate(Page.Devices));
+        BackCommand = new RelayCommand(() => _main.Navigate(Page.Files));
         ShareFilesCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFilesAsync()));
         ShareFolderCommand = new AsyncCommand(async () => await ShareAsync(await _ui.PickFoldersAsync()));
         StopSharingCommand = new RelayCommand(() => _node.PhoneLink.StopSharing());

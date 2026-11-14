@@ -31,8 +31,10 @@
                          Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
             <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Receive'}"
                          Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
-            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Devices'}"
-                         Tag="{StaticResource IconDevices}" IsChecked="{Binding IsDevicesPage}" />
+            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Files'}"
+                         Tag="{StaticResource IconFolder}" IsChecked="{Binding IsFilesPage}" />
+            <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Backup'}"
+                         Tag="{StaticResource IconBackup}" IsChecked="{Binding IsBackupPage}" IsVisible="{Binding HasBackup}" />
             <Panel>
               <RadioButton Classes="nav" GroupName="nav" Content="{l:T 'Activity'}"
                            Tag="{StaticResource IconActivity}" IsChecked="{Binding IsActivityPage}" />

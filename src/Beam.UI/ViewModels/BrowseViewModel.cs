@@ -97,7 +97,7 @@ public sealed class BrowseCrumbViewModel
 
 /// <summary>
 /// Browsing a trusted device's shared folders: the folders it shares, what is in them, downloading chosen files and
-/// folders, and adding files when it allows that. Opened from Send (a trusted device) or Settings → Trusted devices.
+/// folders, and adding files when it allows that. Opened from Send (a trusted device) or Files.
 /// </summary>
 public sealed class BrowseViewModel : ObservableObject, IAsyncDisposable
 {

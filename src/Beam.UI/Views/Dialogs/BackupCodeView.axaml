@@ -12,7 +12,7 @@
       </Border>
       <TextBlock Classes="dialogTitle" Text="{l:T 'Back up a phone to this computer'}" />
       <TextBlock Classes="secondary" TextWrapping="Wrap" IsVisible="{Binding ShowsCode}"
-                 Text="{l:T 'On the phone, open Beam → Settings → Backup → Set up backup, and scan this code. The phone must be on the same Wi-Fi as this computer.'}" />
+                 Text="{l:T 'On the phone, open Beam → Backup → Set up backup, and scan this code. The phone must be on the same Wi-Fi as this computer.'}" />
     </StackPanel>
 
     <!-- Always black on white (phone cameras need the contrast, also in dark mode). -->

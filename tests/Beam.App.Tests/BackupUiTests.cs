@@ -20,9 +20,8 @@ public class BackupUiTests
         await pc.InitializeAsync();
         await phone.InitializeAsync();
 
-        // The computer: Settings → Backup → Add a phone shows a one-time code.
-        pc.ViewModel.IsSettingsPage = true;
-        pc.ViewModel.Settings.Section = SettingsSection.Backup;
+        // The computer: Backup → Add a phone shows a one-time code.
+        pc.ViewModel.IsBackupPage = true;
         await UiHarness.PumpAsync(100);
         Assert.Contains("Back up phones to this computer", pc.VisibleTexts());
         pc.ViewModel.Settings.Backup.AddPhoneCommand.Execute(null);
@@ -36,8 +35,7 @@ public class BackupUiTests
         var code = dialog.SetupCode!;
         code.Addresses = new List<string> { $"127.0.0.1:{pc.Node.Transfers.Port}" };
         phone.Platform.ScannedCode = code.AppendTo(null);
-        phone.ViewModel.IsSettingsPage = true;
-        phone.ViewModel.Settings.Section = SettingsSection.Backup;
+        phone.ViewModel.IsBackupPage = true;
         await UiHarness.PumpAsync(100);
         Assert.Contains("Set up backup", phone.VisibleTexts().Concat(Buttons(phone)));
         phone.ViewModel.Settings.Backup.SetUpCommand.Execute(null);
@@ -61,6 +59,10 @@ public class BackupUiTests
         var backup = phone.ViewModel.Settings.Backup;
         // The plan appears first, its starting choices a moment later (saved after Android's permission).
         await UiHarness.WaitForAsync(() => backup.HasPlan && backup.BackUpPhotos, "plan shown");
+        // The status first; what is backed up one level down (closed at first).
+        Assert.False(backup.ShowsChoices);
+        Assert.Contains("Photos", backup.ChoicesSummary);
+        backup.ShowsChoices = true;
         Assert.Equal("Backing up to Diaz's PC", backup.TargetText);
         Assert.True(backup.BackUpPhotos); // whole phone: photos and videos to start with
         Assert.True(backup.BackUpVideos);
@@ -172,9 +174,12 @@ public class BackupUiTests
         await using var phone = new UiHarness("Diaz's iPhone", width: 400, height: 860, phone: true);
         await phone.InitializeAsync();
         Assert.False(phone.ViewModel.Settings.Backup.IsAvailable);
-        phone.ViewModel.IsSettingsPage = true;
-        phone.ViewModel.Settings.Section = SettingsSection.Backup;
+        Assert.False(phone.ViewModel.HasBackup); // no Backup tab
         await UiHarness.PumpAsync(100);
+        Assert.DoesNotContain("Backup", phone.VisibleTexts());
+        phone.ViewModel.IsBackupPage = true; // e.g. from an old notification: stays where it is
+        await UiHarness.PumpAsync(100);
+        Assert.False(phone.ViewModel.IsBackupPage);
         Assert.DoesNotContain("Backup", phone.VisibleTexts());
     }
 
@@ -396,6 +401,7 @@ public class BackupUiTests
             ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
             var photos = backup.WholePhoneKinds.Single(k => k.Kind == BackupSourceKinds.Photos);
             await UiHarness.WaitForAsync(() => photos.IsOn, "photos on");
+            backup.ShowsChoices = true; // "What is backed up" opened
 
             // Closed at first. Open: the main folders (each app's folders as one), then "Other folders"; "All folders" ticked, all gray.
             Assert.Equal("All folders", photos.Summary);

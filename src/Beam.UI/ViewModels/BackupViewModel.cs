@@ -482,7 +482,7 @@ public sealed class BackupPartnerViewModel
 }
 
 /// <summary>
-/// Settings → Backup. On a computer: set up phones that back up here (a one-time code), and the list of them. On a
+/// Backup. On a computer: set up phones that back up here (a one-time code), and the list of them. On a
 /// phone: set up a backup by scanning a computer's code, choose what is backed up, and see how it went.
 /// </summary>
 public sealed class BackupViewModel : ObservableObject
@@ -569,6 +569,32 @@ public sealed class BackupViewModel : ObservableObject
     public bool HasPlan => _plan != null;
 
     public bool HasNoPlan => _plan == null;
+
+    /// <summary>A phone with no backup yet: what it is, and Set up backup.</summary>
+    public bool ShowsSetUp => IsPhone && HasNoPlan;
+
+    /// <summary>"What is backed up" is open (the choices are one level below the status).</summary>
+    public bool ShowsChoices
+    {
+        get => _showsChoices;
+        set => SetProperty(ref _showsChoices, value);
+    }
+
+    private bool _showsChoices;
+
+    /// <summary>What is backed up, in a line: "Photos, Videos · 2 folders".</summary>
+    public string ChoicesSummary
+    {
+        get
+        {
+            var kinds = WholePhoneKinds.Where(k => k.IsOn).Select(k => k.Title).ToList();
+            var folders = Sources.Count(s => s.Enabled);
+            var parts = new List<string>();
+            if (kinds.Count > 0) parts.Add(string.Join(", ", kinds));
+            if (folders > 0) parts.Add(L.Plural(folders, "{0} folder", "{0} folders"));
+            return parts.Count == 0 ? L.T("Nothing yet. Open to choose.") : string.Join(" · ", parts);
+        }
+    }
 
     public string TargetName => _plan?.TargetName ?? "";
 
@@ -727,10 +753,9 @@ public sealed class BackupViewModel : ObservableObject
                 plan.Sources.RemoveAll(s => s.Kind is BackupSourceKinds.Photos or BackupSourceKinds.Videos);
             _node.Backup.Save(plan);
             Reload();
-            _main.Settings.Section = SettingsSection.Backup;
-            _main.IsSettingsPage = true;
+            _main.Navigate(Page.Backup);
             await _main.ShowDialogAsync(new ConfirmViewModel(L.T("Backup is set up"),
-                L.T("This phone backs up to {0} by itself whenever both are on the same Wi-Fi. Only new and changed files are sent, encrypted, and only to {0}. Choose what is backed up in Settings → Backup.", plan.TargetName),
+                L.T("This phone backs up to {0} by itself whenever both are on the same Wi-Fi. Only new and changed files are sent, encrypted, and only to {0}. Choose what is backed up in Backup.", plan.TargetName),
                 L.T("OK"), ""));
         }
         catch (TransferException ex)
@@ -860,7 +885,7 @@ public sealed class BackupViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(scanned)) return;
         if (PairingCode.TryParse(scanned) is not { BackupToken: not null } code)
         {
-            Message = L.T("That's not a backup code. On the computer, open Beam → Settings → Backup → Add a phone, and scan the code shown there.");
+            Message = L.T("That's not a backup code. On the computer, open Beam → Backup → Add a phone, and scan the code shown there.");
             return;
         }
 
@@ -1089,7 +1114,7 @@ public sealed class BackupViewModel : ObservableObject
             for (var i = 0; i < Sources.Count; i++) _plan!.Sources[_plan.Sources.IndexOf(sources[i])] = Sources[i].Source;
         }
 
-        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) }.Concat(WholePhoneProperties))
+        foreach (var name in new[] { nameof(HasPlan), nameof(HasNoPlan), nameof(ShowsSetUp), nameof(ChoicesSummary), nameof(TargetName), nameof(TargetText), nameof(Automatic), nameof(KeepFolderNames) }.Concat(WholePhoneProperties))
             OnPropertyChanged(name);
         foreach (var kind in WholePhoneKinds) kind.Refresh();
         _platform.ScheduleBackups(settings.Backups.Any(b => b.Automatic && b.HasAnythingToBackUp));

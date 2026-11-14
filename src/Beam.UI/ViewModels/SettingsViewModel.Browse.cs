@@ -10,7 +10,7 @@ using Beam.Core.Transfer;
 
 namespace Beam.App.ViewModels;
 
-/// <summary>A folder other trusted devices can browse (Settings → Browsing).</summary>
+/// <summary>A folder other trusted devices can browse (Files → What you share).</summary>
 public sealed class SharedFolderViewModel
 {
     public SharedFolderViewModel(SharedFolder folder, Action<SharedFolderViewModel> remove)
@@ -28,7 +28,7 @@ public sealed class SharedFolderViewModel
     public RelayCommand RemoveCommand { get; }
 }
 
-// Settings → Trusted devices (adding one with a code) and Settings → Browsing (what others may browse here).
+// Files (adding one with a code) and Files → What you share (what others may browse here).
 public sealed partial class SettingsViewModel
 {
     private static readonly TimeSpan OwnerGrace = TimeSpan.FromMinutes(2);
@@ -119,7 +119,7 @@ public sealed partial class SettingsViewModel
         }
     }
 
-    /// <summary>Settings → Trusted devices → Add a trusted device: shows this device's code (or scans the other's).</summary>
+    /// <summary>Files → Add a trusted device: shows this device's code (or scans the other's).</summary>
     private async Task AddTrustedAsync()
     {
         TrustMessage = "";
@@ -145,7 +145,7 @@ public sealed partial class SettingsViewModel
         if (PairingCode.TryParse(scanned) is not { TrustToken: not null } code)
         {
             await _main.ShowDialogAsync(new ConfirmViewModel(L.T("That's not a code for adding a trusted device"),
-                L.T("On the other device, open Beam → Settings → Trusted devices → Add a trusted device, then scan the code shown there."), L.T("OK"), ""));
+                L.T("On the other device, open Beam → Files → Add a trusted device, then scan the code shown there."), L.T("OK"), ""));
             return;
         }
 

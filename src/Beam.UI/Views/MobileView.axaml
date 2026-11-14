@@ -33,8 +33,10 @@
                        Tag="{StaticResource IconSend}" IsChecked="{Binding IsHomePage}" />
           <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Receive'}"
                        Tag="{StaticResource IconDownload}" IsChecked="{Binding IsReceivePage}" />
-          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Devices'}"
-                       Tag="{StaticResource IconDevices}" IsChecked="{Binding IsDevicesPage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Files'}"
+                       Tag="{StaticResource IconFolder}" IsChecked="{Binding IsFilesPage}" />
+          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Backup'}"
+                       Tag="{StaticResource IconBackup}" IsChecked="{Binding IsBackupPage}" IsVisible="{Binding HasBackup}" />
           <Panel>
             <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Activity'}"
                          Tag="{StaticResource IconActivity}" IsChecked="{Binding IsActivityPage}" />
@@ -42,8 +44,6 @@
               <TextBlock Text="{Binding ActiveTransferBadge}" />
             </Border>
           </Panel>
-          <RadioButton Classes="tab" GroupName="tabs" Content="{l:T 'Settings'}"
-                       Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
         </UniformGrid>
       </Border>
     </Grid>

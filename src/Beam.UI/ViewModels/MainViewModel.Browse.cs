@@ -87,11 +87,10 @@ public sealed partial class MainViewModel
 
         if (_platform.IsPhone && !_warnedAllFiles && !_platform.HasPermission(AppPermission.AllFiles) && (_warnedAllFiles = true))
             _platform.ShowNotification(L.T("Your folders may look empty to {0}", current[0].DeviceName),
-                L.T("Beam no longer has “All files access”. Allow it in Settings → Browsing."), () => Dispatcher.UIThread.Post(() =>
+                L.T("Beam no longer has “All files access”. Allow it in Files → What you share."), () => Dispatcher.UIThread.Post(() =>
                 {
                     _ui.BringToFront();
-                    Settings.Section = SettingsSection.Sharing;
-                    Navigate(Page.Settings);
+                    Navigate(Page.Files); // what this phone shares is there
                 }));
 
         // Also outside Beam (phones): who is browsing, and Stop.

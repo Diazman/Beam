@@ -9,6 +9,10 @@ namespace Beam.App.Tests;
 /// <summary>The phone layout (MobileView): bottom tabs, every page at phone size, transfers tab. Screenshots: artifacts/screenshots/phone-*.png.</summary>
 public class PhoneLayoutTests
 {
+    private static IEnumerable<string> Buttons(UiHarness h) =>
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(h.Window).OfType<Avalonia.Controls.Button>()
+            .Where(b => b.IsEffectivelyVisible).Select(b => b.Content as string).OfType<string>();
+
     [AvaloniaFact]
     public async Task EveryTabFitsAPhoneScreen()
     {
@@ -30,13 +34,21 @@ public class PhoneLayoutTests
         Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("phone-2-receive");
 
-        app.ViewModel.IsDevicesPage = true;
+        app.ViewModel.IsFilesPage = true;
         await UiHarness.PumpAsync(100);
-        Assert.Contains("Diaz's Laptop", app.VisibleTexts());
+        Assert.Contains("Browse your other devices' files", app.VisibleTexts()); // no trusted device yet
         Assert.Contains("Add a trusted device", app.VisibleTexts());
+        Assert.Contains("WHAT YOU SHARE", app.VisibleTexts());
         Assert.DoesNotContain("No Beam app on the other device?", app.VisibleTexts()); // computers only
         Assert.Empty(app.TextOutsideWindow());
-        app.Screenshot("phone-3-devices");
+        app.Screenshot("phone-3-files");
+
+        app.Platform.SupportsBackup = true;
+        app.ViewModel.IsBackupPage = true;
+        await UiHarness.PumpAsync(100);
+        Assert.Contains("Set up backup", app.VisibleTexts().Concat(Buttons(app)));
+        Assert.Empty(app.TextOutsideWindow());
+        app.Screenshot("phone-3-backup");
 
         app.ViewModel.IsActivityPage = true;
         await UiHarness.PumpAsync(100);
@@ -45,10 +57,15 @@ public class PhoneLayoutTests
         Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("phone-4-activity-empty");
 
-        // Settings: the list of sections, then one section; Back returns to the list.
-        app.ViewModel.IsSettingsPage = true;
+        // Settings: the gear on the main pages, the list of sections, then one section; Back returns to the list.
+        Assert.True(app.ViewModel.ShowsSettingsButton);
+        app.ViewModel.OpenSettingsCommand.Execute(null);
+        Assert.True(app.ViewModel.IsSettingsPage);
+        Assert.False(app.ViewModel.ShowsSettingsButton);
         await UiHarness.PumpAsync(100);
-        Assert.Contains("Shared folders", app.VisibleTexts());
+        Assert.Contains("Connection", app.VisibleTexts());
+        Assert.Single(app.VisibleTexts(), t => t == "Backup"); // the tab only: no longer a Settings section
+        Assert.DoesNotContain("Shared folders", app.VisibleTexts()); // on Files now
         Assert.DoesNotContain("Appearance", app.VisibleTexts());
         Assert.Empty(app.TextOutsideWindow());
         app.Screenshot("phone-5-settings");

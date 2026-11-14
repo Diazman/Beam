@@ -159,7 +159,7 @@ public sealed class BackupService : IDisposable
                 return new BackupResponseMessage
                 {
                     Ok = false,
-                    Message = L.T("This code isn't valid any more. On the computer, open Settings → Backup → Add a phone, and scan the new code."),
+                    Message = L.T("This code isn't valid any more. On the computer, open Backup → Add a phone, and scan the new code."),
                 };
             }
 
@@ -221,7 +221,7 @@ public sealed class BackupService : IDisposable
     {
         if (string.IsNullOrEmpty(code.BackupToken))
             throw new TransferException(TransferErrorKind.Protocol,
-                L.T("This is a pairing code, not a backup code. On the computer, open Settings → Backup → Add a phone, and scan that code."));
+                L.T("This is a pairing code, not a backup code. On the computer, open Backup → Add a phone, and scan that code."));
         var endpoints = code.ToDevice().Endpoints.Concat(_discovery.Find(code.DeviceId)?.Endpoints ?? Array.Empty<IPEndPoint>())
             .Where(e => !_transfers.IsDirectAddress(e.Address))
             .DistinctBy(e => e.ToString())

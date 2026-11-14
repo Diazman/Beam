@@ -741,14 +741,14 @@ public sealed class HomeViewModel : ObservableObject
 
         if (code.TrustToken != null)
         {
-            // Another device's code from Settings → Trusted devices → Add a trusted device: both trust each other.
+            // Another device's code from Files → Add a trusted device: both trust each other.
             await _main.Settings.AddTrustedFromCodeAsync(code);
             return;
         }
 
         if (code.BackupToken != null)
         {
-            // A computer's backup code (Settings → Backup → Add a phone): sets up the backup, doesn't pair.
+            // A computer's backup code (Backup → Add a phone): sets up the backup, doesn't pair.
             await _main.Settings.Backup.SetUpFromCodeAsync(code);
             if (_main.Settings.Backup.HasMessage)
                 await _main.ShowDialogAsync(new Dialogs.ConfirmViewModel(L.T("Backup isn't set up"), _main.Settings.Backup.Message, L.T("OK"), ""));

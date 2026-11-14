@@ -1,0 +1,185 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Beam.App.Localization"
+             xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
+             x:Class="Beam.App.Views.FilesView"
+             x:DataType="vm:FilesViewModel">
+  <!-- Files: browse your trusted devices' files, and share your own folders with them. -->
+  <ScrollViewer>
+    <StackPanel Classes="page" Spacing="26" MaxWidth="880" HorizontalAlignment="Stretch">
+      <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="h1" Text="{l:T 'Files'}" />
+        <TextBlock Classes="secondary" TextWrapping="Wrap"
+                   Text="{l:T 'Open the folders your trusted devices share, and share yours with them. Directly, encrypted, never through the internet.'}" />
+      </StackPanel>
+        <views:SettingsGear Grid.Column="1" />
+      </Grid>
+
+      <!-- ================= Trusted devices: browse them ================= -->
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Classes="overline" Text="{l:T 'YOUR TRUSTED DEVICES'}" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="link" Command="{Binding ScanCodeCommand}" IsVisible="{Binding CanScanCodes}" VerticalAlignment="Center"
+                  Content="{l:T 'Scan a code'}" Margin="0,0,4,0" />
+          <Button Grid.Column="2" Classes="link" Command="{Binding AddTrustedCommand}" IsVisible="{Binding HasRows}" VerticalAlignment="Center"
+                  Content="{l:T 'Add a trusted device'}" />
+        </Grid>
+
+        <!-- None yet: what it gives, and one button -->
+        <Border Classes="hero" IsVisible="{Binding HasNoRows}">
+          <Panel>
+            <Rectangle RadiusX="20" RadiusY="20" Fill="{DynamicResource AccentWashBrush}" Margin="-28" IsHitTestVisible="False" />
+            <StackPanel Spacing="12" HorizontalAlignment="Center" Margin="0,4">
+              <Border Classes="iconBadge brand" Width="64" Height="64" CornerRadius="32" HorizontalAlignment="Center">
+                <PathIcon Data="{StaticResource IconFolder}" Width="28" Height="28" />
+              </Border>
+              <TextBlock Classes="h2" Text="{l:T 'Browse your other devices\' files'}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+              <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="500" HorizontalAlignment="Center"
+                         Text="{l:T 'Add a device you trust by scanning a code once. Then each can open the other\'s shared folders, download files and add new ones.'}" />
+              <Button Classes="accent large" Command="{Binding AddTrustedCommand}" HorizontalAlignment="Center" Margin="0,6,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <PathIcon Data="{StaticResource IconShield}" Width="14" Height="14" />
+                  <TextBlock Text="{l:T 'Add a trusted device'}" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </Panel>
+        </Border>
+
+        <Border Classes="card" Padding="0" IsVisible="{Binding HasRows}">
+          <ItemsControl ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DeviceRowViewModel">
+                <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Border Classes="iconBadge neutral" Width="42" Height="42" CornerRadius="12">
+                      <PathIcon Data="{Binding Icon}" Width="20" Height="20" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center" Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Classes="caption" Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Button Command="{Binding SendCommand}" IsVisible="{Binding IsNearby}" ToolTip.Tip="{l:T 'Send'}" AutomationProperties.Name="{l:T 'Send'}">
+                        <PathIcon Data="{StaticResource IconSend}" Width="13" Height="13" />
+                      </Button>
+                      <Button Classes="accent" Command="{Binding BrowseCommand}" ToolTip.Tip="{l:T 'Browse its shared folders'}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <PathIcon Data="{StaticResource IconFolder}" Width="13" Height="13" />
+                          <TextBlock Text="{l:T 'Browse'}" />
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="icon" AutomationProperties.Name="{l:T 'More'}" ToolTip.Tip="{l:T 'More'}">
+                        <PathIcon Data="{StaticResource IconChevronDown}" />
+                        <Button.Flyout>
+                          <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="{l:T 'Ask before browsing again'}" Command="{Binding Trusted.AskAgainCommand}"
+                                      IsVisible="{Binding AlwaysBrowse}" />
+                            <MenuItem Header="{Binding Trusted.StopTrustingText}" Command="{Binding Trusted.RemoveCommand}" />
+                          </MenuFlyout>
+                        </Button.Flyout>
+                      </Button>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+      </StackPanel>
+
+      <!-- ================= What this device shares ================= -->
+      <StackPanel Spacing="12">
+        <TextBlock Classes="overline" Text="{l:T 'WHAT YOU SHARE'}" />
+
+        <!-- Who is browsing now -->
+        <ItemsControl ItemsSource="{Binding Main.Visits}" IsVisible="{Binding Main.HasVisits}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BrowseVisitViewModel">
+              <Border Classes="notice" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Content="{l:T 'Stop'}" Command="{Binding StopCommand}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Border Classes="card">
+          <StackPanel Spacing="12">
+            <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="{l:T 'Let trusted devices browse my shared folders'}" />
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="{l:T 'You are asked each time, unless you always allow a device. Only the folders below can be seen, over your Wi-Fi or a direct connection, encrypted.'}" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.BrowsingEnabled}" Margin="16,0,0,0" />
+            </Grid>
+            <StackPanel Spacing="12" IsVisible="{Binding Settings.BrowsingEnabled}">
+              <Separator />
+              <StackPanel Spacing="6">
+                <TextBlock Classes="h3" Text="{l:T 'Folders you share'}" />
+                <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="{l:T 'No folders are shared. Trusted devices see nothing.'}" IsVisible="{Binding !Settings.HasSharedFolders}" />
+                <ItemsControl ItemsSource="{Binding Settings.SharedFolders}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SharedFolderViewModel">
+                      <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                        <PathIcon Data="{StaticResource IconFolder}" Width="16" Height="16" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Classes="caption" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="{l:T 'Remove'}" Command="{Binding RemoveCommand}" VerticalAlignment="Center" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="{l:T 'Share a folder…'}" Command="{Binding Settings.AddSharedFolderCommand}" HorizontalAlignment="Left" />
+              </StackPanel>
+              <Separator />
+              <Grid Classes="settingRow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Classes="h3" Text="{l:T 'Allow adding files'}" />
+                  <TextBlock Classes="caption" TextWrapping="Wrap"
+                             Text="{l:T 'Trusted devices can put files into the shared folders. Nothing is ever replaced, changed or deleted.'}" />
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.BrowseAllowAdding}" Margin="16,0,0,0" />
+              </Grid>
+            </StackPanel>
+            <Border Classes="notice warning" IsVisible="{Binding Settings.NeedsAllFiles}">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock TextWrapping="Wrap" FontSize="13" VerticalAlignment="Center"
+                           Text="{l:T 'Beam no longer has “All files access”: your trusted devices see only photos, videos and music, and other folders look empty.'}" />
+                <Button Grid.Column="1" Classes="link" Content="{l:T 'Allow'}" Command="{Binding Settings.AllowAllFilesCommand}" VerticalAlignment="Center" Margin="12,0,0,0" />
+              </Grid>
+            </Border>
+            <Border Classes="notice error" IsVisible="{Binding Settings.HasTrustMessage}">
+              <TextBlock Text="{Binding Settings.TrustMessage}" TextWrapping="Wrap" FontSize="13" />
+            </Border>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- ================= Devices without Beam ================= -->
+      <Button Classes="row" Command="{Binding OpenWebShareCommand}" IsVisible="{Binding CanShareWithBrowser}" Padding="0">
+        <Border Classes="card" Padding="18,16">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Border Classes="iconBadge" Width="42" Height="42" CornerRadius="12">
+              <PathIcon Data="{StaticResource IconGlobe}" Width="20" Height="20" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Text="{l:T 'No Beam app on the other device?'}" FontWeight="SemiBold" />
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Text="{l:T 'Share files with any phone, tablet or computer through its web browser.'}" />
+            </StackPanel>
+            <PathIcon Grid.Column="2" Data="{StaticResource IconChevronRight}" Width="18" Height="18"
+                      Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </Button>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

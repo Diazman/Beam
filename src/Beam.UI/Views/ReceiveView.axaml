@@ -2,15 +2,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:l="using:Beam.App.Localization"
              xmlns:vm="using:Beam.App.ViewModels"
+             xmlns:views="using:Beam.App.Views"
              x:Class="Beam.App.Views.ReceiveView"
              x:DataType="vm:ReceiveViewModel">
   <!-- Receive: this device is ready; the rest only when it doesn't show up on the other one. -->
   <ScrollViewer>
     <StackPanel Classes="page" Spacing="22" MaxWidth="880" HorizontalAlignment="Stretch">
+      <Grid ColumnDefinitions="*,Auto">
       <StackPanel Spacing="4">
         <TextBlock Classes="h1" Text="{l:T 'Receive'}" />
         <TextBlock Classes="secondary" TextWrapping="Wrap" Text="{Binding ReadyText}" />
       </StackPanel>
+        <views:SettingsGear Grid.Column="1" />
+      </Grid>
 
       <!-- Ready -->
       <Border Classes="hero">
