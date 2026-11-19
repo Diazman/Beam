@@ -22,8 +22,6 @@
               BorderBrush="{DynamicResource DividerBrush}"
               BorderThickness="0,0,1,0">
         <DockPanel Margin="0,20,0,16">
-          <Image DockPanel.Dock="Top" Source="avares://Beam.UI/Assets/beam.png" Width="40" Height="40" HorizontalAlignment="Center"
-                 Margin="0,0,0,22" ToolTip.Tip="Beam" />
           <RadioButton DockPanel.Dock="Bottom" Classes="nav" GroupName="nav" Content="{l:T 'Settings'}" HorizontalAlignment="Center"
                        Tag="{StaticResource IconSettings}" IsChecked="{Binding IsSettingsPage}" />
           <StackPanel Spacing="6" HorizontalAlignment="Center">

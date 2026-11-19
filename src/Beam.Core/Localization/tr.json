@@ -776,5 +776,8 @@
   "Folders you share": "Paylaştığınız klasörler",
   "Your photos, videos and folders, backed up to your own computer by themselves. Over your Wi-Fi, never the internet.": "Fotoğraflarınız, videolarınız ve klasörleriniz kendiliğinden kendi bilgisayarınıza yedeklenir. Wi-Fi'niz üzerinden, asla internetten değil.",
   "Your phones back up their photos, videos and folders here by themselves, over your Wi-Fi. Never the internet.": "Telefonlarınız fotoğraflarını, videolarını ve klasörlerini Wi-Fi'niz üzerinden kendiliğinden buraya yedekler. Asla internetten değil.",
-  "On the computer, open Beam → Backup → Add a phone, then scan the code shown there.": "Bilgisayarda Beam → Yedekleme → Telefon ekle'yi açın ve orada gösterilen kodu tarayın."
+  "On the computer, open Beam → Backup → Add a phone, then scan the code shown there.": "Bilgisayarda Beam → Yedekleme → Telefon ekle'yi açın ve orada gösterilen kodu tarayın.",
+  "Support Beam": "Beam'i destekle",
+  "Beam is free, with no ads and no accounts. If it saves you time, you can support its development on GitHub Sponsors.": "Beam ücretsizdir; reklam ve hesap yoktur. Size zaman kazandırıyorsa, geliştirilmesini GitHub Sponsors'ta destekleyebilirsiniz.",
+  "Sponsor": "Destekle"
 }

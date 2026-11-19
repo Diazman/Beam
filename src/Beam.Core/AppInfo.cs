@@ -24,6 +24,9 @@ public static class AppInfo
 
     public const string PrivacyPolicyUrl = "https://gist.github.com/Diazman/270d981925698b36032600fbd8b58ddb";
 
+    /// <summary>Where people can support Beam's development (GitHub Sponsors).</summary>
+    public const string SponsorUrl = "https://github.com/sponsors/Diazman";
+
     /// <summary>
     /// Where phones get the Beam app (linked from the phone page in the browser). The test build until the
     /// Google Play listing is live; then "https://play.google.com/store/apps/details?id=com.diazman.beam".

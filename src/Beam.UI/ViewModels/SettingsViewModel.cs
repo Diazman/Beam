@@ -97,6 +97,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         OpenLogsCommand = new RelayCommand(() => _platform.ShareLog(_node.Paths.LogDirectory));
         CopyAddressCommand = new AsyncCommand(() => _ui.CopyToClipboardAsync(LocalAddresses));
         OpenPrivacyCommand = new RelayCommand(() => _main.Platform.OpenUrl(AppInfo.PrivacyPolicyUrl));
+        OpenSponsorCommand = new RelayCommand(() => _main.Platform.OpenUrl(AppInfo.SponsorUrl));
         InitBrowse();
 
         ThemeOptions = new[]
@@ -236,6 +237,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string VersionText => $"{AppInfo.ProductName} {AppInfo.Version} ({AppInfo.Build})";
 
     public RelayCommand OpenPrivacyCommand { get; }
+
+    /// <summary>Support Beam (GitHub Sponsors).</summary>
+    public RelayCommand OpenSponsorCommand { get; }
+
+    /// <summary>
+    /// The Support Beam link shows on computers only: app stores on phones don't allow paying the developer outside
+    /// their own in-app purchases.
+    /// </summary>
+    public bool ShowsSponsor => !_platform.IsPhone;
 
     public RelayCommand SaveNameCommand { get; }
 

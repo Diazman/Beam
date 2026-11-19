@@ -212,6 +212,26 @@
 
         <!-- About -->
         <StackPanel Spacing="24" IsVisible="{Binding IsAbout}">
+          <!-- Support Beam (computers only: phone app stores don't allow outside payments) -->
+          <Border Classes="hero" Padding="22" IsVisible="{Binding ShowsSponsor}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <Border Classes="iconBadge brand" Width="44" Height="44" CornerRadius="22" VerticalAlignment="Center">
+                <PathIcon Data="{StaticResource IconHeart}" Width="20" Height="20" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Classes="h3" Text="{l:T 'Support Beam'}" />
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="{l:T 'Beam is free, with no ads and no accounts. If it saves you time, you can support its development on GitHub Sponsors.'}" />
+              </StackPanel>
+              <Button Grid.Column="2" Classes="accent" Command="{Binding OpenSponsorCommand}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <PathIcon Data="{StaticResource IconHeart}" Width="13" Height="13" />
+                  <TextBlock Text="{l:T 'Sponsor'}" />
+                </StackPanel>
+              </Button>
+            </Grid>
+          </Border>
+
           <!-- About -->
           <StackPanel Spacing="10">
             <Border Classes="card">

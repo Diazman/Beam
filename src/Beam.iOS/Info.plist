@@ -38,5 +38,8 @@
   <true/>
   <key>LSSupportsOpeningDocumentsInPlace</key>
   <true/>
+  <!-- The app icon (Assets.xcassets/AppIcon.appiconset: one 1024 px, opaque; iOS rounds the corners). -->
+  <key>XSAppIconAssets</key>
+  <string>Assets.xcassets/AppIcon.appiconset</string>
 </dict>
 </plist>

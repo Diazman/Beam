@@ -4,6 +4,8 @@
 drop in files or folders, and they arrive — encrypted, verified, and with their folder structure intact. No cables,
 accounts, cloud, IP addresses, or network shares. Beam runs on Windows, Android and iPhone/iPad.
 
+Beam is free, with no ads and no accounts. If it saves you time, you can [❤ support its development on GitHub Sponsors](https://github.com/sponsors/Diazman).
+
 ![Beam main screen](docs/images/home.png)
 
 | Incoming request | Transfer in progress | Name conflicts |

@@ -115,17 +115,17 @@
     <Setter Property="CornerRadius" Value="20" />
     <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
   </Style>
-  <!-- The brand-gradient circle around a main icon (Receive, the drop zone, a selected device). -->
+  <Style Selector="Border.iconBadge > PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Width" Value="18" />
+    <Setter Property="Height" Value="18" />
+  </Style>
+  <!-- The brand-gradient circle around a main icon (after the plain one: the later style wins). -->
   <Style Selector="Border.iconBadge.brand">
     <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}" />
   </Style>
   <Style Selector="Border.iconBadge.brand > PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
-  </Style>
-  <Style Selector="Border.iconBadge > PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
-    <Setter Property="Width" Value="18" />
-    <Setter Property="Height" Value="18" />
   </Style>
   <Style Selector="Border.iconBadge.success">
     <Setter Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
@@ -227,6 +227,16 @@
     <Setter Property="Background" Value="{DynamicResource SubtleBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
     <Setter Property="Opacity" Value="1" />
+  </Style>
+  <!-- An icon or a label inside a gradient button: white (the app-wide TextBlock colour would win otherwise). -->
+  <Style Selector="Button.accent PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+  </Style>
+  <Style Selector="Button.accent TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+  </Style>
+  <Style Selector="Button.accent:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
   </Style>
   <Style Selector="Button.accent:disabled PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
