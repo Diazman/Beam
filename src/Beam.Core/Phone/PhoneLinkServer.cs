@@ -286,10 +286,35 @@ public sealed partial class PhoneLinkServer : IAsyncDisposable
                 }
                 finally
                 {
+                    await CloseGracefullyAsync(socket).ConfigureAwait(false);
                     socket.Dispose();
                     Interlocked.Decrement(ref _connections);
                 }
             }, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Ends the connection so the answer already sent arrives: says no more is coming, then reads and drops what the
+    /// phone is still sending (an upload cancelled here) for a moment. Closing with unread data makes Windows reset the
+    /// connection, and a reset can throw away the answer before the phone's browser has read it.
+    /// </summary>
+    private static async Task CloseGracefullyAsync(Socket socket)
+    {
+        try
+        {
+            if (!socket.Connected) return;
+            socket.Shutdown(SocketShutdown.Send);
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var buffer = new byte[64 * 1024];
+            while (await socket.ReceiveAsync(buffer, SocketFlags.None, limit.Token).ConfigureAwait(false) > 0)
+            {
+                // dropped
+            }
+        }
+        catch (Exception ex) when (ex is SocketException or ObjectDisposedException or OperationCanceledException or InvalidOperationException)
+        {
+            // already gone, or still sending after the grace: closed anyway
         }
     }
 
