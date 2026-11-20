@@ -242,24 +242,28 @@ public class DirectRecoveryTests
     }
 
     [Fact]
-    public async Task APhoneThatCantJoinTheHotspotGetsTheUsualNetworkOnTryAgain()
+    public async Task APhoneThatCantJoinTheHotspotGetsTheUsualNetworkInTheSameSend()
     {
         var air = new FakeDirectAir();
         var (pc, phone, pcLink, phoneLink) = await PcAndAsync(air, pcOnline: true, Phone, DeviceKinds.Phone);
         await using var _p = pc;
         await using var _r = phone;
         phoneLink.CantJoinSharedNetworks = true;
+        var file = pc.CreateFile("a.jpg", 200_000);
 
-        var session = pc.Node.Send(phone.AsDevice(), new[] { pc.CreateFile("a.jpg", 200_000) }, ConnectionMethod.Direct);
-        await Wait.ForFinishAsync(session);
-        Assert.Equal(TransferState.Failed, session.State);
-        Assert.Contains("receiver join", session.Error!.Message);
-        Assert.True(pcLink.HostedNetworks.Last().SharesInternet);
-        await Wait.UntilAsync(() => pcLink.Hosting == null, because: "the hotspot went off");
-
-        session.Resume();
+        var session = pc.Node.Send(phone.AsDevice(), new[] { file }, ConnectionMethod.Direct);
         await Wait.ForFinishAsync(session);
         Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.Equal(TransferPath.Direct, session.Path);
+        Assert.Equal(2, pcLink.HostedNetworks.Count);
+        Assert.True(pcLink.HostedNetworks[0].SharesInternet); // the hotspot first
+        Assert.False(pcLink.HostedNetworks[1].SharesInternet); // then the usual network, without asking the user
+        Assert.Equal(TestFiles.Hash(file), TestFiles.Hash(Path.Combine(phone.ReceiveFolder, "a.jpg")));
+
+        // The next send goes to the usual network straight away.
+        var next = pc.Node.Send(phone.AsDevice(), new[] { pc.CreateFile("b.jpg", 1000) }, ConnectionMethod.Direct);
+        await Wait.ForFinishAsync(next);
+        Assert.True(next.State == TransferState.Completed, next.Error?.Message);
         Assert.False(pcLink.HostedNetworks.Last().SharesInternet);
     }
 

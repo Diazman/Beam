@@ -150,7 +150,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     /// </summary>
     public IReadOnlyCollection<string> VisibleNetworks() => VisibleNetworks(scanEveryMs: 30_000);
 
-    private IReadOnlyCollection<string> VisibleNetworks(int scanEveryMs)
+    private IReadOnlyCollection<string> VisibleNetworks(int scanEveryMs, long seenSinceMs = 0)
     {
         try
         {
@@ -166,7 +166,7 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             }
 
 #pragma warning disable CA1422 // ScanResult.Ssid: the replacement needs Android 13
-            return wifi.ScanResults?.Select(r => r.Ssid?.Trim('"')).Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToHashSet()
+            return wifi.ScanResults?.Where(r => SeenSince(r, seenSinceMs)).Select(r => r.Ssid?.Trim('"')).Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToHashSet()
                    ?? (IReadOnlyCollection<string>)Array.Empty<string>();
 #pragma warning restore CA1422
         }
@@ -176,6 +176,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
             return Array.Empty<string>();
         }
     }
+
+    /// <summary>
+    /// Whether Android last saw <paramref name="result"/> at or after <paramref name="sinceMs"/> (SystemClock.ElapsedRealtime).
+    /// Android throttles scans and keeps the old results: a network that is off by now (the same name, another access
+    /// point: a computer's Wi-Fi Direct network before its hotspot) can still be among them.
+    /// </summary>
+    private static bool SeenSince(ScanResult result, long sinceMs) => sinceMs <= 0 || result.Timestamp / 1000 >= sinceMs;
 
     /// <remarks>
     /// One radio operation at a time (<see cref="RadioOperations"/>): a start or join that is given up keeps the radio to
@@ -586,13 +593,15 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
         var deadline = System.Environment.TickCount64 + (long)VisibleTimeout.TotalMilliseconds;
         _lastScanStart = 0; // scan now
+        // Only what Android sees from now on: an older result for this name may be another access point that is off now.
+        var since = SystemClock.ElapsedRealtime();
         var sawAnything = false;
         while (System.Environment.TickCount64 < deadline)
         {
-            var visible = VisibleNetworks(scanEveryMs: 5_000);
+            var visible = VisibleNetworks(scanEveryMs: 5_000, seenSinceMs: since);
             if (visible.Contains(ssid))
             {
-                var bssid = BssidOf(ssid);
+                var bssid = BssidOf(ssid, since);
                 Log.Info($"Wi-Fi: {ssid} is in range ({bssid ?? "no BSSID"})");
                 return bssid;
             }
@@ -606,13 +615,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
     }
 
     /// <summary>The strongest access point broadcasting <paramref name="ssid"/> in the last scan.</summary>
-    private string? BssidOf(string ssid)
+    private string? BssidOf(string ssid, long seenSinceMs)
     {
         try
         {
             if (_context.GetSystemService(Context.WifiService) is not WifiManager wifi) return null;
 #pragma warning disable CA1422 // ScanResult.Ssid: the replacement needs Android 13
-            return wifi.ScanResults?.Where(r => r.Ssid?.Trim('"') == ssid && !string.IsNullOrEmpty(r.Bssid))
+            return wifi.ScanResults?.Where(r => r.Ssid?.Trim('"') == ssid && !string.IsNullOrEmpty(r.Bssid) && SeenSince(r, seenSinceMs))
                 .OrderByDescending(r => r.Level).Select(r => r.Bssid).FirstOrDefault();
 #pragma warning restore CA1422
         }
@@ -648,22 +657,13 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         var connectivity = (ConnectivityManager?)_context.GetSystemService(Context.ConnectivityService)
                            ?? throw new DirectLinkException(L.T("This phone couldn't join the direct connection. Move the devices closer together and try again."));
         var bssid = await WaitUntilVisibleAsync(network.Ssid, cancellationToken).ConfigureAwait(false);
-        var builder = new WifiNetworkSpecifier.Builder().SetSsid(network.Ssid)!.SetWpa2Passphrase(network.Passphrase)!;
-        // The exact access point: Android connects to it without searching again, and once the user approved it,
-        // later requests for it are usually approved without asking.
-        if (bssid != null && global::Android.Net.MacAddress.FromString(bssid) is { } mac) builder.SetBssid(mac);
-        var specifier = builder.Build();
-        var request = new NetworkRequest.Builder()
-            .AddTransportType(TransportType.Wifi)!
-            .RemoveCapability(NetCapability.Internet)!
-            .SetNetworkSpecifier(specifier)!
-            .Build();
         WifiCallback callback;
         Android.Net.Network? joined = null;
         for (var attempt = 1; ; attempt++)
         {
+            var request = WifiRequest(network, bssid);
             callback = new WifiCallback(network.Ssid, OnNetworkLost, () => IsWifiEnabled);
-            Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}");
+            Log.Info($"Wi-Fi: asking Android to connect to {network.Ssid}{(bssid != null ? $" at {bssid}" : "")}");
             var asked = System.Environment.TickCount64;
             try
             {
@@ -695,9 +695,19 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
 
             if (joined != null) break;
             ReleaseWifiNetwork();
+            if (bssid != null)
+            {
+                // Asked for one access point, which didn't answer (the computer's network may be on another one by now,
+                // under the same name): asking by name lets Android find it wherever it is.
+                Log.Info($"Wi-Fi: {network.Ssid} didn't come up at {bssid}; asking Android for it by name");
+                bssid = null;
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             // Android sometimes turns the first request down at once (it was still busy with the previous network):
             // asking again a moment later usually works.
-            if (attempt >= 2 || System.Environment.TickCount64 - asked > 3000) break;
+            if (attempt >= 3 || System.Environment.TickCount64 - asked > 3000) break;
             Log.Info($"Wi-Fi: Android turned {network.Ssid} down at once; asking again");
             await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
         }
@@ -724,6 +734,22 @@ internal sealed class AndroidDirectLink : IDirectLink, IDirectLinkEvents, IDirec
         _ = WatchLinkAsync(callback, connectivity);
         JoinedChanged?.Invoke();
         return host;
+    }
+
+    /// <summary>
+    /// The request for <paramref name="network"/> as ordinary Wi-Fi for Beam only. With <paramref name="bssid"/>, that
+    /// exact access point: Android connects to it without searching again, and once the user approved it, later
+    /// requests for it are usually approved without asking.
+    /// </summary>
+    private static NetworkRequest WifiRequest(DirectNetwork network, string? bssid)
+    {
+        var builder = new WifiNetworkSpecifier.Builder().SetSsid(network.Ssid)!.SetWpa2Passphrase(network.Passphrase)!;
+        if (bssid != null && global::Android.Net.MacAddress.FromString(bssid) is { } mac) builder.SetBssid(mac);
+        return new NetworkRequest.Builder()
+            .AddTransportType(TransportType.Wifi)!
+            .RemoveCapability(NetCapability.Internet)!
+            .SetNetworkSpecifier(builder.Build())!
+            .Build()!;
     }
 
     /// <summary>The direct network's host: its gateway, else the .1 address of the phone's subnet (Windows hosts are 192.168.137.1).</summary>

@@ -34,8 +34,8 @@ Beam is free, with no ads and no accounts. If it saves you time, you can [❤ su
   Windows Share dialog.
 - **Direct mode**: devices that share no Wi-Fi network (or a slow one) connect over their own Wi-Fi link. The
   sender starts a network for that transfer, the receiver joins it, and both check who the other is before any file
-  goes. Bluetooth finds nearby devices and sets the link up. On a PC with internet, Windows' Mobile hotspot keeps the
-  phone online meanwhile.
+  goes. Bluetooth finds nearby devices and sets the link up; a device found only over Bluetooth gets a direct link
+  even with Direct off. On a PC with internet, Windows' Mobile hotspot keeps the phone online meanwhile.
 - **Phone apps** for Android and iPhone/iPad, with the same screens as on Windows. See
   [docs/MOBILE-APPS.md](docs/MOBILE-APPS.md).
 - **Phones without an app**: Files → “No Beam app on the other device?” shows a QR code; any iPhone or Android phone that scans it gets a page to

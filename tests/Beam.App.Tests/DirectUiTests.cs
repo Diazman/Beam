@@ -144,6 +144,60 @@ public class DirectUiTests
     }
 
     [AvaloniaFact]
+    public async Task ADeviceFoundOnlyOverBluetoothGetsADirectConnectionWithDirectOff()
+    {
+        // Heard over Bluetooth but not on this Wi-Fi: the network can't carry the files, so Send goes direct by itself.
+        var air = new FakeDirectAir();
+        var bluetooth = new FakeNearbyAir();
+        await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers), nearbyRadio: bluetooth.Radio());
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true,
+            directLink: air.Link(DirectRoles.Host | DirectRoles.Join), nearbyRadio: bluetooth.Radio());
+        await laptop.InitializeAsync();
+        await phone.InitializeAsync();
+        laptop.Node.Settings.Update(s => s.Connection = ConnectionMethod.SameNetwork);
+        air.ConnectDirectOnly(laptop.Node, phone.Node); // no shared Wi-Fi
+        phone.Node.Nearby.SetReceiving(true);
+        laptop.Node.Nearby.SetLooking(true);
+        Beam.Core.Discovery.DeviceInfo? heard = null;
+        await UiHarness.WaitForAsync(() => (heard = laptop.Node.Discovery.Devices.FirstOrDefault(Beam.Core.Nearby.NearbyService.IsPlaceholder)) != null, "phone heard over Bluetooth");
+        Assert.Equal(ConnectionMethod.SameNetwork, laptop.ViewModel.SendMode);
+
+        var file = laptop.CreateFile("Holiday.jpg", 300_000);
+        Assert.True(await laptop.ViewModel.StartSendAsync(heard!, new[] { file }));
+        var session = laptop.Node.Transfers.Sessions.Single();
+        Assert.Equal(ConnectionMethod.Direct, session.Mode);
+        // The phone's user is asked, as for any direct connection from a device it hasn't paired with over Bluetooth.
+        await UiHarness.WaitForAsync(() => phone.ViewModel.Dialog is ConfirmViewModel { Title: "Connect directly to Laptop?" }, "asked on the phone");
+        ((ConfirmViewModel)phone.ViewModel.Dialog!).PrimaryCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => session.IsFinished || phone.ViewModel.Dialog is IncomingRequestViewModel, "files offered", 30000);
+        if (phone.ViewModel.Dialog is IncomingRequestViewModel offer) offer.AcceptCommand.Execute(null);
+        await UiHarness.WaitForAsync(() => session.IsFinished, "sent", 30000);
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.Equal(TransferPath.Direct, session.Path);
+        Assert.Equal(ConnectionMethod.SameNetwork, laptop.Node.Settings.Current.Connection); // the setting itself stays off
+    }
+
+    [AvaloniaFact]
+    public async Task ADeviceOnTheSameWiFiIsSentToOverItWithDirectOff()
+    {
+        var air = new FakeDirectAir();
+        await using var laptop = new UiHarness("Laptop", directLink: air.Link(DirectRoles.Host | DirectRoles.JoinComputers));
+        await using var phone = new UiHarness("Diaz's Galaxy", width: 400, height: 860, phone: true, directLink: air.Link(DirectRoles.Host | DirectRoles.Join));
+        await laptop.InitializeAsync();
+        await phone.InitializeAsync();
+        laptop.Node.Settings.Update(s => s.Connection = ConnectionMethod.SameNetwork);
+        phone.Node.Settings.Update(s => s.TrustedDevices.Add(new TrustedDevice { Fingerprint = laptop.Node.Identity.Fingerprint, DeviceId = laptop.Node.Identity.DeviceId, Name = "Laptop" }));
+        air.Connect(laptop.Node, laptop.AsDevice, phone.Node, phone.AsDevice);
+
+        Assert.True(await laptop.ViewModel.StartSendAsync(phone.AsDevice(), new[] { laptop.CreateFile("a.jpg", 1000) }));
+        var session = laptop.Node.Transfers.Sessions.Single();
+        await UiHarness.WaitForAsync(() => session.IsFinished, "sent", 30000);
+        Assert.True(session.State == TransferState.Completed, session.Error?.Message);
+        Assert.Equal(ConnectionMethod.SameNetwork, session.Mode);
+        Assert.Equal(0, air.Hosted);
+    }
+
+    [AvaloniaFact]
     public async Task ReceiveStartsNoNetworkAndSaysHowDirectSendersConnect()
     {
         var air = new FakeDirectAir();

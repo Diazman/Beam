@@ -49,7 +49,7 @@ public class DirectPhoneHotspotTests
     }
 
     [Fact]
-    public async Task APcThatCantJoinThePhonesHotspotGetsTheGroupOnTryAgain()
+    public async Task APcThatCantJoinThePhonesHotspotGetsTheGroupInTheSameSend()
     {
         var air = new FakeDirectAir();
         var phoneLink = Fake(air.Link(Phone, canRunHotspot: true));
@@ -62,15 +62,10 @@ public class DirectPhoneHotspotTests
 
         var session = phone.Node.Send(pc.AsDevice(), new[] { phone.CreateFile("a.jpg", 200_000) }, ConnectionMethod.Direct);
         await Wait.ForFinishAsync(session);
-        Assert.Equal(TransferState.Failed, session.State);
-        Assert.Contains("receiver join", session.Error!.Message);
-        Assert.True(phoneLink.HostedNetworks.Last().IsAccessPoint);
-        await Wait.UntilAsync(() => phoneLink.Hosting == null, because: "the hotspot went off");
-
-        session.Resume();
-        await Wait.ForFinishAsync(session);
         Assert.True(session.State == TransferState.Completed, session.Error?.Message);
-        Assert.False(phoneLink.HostedNetworks.Last().IsAccessPoint);
+        Assert.Equal(2, phoneLink.HostedNetworks.Count);
+        Assert.True(phoneLink.HostedNetworks[0].IsAccessPoint); // the hotspot first
+        Assert.False(phoneLink.HostedNetworks[1].IsAccessPoint); // then the Wi-Fi Direct group, in the same send
     }
 
     [Fact]

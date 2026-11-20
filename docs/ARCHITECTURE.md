@@ -92,13 +92,17 @@ queue (8 chunks) lets the network keep flowing while the disk writes. Memory sta
 ## Direct mode
 
 With **Send directly** on, the files go over a Wi-Fi link between the two devices instead of the shared network
-(`DirectManager`, one `DirectSession` per receiver):
+(`DirectManager`, one `DirectSession` per receiver). With it off, a receiver heard only over Bluetooth (so not on this
+Wi-Fi) gets a direct link all the same, when this device can start one (`MainViewModel.SendModeFor`):
 
 1. **Propose** over a control channel: Beam's TLS connection when the receiver is reachable on the network, else the
    encrypted Bluetooth handshake (`NearbyService`).
 2. The **sender starts a network** for this session (a fresh passphrase each time): a Wi-Fi Direct group, or on a
    Windows PC with internet its Mobile hotspot, or on an Android phone sending to a computer its own hotspot.
 3. It **offers** the network's name and passphrase; the receiver joins and reports **ready** over the new network.
+   A receiver that can't join the hotspot gets the usual Wi-Fi Direct network in the same send (and for the next
+   30 minutes). Android joins only access points it saw after the request: the hotspot and the Wi-Fi Direct network
+   share a name, and an older scan result may be the one that is off.
 4. The sender **verifies** peer, session and route there, and only then sends — to that verified address only.
 5. **End**: the network is stopped (or shared by the next session of the same send) and the receiver leaves it.
 

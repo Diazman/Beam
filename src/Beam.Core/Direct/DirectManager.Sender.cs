@@ -299,7 +299,23 @@ public sealed partial class DirectManager
 
             if (session.State == DirectSessionState.Negotiating)
             {
-                await EstablishAsync(session, send, token).ConfigureAwait(false);
+                var hotspotFailedBefore = HotspotFailedFor(send.Receiver.Id);
+                try
+                {
+                    await EstablishAsync(session, send, token).ConfigureAwait(false);
+                }
+                catch (TransferException) when (!hotspotFailedBefore && HotspotFailedFor(send.Receiver.Id) && !token.IsCancellationRequested
+                                                && CanStartOtherNetworkFor(send))
+                {
+                    // The receiver couldn't join this device's hotspot: the same send, on this device's usual direct
+                    // network, rather than a failure the user has to try again after.
+                    Log.Info($"Direct: {send.Receiver.Name} couldn't join the hotspot; setting up the usual direct network instead");
+                    ReleaseHost(send.Key);
+                    session = send.Session = NewSession(send.Receiver);
+                    send.Transfer?.SetMode(ConnectionMethod.Direct, session);
+                    await EstablishAsync(session, send, token).ConfigureAwait(false);
+                }
+
                 return;
             }
 
@@ -313,6 +329,15 @@ public sealed partial class DirectManager
         {
             send.Gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Whether giving back <paramref name="send"/>'s share of this device's network turns it off, so the next setup
+    /// starts another one (not while other sessions are on it).
+    /// </summary>
+    private bool CanStartOtherNetworkFor(DirectSend send)
+    {
+        lock (_hostGate) return _hostLeases.All(owner => owner == send.Key);
     }
 
     /// <summary>

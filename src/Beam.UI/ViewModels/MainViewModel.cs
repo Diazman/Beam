@@ -477,14 +477,28 @@ public sealed partial class MainViewModel : ObservableObject, IIncomingTransferH
         ? ConnectionMethod.Direct
         : ConnectionMethod.SameNetwork;
 
+    /// <summary>
+    /// The mode for one send: the chosen one, except that a device found only over Bluetooth (so not on this Wi-Fi) gets
+    /// a direct connection even with Direct off, when this device can start one for it.
+    /// </summary>
+    internal ConnectionMethod SendModeFor(DeviceInfo device, bool onlyNearby)
+    {
+        if (SendMode == ConnectionMethod.Direct || !onlyNearby) return SendMode;
+        if (!Node.Direct.CanHost || !Node.Direct.CanSendDirectlyTo(device)) return SendMode;
+        Log.Info($"Sending to {device.Name} directly: it was found only over Bluetooth, so it isn't on this Wi-Fi");
+        return ConnectionMethod.Direct;
+    }
+
     /// <summary>Starts sending to one device in the chosen mode. Returns false (after telling the user why) if it couldn't start.</summary>
     public async Task<bool> StartSendAsync(DeviceInfo device, IReadOnlyList<string> paths)
     {
+        // Before resolving: a device heard only over Bluetooth isn't on this Wi-Fi, so the network can't carry the files.
+        var onlyNearby = Node.ChannelsOf(device) is { LocalNetwork: false, Bluetooth: true };
         if (await ResolveAsync(device) is not { } target) return false;
         device = target;
         try
         {
-            Node.Send(device, paths, SendMode);
+            Node.Send(device, paths, SendModeFor(device, onlyNearby));
             return true;
         }
         catch (Exception ex)
