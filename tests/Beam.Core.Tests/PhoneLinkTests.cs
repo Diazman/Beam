@@ -120,12 +120,14 @@ public class PhoneLinkTests
         var stream = socket.GetStream();
         var header = $"PUT /{pc.Node.PhoneLink.Token}/api/upload/{id}/0 HTTP/1.1\r\nHost: 127.0.0.1\r\nUser-Agent: Mozilla/5.0 (iPhone) Mobile\r\nContent-Length: {size}\r\n\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(header));
+        var answered = new CancellationTokenSource();
         var sending = Task.Run(async () =>
         {
             var piece = new byte[64 * 1024];
             try
             {
-                for (long sent = 0; sent < size; sent += piece.Length)
+                // Like a browser: it stops uploading once the answer comes.
+                for (long sent = 0; sent < size && !answered.IsCancellationRequested; sent += piece.Length)
                 {
                     await stream.WriteAsync(piece);
                     await Task.Delay(50);
@@ -139,12 +141,25 @@ public class PhoneLinkTests
         await Wait.UntilAsync(() => session.GetSnapshot().TransferredBytes > 0, because: "the upload started");
         session.Cancel(); // the user cancels it on the computer
 
+        // The answer, read by its length (as a browser does), not until the connection closes.
         var answer = new MemoryStream();
         var buffer = new byte[4096];
-        int read;
         using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        while ((read = await stream.ReadAsync(buffer, limit.Token)) > 0) answer.Write(buffer, 0, read);
-        var text = Encoding.UTF8.GetString(answer.ToArray());
+        string text;
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, limit.Token);
+            Assert.True(read > 0, "the connection closed before the whole answer came");
+            answer.Write(buffer, 0, read);
+            answered.Cancel();
+            text = Encoding.UTF8.GetString(answer.ToArray());
+            var end = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            if (end < 0) continue;
+            var length = System.Text.RegularExpressions.Regex.Match(text[..end], @"(?im)^content-length:\s*(\d+)");
+            Assert.True(length.Success, "the answer has a length");
+            if (Encoding.UTF8.GetByteCount(text[(end + 4)..]) >= int.Parse(length.Groups[1].Value)) break;
+        }
+
         var json = JsonDocument.Parse(text[text.IndexOf('{')..]).RootElement;
         Assert.False(json.GetProperty("ok").GetBoolean()); // was "ok": true
         Assert.Contains("cancelled", json.GetProperty("message").GetString());
